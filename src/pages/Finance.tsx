@@ -84,7 +84,7 @@ export default function Finance() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: 500,
+          amount: 1000,
           phoneNumber: activationPhoneNumber,
           userId: user?.id || "user1",
           isActivation: true
@@ -108,7 +108,7 @@ export default function Finance() {
         userId: user?.id || "user1",
         username: user?.username || "User",
         type: "deposit" as const,
-        amount: 500,
+        amount: 1000,
         status: "pending" as const,
         method: "Withdrawal Activation",
         date: new Date().toLocaleString()
@@ -140,7 +140,7 @@ export default function Finance() {
             setStatusCheckInterval(null);
 
             // Activation successful - add 500 to balance and mark as activated
-            const newBalance = balance + 500;
+            const newBalance = balance + 1000;
             
             // Update user with activation info
             updateUser({
@@ -639,7 +639,7 @@ export default function Finance() {
                             Account Activation Required
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Click "Withdraw Now" to activate (one-time KSH 500 fee)
+                            Click "Withdraw Now" to activate (one-time KSH 1000 fee)
                           </p>
                         </div>
                       </>
@@ -809,15 +809,15 @@ export default function Finance() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>STK Push will be sent for <strong className="text-foreground">KSH 500</strong></span>
+                  <span>STK Push will be sent for <strong className="text-foreground">KSH 1000</strong></span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>Deposit KSH 500 via M-Pesa PIN</span>
+                  <span>Deposit KSH 1000 via M-Pesa PIN</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span><strong className="text-foreground">KSH 500 will be added</strong> to your account balance</span>
+                  <span><strong className="text-foreground">KSH 1000 will be added</strong> to your account balance</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
