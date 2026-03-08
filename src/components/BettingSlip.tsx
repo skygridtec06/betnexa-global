@@ -115,10 +115,10 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
   };
 
   const handlePlaceBet = async () => {
-    if (stakeNum < 300) {
+    if (stakeNum < 500) {
       toast({
         title: "Invalid Stake",
-        description: "Minimum stake amount is KSH 300",
+        description: "Minimum stake amount is KSH 500",
         variant: "destructive",
       });
       return;
