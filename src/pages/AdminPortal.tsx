@@ -1034,6 +1034,7 @@ const AdminPortal = () => {
             </div>
           ))}
           <ActiveMembers />
+        </div>
 
         <Tabs defaultValue="games">
           <TabsList className="mb-6 bg-secondary grid w-full grid-cols-5">
