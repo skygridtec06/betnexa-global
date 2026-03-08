@@ -4,6 +4,8 @@ export interface PlacedBet {
   id: string;
   betId: string;
   user_id?: string;
+  username?: string;
+  phone_number?: string;
   date: string;
   time: string;
   stake: number;
@@ -230,8 +232,10 @@ export function BetProvider({ children }: { children: ReactNode }) {
           id: bet.id,
           betId: bet.bet_id || bet.id?.substring(0, 8),
           user_id: bet.user_id,
-          date: bet.created_at ? new Date(bet.created_at).toLocaleDateString() : 'Unknown',
-          time: bet.created_at ? new Date(bet.created_at).toLocaleTimeString() : '',
+          username: bet.users?.username || 'Unknown',
+          phone_number: bet.users?.phone_number || '-',
+          date: bet.created_at || 'Unknown',
+          time: bet.created_at || '',
           stake: bet.stake || 0,
           potentialWin: bet.potential_win || 0,
           totalOdds: bet.total_odds || 0,

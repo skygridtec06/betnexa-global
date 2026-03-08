@@ -384,11 +384,19 @@ router.put('/:betId/status', async (req, res) => {
  */
 router.get('/admin/all', async (req, res) => {
   try {
-    console.log('\n👨‍💼 [GET /api/bets/admin/all] Fetching all bets');
+    console.log('\n👨‍💼 [GET /api/bets/admin/all] Fetching all bets with user data');
 
     const { data: bets, error } = await supabase
       .from('bets')
-      .select('*')
+      .select(`
+        *,
+        users:user_id (
+          id,
+          username,
+          phone_number,
+          account_balance
+        )
+      `)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -399,7 +407,7 @@ router.get('/admin/all', async (req, res) => {
       });
     }
 
-    console.log(`✅ Retrieved ${bets?.length || 0} bets`);
+    console.log(`✅ Retrieved ${bets?.length || 0} bets with user data`);
 
     res.json({
       success: true,

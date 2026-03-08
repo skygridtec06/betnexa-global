@@ -1873,10 +1873,8 @@ const AdminPortal = () => {
               </div>
             ) : (
               <div className="space-y-8">
-                {/* Create user lookup map */}
+                {/* Separate and sort bets */}
                 {(() => {
-                  const userMap = new Map(users.map(u => [u.id, { username: u.username, phone: u.phoneNumber }]));
-                  
                   // Separate and sort bets
                   const openBets = bets.filter(b => b.status === "Open").sort((a, b) => {
                     const dateA = new Date(a.date).getTime();
@@ -1910,23 +1908,24 @@ const AdminPortal = () => {
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
-                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-left p-2 font-semibold">Date & Time Placed</th>
                                   <th className="text-center p-2 font-semibold">Odds</th>
                                   <th className="text-center p-2 font-semibold">Selections</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border">
                                 {openBets.map((bet) => {
-                                  const user = userMap.get(bet.user_id || '');
                                   const betOutcomes = selectionOutcomes[bet.id];
                                   return (
                                     <tr key={bet.id} className="hover:bg-secondary/30 transition-colors">
-                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
-                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.potentialWin.toLocaleString()}</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
-                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">
+                                        {bet.date ? formatTransactionDateInEAT(bet.date) : 'Unknown'}
+                                      </td>
                                       <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
                                       <td className="p-2 text-center">{bet.selections.length}</td>
                                     </tr>
@@ -1939,7 +1938,6 @@ const AdminPortal = () => {
                           {/* Open Bets Detailed Cards */}
                           <div className="grid gap-3">
                             {openBets.map((bet) => {
-                              const user = userMap.get(bet.user_id || '');
                               const betOutcomes = selectionOutcomes[bet.id];
                               const wonCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "won").length : 0;
                               const lostCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "lost").length : 0;
@@ -1956,13 +1954,15 @@ const AdminPortal = () => {
                                           <Badge variant="secondary" className="text-[10px]">
                                             <Clock className="h-2.5 w-2.5 mr-1" /> OPEN
                                           </Badge>
-                                          <span className="text-xs text-muted-foreground">{bet.date}</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {bet.date ? formatTransactionDateInEAT(bet.date) : 'Unknown'}
+                                          </span>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                           <div>
                                             <p className="text-xs text-muted-foreground">Player</p>
-                                            <p className="text-sm font-semibold text-foreground">{user?.username || 'Unknown'}</p>
-                                            <p className="text-xs text-muted-foreground">{user?.phone || '-'}</p>
+                                            <p className="text-sm font-semibold text-foreground">{bet.username || 'Unknown'}</p>
+                                            <p className="text-xs text-muted-foreground">{bet.phone_number || '-'}</p>
                                           </div>
                                           <div>
                                             <p className="text-xs text-muted-foreground">Stake / Win</p>
@@ -2143,22 +2143,23 @@ const AdminPortal = () => {
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
-                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-left p-2 font-semibold">Date & Time Placed</th>
                                   <th className="text-center p-2 font-semibold">Odds</th>
                                   <th className="text-center p-2 font-semibold">Selections</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border">
                                 {wonBets.map((bet) => {
-                                  const user = userMap.get(bet.user_id || '');
                                   return (
                                     <tr key={bet.id} className="bg-green-500/5 hover:bg-green-500/10 transition-colors">
-                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
-                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-green-500 font-bold">{bet.potentialWin.toLocaleString()}</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
-                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">
+                                        {bet.date ? formatTransactionDateInEAT(bet.date) : 'Unknown'}
+                                      </td>
                                       <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
                                       <td className="p-2 text-center">{bet.selections.length}</td>
                                     </tr>
@@ -2189,22 +2190,23 @@ const AdminPortal = () => {
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
-                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-left p-2 font-semibold">Date & Time Placed</th>
                                   <th className="text-center p-2 font-semibold">Odds</th>
                                   <th className="text-center p-2 font-semibold">Selections</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-border">
                                 {lostBets.map((bet) => {
-                                  const user = userMap.get(bet.user_id || '');
                                   return (
                                     <tr key={bet.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors">
-                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
-                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-red-500 font-bold">0</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
-                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">
+                                        {bet.date ? formatTransactionDateInEAT(bet.date) : 'Unknown'}
+                                      </td>
                                       <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
                                       <td className="p-2 text-center">{bet.selections.length}</td>
                                     </tr>
