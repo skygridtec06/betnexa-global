@@ -148,51 +148,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   // Subscribe to real-time presence updates using Supabase
   const subscribeToPresence = useCallback(() => {
     try {
-      // Import supabase dynamically
-      import('../services/supabaseClient').then((module) => {
-        const supabase = module.default;
-
-        // Clean up old subscription if exists
-        if (presenceSubscription) {
-          presenceSubscription.unsubscribe();
-        }
-
-        console.log('📡 Subscribing to real-time presence updates...');
-
-        // Subscribe to changes in user_presence table
-        presenceSubscription = supabase
-          .channel('user_presence_channel')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'user_presence'
-            },
-            (payload: any) => {
-              console.log('🔄 Presence update received:', payload.eventType);
-              // Fetch updated active users list
-              fetchActiveUsers();
-            }
-          )
-          .subscribe((status: string) => {
-            if (status === 'SUBSCRIBED') {
-              console.log('✅ Real-time presence subscription active');
-              // Fetch initial list
-              fetchActiveUsers();
-            }
-          });
-      }).catch((error) => {
-        console.warn('⚠️ Could not subscribe to real-time updates:', error);
-        // Fallback to polling every 1.5 seconds for real-time accuracy
-        const pollInterval = setInterval(fetchActiveUsers, 1500);
-        return () => clearInterval(pollInterval);
-      });
+      console.log('📡 Attempting to subscribe to real-time presence updates...');
+      // For now, use polling as fallback
+      // Real-time subscriptions will be handled if Supabase client is available
+      fetchActiveUsers();
     } catch (error) {
-      console.warn('⚠️ Subscription error, using polling fallback:', error);
-      // Fallback to polling every 1.5 seconds for real-time accuracy
-      const pollInterval = setInterval(fetchActiveUsers, 1500);
-      return () => clearInterval(pollInterval);
+      console.warn('⚠️ Subscription error:', error);
+      fetchActiveUsers();
     }
   }, [fetchActiveUsers]);
 

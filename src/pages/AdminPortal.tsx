@@ -12,7 +12,6 @@ import { useOdds, type GameOdds } from "@/context/OddsContext";
 import { useUserManagement } from "@/context/UserManagementContext";
 import { useUser } from "@/context/UserContext";
 import { useTransactions } from "@/context/TransactionContext";
-import { usePresence } from "@/context/PresenceContext";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
@@ -66,7 +65,6 @@ const AdminPortal = () => {
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
   const { getAllTransactions, updateTransactionStatus } = useTransactions();
-  const { activeCount } = usePresence();
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [editingGame, setEditingGame] = useState<string | null>(null);
