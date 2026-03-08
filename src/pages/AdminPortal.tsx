@@ -1888,10 +1888,10 @@ const AdminPortal = () => {
                   
                   // Render Open Bets Section
                   return (
-                    <>
+                    <div className="space-y-0">
                       {/* OPEN BETS - At Top */}
                       {openBets.length > 0 && (
-                        <div className="space-y-3">
+                        <div className="space-y-3 pb-8 border-b-2 border-yellow-500/30">
                           <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm py-2">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500 flex items-center gap-2">
                               <Clock className="h-4 w-4" /> Open Bets ({openBets.length})
@@ -2124,9 +2124,9 @@ const AdminPortal = () => {
                         </div>
                       )}
                       
-                      {/* WON BETS - Below Open  */}
+                      {/* WON BETS - Below Open with Divider */}
                       {wonBets.length > 0 && (
-                        <div className="space-y-3">
+                        <div className="space-y-3 pt-8 pb-8 border-b-2 border-green-500/30">
                           <div className="bg-card/95 backdrop-blur-sm py-2">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-green-500 flex items-center gap-2">
                               <CheckCircle className="h-4 w-4" /> Won Bets ({wonBets.length})
@@ -2171,9 +2171,9 @@ const AdminPortal = () => {
                         </div>
                       )}
                       
-                      {/* LOST BETS - Below Won */}
+                      {/* LOST BETS - Below Won with Divider */}
                       {lostBets.length > 0 && (
-                        <div className="space-y-3">
+                        <div className="space-y-3 pt-8">
                           <div className="bg-card/95 backdrop-blur-sm py-2">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-red-500 flex items-center gap-2">
                               <XCircle className="h-4 w-4" /> Lost Bets ({lostBets.length})
@@ -2217,7 +2217,7 @@ const AdminPortal = () => {
                           </div>
                         </div>
                       )}
-                    </>
+                    </div>
                   );
                 })()}
               </div>
