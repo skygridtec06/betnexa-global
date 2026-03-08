@@ -1861,214 +1861,362 @@ const AdminPortal = () => {
           <TabsContent value="bets" className="space-y-6">
             <div className="mb-4">
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Manage Bets</h3>
-              <p className="mt-1 text-xs text-muted-foreground">Settle and manage all player bets - Mark selections individually for multibets</p>
+              <p className="mt-1 text-xs text-muted-foreground">All open, won, and lost bets - Mark selections individually for multibets</p>
             </div>
-            <div className="space-y-3">
-              {bets.map((bet) => {
-                const betOutcomes = selectionOutcomes[bet.id];
-                const wonCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "won").length : 0;
-                const lostCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "lost").length : 0;
-                const totalOutcomes = betOutcomes ? Object.keys(betOutcomes).length : 0;
-                
-                return (
-                  <Card key={bet.id} className="border-border bg-card p-4">
-                    <div className="space-y-3">
-                      {/* Bet Header */}
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="outline" className="text-[10px]">#{bet.betId}</Badge>
-                            <Badge 
-                              variant={bet.status === "Won" ? "default" : bet.status === "Lost" ? "destructive" : "secondary"}
-                              className="text-[10px]"
-                            >
-                              {bet.status}
-                            </Badge>
-                            <span className="text-xs text-muted-foreground">{bet.date}</span>
+            
+            {bets.length === 0 ? (
+              <div className="rounded-xl border border-border/50 bg-card p-8 text-center text-muted-foreground">
+                No bets found
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {/* Create user lookup map */}
+                {(() => {
+                  const userMap = new Map(users.map(u => [u.id, { username: u.username, phone: u.phoneNumber }]));
+                  
+                  // Separate and sort bets
+                  const openBets = bets.filter(b => b.status === "Open").sort((a, b) => {
+                    const dateA = new Date(a.date).getTime();
+                    const dateB = new Date(b.date).getTime();
+                    return dateB - dateA; // Latest first
+                  });
+                  
+                  const settledBets = bets.filter(b => b.status !== "Open");
+                  const wonBets = settledBets.filter(b => b.status === "Won");
+                  const lostBets = settledBets.filter(b => b.status === "Lost");
+                  
+                  // Render Open Bets Section
+                  return (
+                    <>
+                      {/* OPEN BETS - At Top */}
+                      {openBets.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm py-2">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500 flex items-center gap-2">
+                              <Clock className="h-4 w-4" /> Open Bets ({openBets.length})
+                            </h4>
                           </div>
-                          <div className="grid gap-2 text-xs mb-2">
-                            <p><strong>Stake:</strong> <span className="text-primary">KSH {bet.stake.toLocaleString()}</span></p>
-                            <p><strong>Potential Win:</strong> <span className="text-primary">KSH {bet.potentialWin.toLocaleString()}</span></p>
-                            <p><strong>Total Odds:</strong> {bet.totalOdds.toFixed(2)} ({bet.selections.length} selections)</p>
+                          
+                          {/* Open Bets Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead className="bg-secondary/50 border-b border-border">
+                                <tr className="text-muted-foreground">
+                                  <th className="text-left p-2 font-semibold">Username</th>
+                                  <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-right p-2 font-semibold">Stake (KSH)</th>
+                                  <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
+                                  <th className="text-left p-2 font-semibold">Bet ID</th>
+                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-center p-2 font-semibold">Odds</th>
+                                  <th className="text-center p-2 font-semibold">Selections</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {openBets.map((bet) => {
+                                  const user = userMap.get(bet.user_id || '');
+                                  const betOutcomes = selectionOutcomes[bet.id];
+                                  return (
+                                    <tr key={bet.id} className="hover:bg-secondary/30 transition-colors">
+                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
+                                      <td className="p-2 text-right text-primary font-semibold">{bet.potentialWin.toLocaleString()}</td>
+                                      <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
+                                      <td className="p-2 text-center">{bet.selections.length}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
                           </div>
-                        </div>
-                      </div>
+                          
+                          {/* Open Bets Detailed Cards */}
+                          <div className="grid gap-3">
+                            {openBets.map((bet) => {
+                              const user = userMap.get(bet.user_id || '');
+                              const betOutcomes = selectionOutcomes[bet.id];
+                              const wonCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "won").length : 0;
+                              const lostCount = betOutcomes ? Object.values(betOutcomes).filter(o => o === "lost").length : 0;
+                              const totalOutcomes = betOutcomes ? Object.keys(betOutcomes).length : 0;
+                              
+                              return (
+                                <Card key={bet.id} className="border-yellow-500/30 bg-yellow-500/5 p-4">
+                                  <div className="space-y-3">
+                                    {/* Bet Header */}
+                                    <div className="flex items-start justify-between pb-2 border-b border-yellow-500/20">
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <Badge variant="outline" className="text-[10px]">#{bet.betId}</Badge>
+                                          <Badge variant="secondary" className="text-[10px]">
+                                            <Clock className="h-2.5 w-2.5 mr-1" /> OPEN
+                                          </Badge>
+                                          <span className="text-xs text-muted-foreground">{bet.date}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                          <div>
+                                            <p className="text-xs text-muted-foreground">Player</p>
+                                            <p className="text-sm font-semibold text-foreground">{user?.username || 'Unknown'}</p>
+                                            <p className="text-xs text-muted-foreground">{user?.phone || '-'}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-xs text-muted-foreground">Stake / Win</p>
+                                            <p className="text-sm font-semibold text-primary">KSH {bet.stake.toLocaleString()}</p>
+                                            <p className="text-xs text-primary">→ KSH {bet.potentialWin.toLocaleString()}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
 
-                      {/* Individual Selections for Settlement */}
-                      {bet.status === "Open" && (
-                        <div className="bg-secondary/50 rounded-lg p-3 space-y-3">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Settle Selections</p>
-                          {bet.selections.map((sel, idx) => {
-                            const matchGame = games.find(g => g.id === sel.matchId);
-                            return (
-                              <div key={idx} className="bg-background/50 p-3 rounded space-y-2">
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <p className="text-xs font-medium text-foreground">
-                                      {idx + 1}. {sel.match} - {sel.type} @ {sel.odds.toFixed(2)}
-                                    </p>
-                                    {matchGame && (
-                                      <div className="mt-1 text-[10px] text-muted-foreground">
-                                        <span className="mr-2">Score: {matchGame.homeScore || 0}-{matchGame.awayScore || 0}</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-secondary text-xs capitalize">
-                                          {matchGame.status === "live" && matchGame.isKickoffStarted ? `LIVE ${String(Math.floor(matchGame.minute ?? 0)).padStart(2, "0")}:${String(Math.floor(matchGame.seconds ?? 0)).padStart(2, "0")}'` : matchGame.status}
-                                        </span>
+                                    {/* Settle Selections */}
+                                    <div className="bg-secondary/30 rounded-lg p-3 space-y-3">
+                                      <p className="text-xs font-semibold text-muted-foreground uppercase">Settle Selections</p>
+                                      {bet.selections.map((sel, idx) => {
+                                        const matchGame = games.find(g => g.id === sel.matchId);
+                                        return (
+                                          <div key={idx} className="bg-background/50 p-3 rounded space-y-2">
+                                            <div className="flex items-start justify-between">
+                                              <div className="flex-1">
+                                                <p className="text-xs font-medium text-foreground">
+                                                  {idx + 1}. {sel.match} - {sel.type} @ {sel.odds.toFixed(2)}
+                                                </p>
+                                                {matchGame && (
+                                                  <div className="mt-1 text-[10px] text-muted-foreground">
+                                                    <span className="mr-2">Score: {matchGame.homeScore || 0}-{matchGame.awayScore || 0}</span>
+                                                    <span className="px-1.5 py-0.5 rounded bg-secondary text-xs capitalize">
+                                                      {matchGame.status === "live" && matchGame.isKickoffStarted ? `LIVE ${String(Math.floor(matchGame.minute ?? 0)).padStart(2, "0")}:${String(Math.floor(matchGame.seconds ?? 0)).padStart(2, "0")}'` : matchGame.status}
+                                                    </span>
+                                                  </div>
+                                                )}
+                                              </div>
+                                              <div className="flex gap-1">
+                                                <Button
+                                                  size="sm"
+                                                  variant={betOutcomes?.[idx] === "won" ? "default" : "ghost"}
+                                                  className={`text-xs h-7 ${betOutcomes?.[idx] === "won" ? "bg-green-500/20 text-green-500" : "bg-transparent"}`}
+                                                  onClick={() => {
+                                                    const newOutcomes = { ...selectionOutcomes };
+                                                    if (!newOutcomes[bet.id]) newOutcomes[bet.id] = {};
+                                                    newOutcomes[bet.id][idx] = "won";
+                                                    setSelectionOutcomes(newOutcomes);
+                                                  }}
+                                                >
+                                                  <CheckCircle className="h-3 w-3" /> Won
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant={betOutcomes?.[idx] === "lost" ? "destructive" : "ghost"}
+                                                  className={`text-xs h-7 ${betOutcomes?.[idx] === "lost" ? "bg-red-500/20 text-red-500" : "bg-transparent"}`}
+                                                  onClick={() => {
+                                                    const newOutcomes = { ...selectionOutcomes };
+                                                    if (!newOutcomes[bet.id]) newOutcomes[bet.id] = {};
+                                                    newOutcomes[bet.id][idx] = "lost";
+                                                    setSelectionOutcomes(newOutcomes);
+                                                  }}
+                                                >
+                                                  <XCircle className="h-3 w-3" /> Lost
+                                                </Button>
+                                              </div>
+                                            </div>
+                                            {matchGame && matchGame.status === "upcoming" && (
+                                              <div className="flex gap-1 text-[10px]">
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-6 text-xs"
+                                                  onClick={() => startKickoff(matchGame.id)}
+                                                >
+                                                  <Play className="h-2.5 w-2.5 mr-1" /> Start
+                                                </Button>
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-6 text-xs"
+                                                  onClick={() => updateGame(matchGame.id, { status: "finished", homeScore: matchGame.homeScore || 0, awayScore: matchGame.awayScore || 0, isKickoffStarted: false })}
+                                                >
+                                                  <Square className="h-2.5 w-2.5 mr-1" /> Finish
+                                                </Button>
+                                              </div>
+                                            )}
+                                            {matchGame && matchGame.status === "live" && (
+                                              <div className="flex gap-1 text-[10px]">
+                                                <Button
+                                                  size="sm"
+                                                  variant="ghost"
+                                                  className="h-6 text-xs"
+                                                  onClick={() => updateGame(matchGame.id, { status: "finished", isKickoffStarted: false })}
+                                                >
+                                                  <Square className="h-2.5 w-2.5 mr-1" /> Finish
+                                                </Button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+
+                                      {/* Settlement Summary and Finalize */}
+                                      {totalOutcomes > 0 && (
+                                        <div className="border-t border-border pt-2 mt-2">
+                                          <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs text-muted-foreground">
+                                              Progress: {wonCount} Won, {lostCount} Lost, {bet.selections.length - totalOutcomes} Pending
+                                            </span>
+                                          </div>
+                                          {totalOutcomes === bet.selections.length && (
+                                            <Button
+                                              size="sm"
+                                              variant="hero"
+                                              onClick={() => settleBetBySelections(bet.id)}
+                                              className="w-full text-xs"
+                                            >
+                                              <CheckCircle className="mr-1 h-3 w-3" /> Finalize Settlement
+                                            </Button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Quick Actions */}
+                                    {!betOutcomes && (
+                                      <div className="flex gap-2">
+                                        <Button
+                                          size="sm"
+                                          className="flex-1 bg-green-500/10 text-green-500 hover:bg-green-500/20"
+                                          onClick={async () => {
+                                            const result = await updateBetStatus(bet.id, "Won", bet.potentialWin);
+                                            if (result.success) {
+                                              console.log(`✅ Bet marked as Won`);
+                                              await fetchUsersFromBackend();
+                                            } else {
+                                              alert(`Failed: ${result.error}`);
+                                            }
+                                          }}
+                                        >
+                                          <CheckCircle className="mr-1 h-3 w-3" /> Quick: Mark All Won
+                                        </Button>
+                                        <Button
+                                          size="sm"
+                                          className="flex-1 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                                          onClick={async () => {
+                                            const result = await updateBetStatus(bet.id, "Lost", 0);
+                                            if (result.success) {
+                                              console.log(`✅ Bet marked as Lost`);
+                                              await fetchUsersFromBackend();
+                                            } else {
+                                              alert(`Failed: ${result.error}`);
+                                            }
+                                          }}
+                                        >
+                                          <XCircle className="mr-1 h-3 w-3" /> Quick: Mark All Lost
+                                        </Button>
                                       </div>
                                     )}
                                   </div>
-                                  <div className="flex gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant={betOutcomes?.[idx] === "won" ? "default" : "ghost"}
-                                      className={`text-xs h-7 ${betOutcomes?.[idx] === "won" ? "bg-green-500/20 text-green-500" : "bg-transparent"}`}
-                                      onClick={() => {
-                                        const newOutcomes = { ...selectionOutcomes };
-                                        if (!newOutcomes[bet.id]) newOutcomes[bet.id] = {};
-                                        newOutcomes[bet.id][idx] = "won";
-                                        setSelectionOutcomes(newOutcomes);
-                                      }}
-                                    >
-                                      <CheckCircle className="h-3 w-3" /> Won
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant={betOutcomes?.[idx] === "lost" ? "destructive" : "ghost"}
-                                      className={`text-xs h-7 ${betOutcomes?.[idx] === "lost" ? "bg-red-500/20 text-red-500" : "bg-transparent"}`}
-                                      onClick={() => {
-                                        const newOutcomes = { ...selectionOutcomes };
-                                        if (!newOutcomes[bet.id]) newOutcomes[bet.id] = {};
-                                        newOutcomes[bet.id][idx] = "lost";
-                                        setSelectionOutcomes(newOutcomes);
-                                      }}
-                                    >
-                                      <XCircle className="h-3 w-3" /> Lost
-                                    </Button>
-                                  </div>
-                                </div>
-                                {/* Match Status Controls */}
-                                {matchGame && matchGame.status === "upcoming" && (
-                                  <div className="flex gap-1 text-[10px]">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-6 text-xs"
-                                      onClick={() => startKickoff(matchGame.id)}
-                                    >
-                                      <Play className="h-2.5 w-2.5 mr-1" /> Start
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-6 text-xs"
-                                      onClick={() => updateGame(matchGame.id, { status: "finished", homeScore: matchGame.homeScore || 0, awayScore: matchGame.awayScore || 0, isKickoffStarted: false })}
-                                    >
-                                      <Square className="h-2.5 w-2.5 mr-1" /> Finish
-                                    </Button>
-                                  </div>
-                                )}
-                                {matchGame && matchGame.status === "live" && (
-                                  <div className="flex gap-1 text-[10px]">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-6 text-xs"
-                                      onClick={() => updateGame(matchGame.id, { status: "finished", isKickoffStarted: false })}
-                                    >
-                                      <Square className="h-2.5 w-2.5 mr-1" /> Finish
-                                    </Button>
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-
-                          {/* Settlement Summary and Finalize */}
-                          {totalOutcomes > 0 && (
-                            <div className="border-t border-border pt-2 mt-2">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-muted-foreground">
-                                  Progress: {wonCount} Won, {lostCount} Lost, {bet.selections.length - totalOutcomes} Pending
-                                </span>
-                              </div>
-                              {totalOutcomes === bet.selections.length && (
-                                <Button
-                                  size="sm"
-                                  variant="hero"
-                                  onClick={() => settleBetBySelections(bet.id)}
-                                  className="w-full text-xs"
-                                >
-                                  <CheckCircle className="mr-1 h-3 w-3" /> Finalize Settlement
-                                </Button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Settled Bet View */}
-                      {bet.status !== "Open" && (
-                        <div className="bg-secondary/50 rounded-lg p-3 space-y-2">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Selections</p>
-                          {bet.selections.map((sel, idx) => (
-                            <p key={idx} className="text-xs text-muted-foreground">
-                              {idx + 1}. {sel.match} - {sel.type} @ {sel.odds.toFixed(2)}
-                            </p>
-                          ))}
-                          <div className="border-t border-border pt-2 mt-2">
-                            <Badge variant="secondary" className="text-[10px]">
-                              {bet.status === "Won" ? "✓ Settled - Won" : "✗ Settled - Lost"}
-                            </Badge>
+                                </Card>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
-
-                      {/* Quick Actions */}
-                      {bet.status === "Open" && !betOutcomes && (
-                        <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            className="flex-1 bg-green-500/10 text-green-500 hover:bg-green-500/20"
-                            onClick={async () => {
-                              const result = await updateBetStatus(bet.id, "Won", bet.potentialWin);
-                              if (result.success) {
-                                console.log(`✅ Bet marked as Won`);
-                                // Refresh user data to show updated balance
-                                await fetchUsersFromBackend();
-                              } else {
-                                alert(`Failed: ${result.error}`);
-                              }
-                            }}
-                          >
-                            <CheckCircle className="mr-1 h-3 w-3" /> Quick: Mark All Won
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 bg-red-500/10 text-red-500 hover:bg-red-500/20"
-                            onClick={async () => {
-                              const result = await updateBetStatus(bet.id, "Lost", 0);
-                              if (result.success) {
-                                console.log(`✅ Bet marked as Lost`);
-                                // Refresh user data after settling
-                                await fetchUsersFromBackend();
-                              } else {
-                                alert(`Failed: ${result.error}`);
-                              }
-                            }}
-                          >
-                            <XCircle className="mr-1 h-3 w-3" /> Quick: Mark All Lost
-                          </Button>
+                      
+                      {/* WON BETS - Below Open  */}
+                      {wonBets.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="bg-card/95 backdrop-blur-sm py-2">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-green-500 flex items-center gap-2">
+                              <CheckCircle className="h-4 w-4" /> Won Bets ({wonBets.length})
+                            </h4>
+                          </div>
+                          
+                          {/* Won Bets Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead className="bg-green-500/10 border-b border-green-500/30">
+                                <tr className="text-green-500">
+                                  <th className="text-left p-2 font-semibold">Username</th>
+                                  <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-right p-2 font-semibold">Stake (KSH)</th>
+                                  <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
+                                  <th className="text-left p-2 font-semibold">Bet ID</th>
+                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-center p-2 font-semibold">Odds</th>
+                                  <th className="text-center p-2 font-semibold">Selections</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {wonBets.map((bet) => {
+                                  const user = userMap.get(bet.user_id || '');
+                                  return (
+                                    <tr key={bet.id} className="bg-green-500/5 hover:bg-green-500/10 transition-colors">
+                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
+                                      <td className="p-2 text-right text-green-500 font-bold">{bet.potentialWin.toLocaleString()}</td>
+                                      <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
+                                      <td className="p-2 text-center">{bet.selections.length}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
                       )}
-                    </div>
-                  </Card>
-                );
-              })}
-              {bets.length === 0 && (
-                <div className="rounded-xl border border-border/50 bg-card p-8 text-center text-muted-foreground">
-                  No bets found
-                </div>
-              )}
-            </div>
+                      
+                      {/* LOST BETS - Below Won */}
+                      {lostBets.length > 0 && (
+                        <div className="space-y-3">
+                          <div className="bg-card/95 backdrop-blur-sm py-2">
+                            <h4 className="text-xs font-bold uppercase tracking-wider text-red-500 flex items-center gap-2">
+                              <XCircle className="h-4 w-4" /> Lost Bets ({lostBets.length})
+                            </h4>
+                          </div>
+                          
+                          {/* Lost Bets Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs">
+                              <thead className="bg-red-500/10 border-b border-red-500/30">
+                                <tr className="text-red-500">
+                                  <th className="text-left p-2 font-semibold">Username</th>
+                                  <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-right p-2 font-semibold">Stake (KSH)</th>
+                                  <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
+                                  <th className="text-left p-2 font-semibold">Bet ID</th>
+                                  <th className="text-left p-2 font-semibold">Date Placed</th>
+                                  <th className="text-center p-2 font-semibold">Odds</th>
+                                  <th className="text-center p-2 font-semibold">Selections</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-border">
+                                {lostBets.map((bet) => {
+                                  const user = userMap.get(bet.user_id || '');
+                                  return (
+                                    <tr key={bet.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors">
+                                      <td className="p-2 text-foreground font-medium">{user?.username || 'Unknown'}</td>
+                                      <td className="p-2 text-muted-foreground">{user?.phone || '-'}</td>
+                                      <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
+                                      <td className="p-2 text-right text-red-500 font-bold">0</td>
+                                      <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
+                                      <td className="p-2 text-muted-foreground whitespace-nowrap">{bet.date}</td>
+                                      <td className="p-2 text-center">{bet.totalOdds.toFixed(2)}</td>
+                                      <td className="p-2 text-center">{bet.selections.length}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </TabsContent>
 
           {/* Payment Management Tab */}

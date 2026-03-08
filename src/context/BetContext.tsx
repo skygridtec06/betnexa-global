@@ -3,6 +3,7 @@ import { createContext, useContext, useState, ReactNode, useEffect } from "react
 export interface PlacedBet {
   id: string;
   betId: string;
+  user_id?: string;
   date: string;
   time: string;
   stake: number;
