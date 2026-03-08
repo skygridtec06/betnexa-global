@@ -7,7 +7,7 @@ const CallbackRoutes = require('./routes/callback.routes.js');
 const AuthRoutes = require('./routes/auth.routes.js');
 const AdminRoutes = require('./routes/admin.routes.js');
 const BetsRoutes = require('./routes/bets.routes.js');
-const PresenceRoutes = require('./routes/presence.routes.js');
+// const PresenceRoutes = require('./routes/presence.routes.js');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -32,7 +32,7 @@ app.use('/api/payments', PaymentRoutes);
 app.use('/api/callbacks', CallbackRoutes);
 app.use('/api/admin', AdminRoutes);
 app.use('/api/bets', BetsRoutes);
-app.use('/api/presence', PresenceRoutes);
+// app.use('/api/presence', PresenceRoutes);
 
 // Health check
 // Health check endpoint
