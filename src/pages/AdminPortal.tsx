@@ -5,12 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
+import { ActiveMembers } from "@/components/ActiveMembers";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
 import { useOdds, type GameOdds } from "@/context/OddsContext";
 import { useUserManagement } from "@/context/UserManagementContext";
 import { useUser } from "@/context/UserContext";
 import { useTransactions } from "@/context/TransactionContext";
+import { usePresence } from "@/context/PresenceContext";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
@@ -64,6 +66,7 @@ const AdminPortal = () => {
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
   const { getAllTransactions, updateTransactionStatus } = useTransactions();
+  const { activeCount } = usePresence();
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [editingGame, setEditingGame] = useState<string | null>(null);
@@ -1018,7 +1021,7 @@ const AdminPortal = () => {
         </div>
 
         {/* Stats */}
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
+        <div className="mb-8 grid gap-4 md:grid-cols-5">
           {stats.map((s) => (
             <div key={s.label} className="gradient-card rounded-xl border border-border/50 p-5 card-glow">
               <div className="flex items-center justify-between">
@@ -1030,7 +1033,7 @@ const AdminPortal = () => {
               </div>
             </div>
           ))}
-        </div>
+          <ActiveMembers />
 
         <Tabs defaultValue="games">
           <TabsList className="mb-6 bg-secondary grid w-full grid-cols-5">
