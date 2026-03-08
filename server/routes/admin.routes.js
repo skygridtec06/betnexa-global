@@ -2364,4 +2364,148 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
   }
 });
 
+// POST: Calculate and update all user balances based on betting history
+router.post('/calculate-user-balances', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n💰 [POST /api/admin/calculate-user-balances] Starting balance calculation...');
+
+    // Fetch all users
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, email, balance, account_balance');
+
+    if (usersError) throw usersError;
+    console.log(`✅ Found ${users.length} users`);
+
+    const updates = [];
+    const report = [];
+
+    for (const user of users) {
+      console.log(`\n📊 Processing user: ${user.email} (ID: ${user.id})`);
+      
+      const currentBalance = user.balance || user.account_balance || 0;
+      console.log(`   Current balance: KSH ${currentBalance}`);
+
+      // Get all bets for this user
+      const { data: bets, error: betsError } = await supabase
+        .from('bets')
+        .select('id, stake, status, amount_won')
+        .eq('user_id', user.id);
+
+      if (betsError) {
+        console.warn(`⚠️ Error fetching bets for user ${user.id}:`, betsError.message);
+        continue;
+      }
+
+      // Separate bets by status
+      const wonBets = bets.filter((b) => b.status === 'Won');
+      const lostBets = bets.filter((b) => b.status === 'Lost');
+      const openBets = bets.filter((b) => b.status === 'Open');
+
+      // Calculate totals
+      const totalWon = wonBets.reduce((sum, b) => sum + (b.amount_won || 0), 0);
+      const totalLostStakes = lostBets.reduce((sum, b) => sum + (b.stake || 0), 0);
+      const totalOpenStakes = openBets.reduce((sum, b) => sum + (b.stake || 0), 0);
+
+      // Formula: won amount - lost stakes - open stakes + 1000 bonus
+      const calculatedBalance = Math.max(0, totalWon - totalLostStakes - totalOpenStakes + 1000);
+
+      console.log(`   Won bets: ${wonBets.length} | Total won: KSH ${totalWon}`);
+      console.log(`   Lost bets: ${lostBets.length} | Total stakes lost: KSH ${totalLostStakes}`);
+      console.log(`   Open bets: ${openBets.length} | Total stakes at risk: KSH ${totalOpenStakes}`);
+      console.log(`   ➜ Calculation: ${totalWon} - ${totalLostStakes} - ${totalOpenStakes} + 1000 = ${calculatedBalance}`);
+      console.log(`   ✓ Calculated balance: KSH ${calculatedBalance}`);
+
+      updates.push({
+        userId: user.id,
+        email: user.email,
+        oldBalance: currentBalance,
+        newBalance: calculatedBalance,
+        won: totalWon,
+        lost: totalLostStakes,
+        open: totalOpenStakes,
+        wonBets: wonBets.length,
+        lostBets: lostBets.length,
+        openBets: openBets.length,
+      });
+
+      report.push({
+        email: user.email,
+        oldBalance: currentBalance,
+        newBalance: calculatedBalance,
+        difference: calculatedBalance - currentBalance,
+      });
+    }
+
+    console.log('\n' + '='.repeat(80));
+    console.log('📋 BALANCE CALCULATION SUMMARY');
+    console.log('='.repeat(80));
+
+    report.forEach((r) => {
+      const diff = r.difference > 0 ? `+${r.difference}` : r.difference;
+      console.log(`${r.email}`);
+      console.log(`  Old: KSH ${r.oldBalance} → New: KSH ${r.newBalance} (${diff})`);
+    });
+
+    console.log('\n' + '='.repeat(80));
+    console.log('🔄 Updating balances in Supabase...');
+    console.log('='.repeat(80));
+
+    // Update all balances
+    let successCount = 0;
+    const failedUpdates = [];
+
+    for (const update of updates) {
+      try {
+        // Update balance field
+        const { error: error1 } = await supabase
+          .from('users')
+          .update({ balance: update.newBalance })
+          .eq('id', update.userId);
+
+        // Also update account_balance field if it exists
+        if (!error1) {
+          await supabase
+            .from('users')
+            .update({ account_balance: update.newBalance })
+            .eq('id', update.userId);
+        }
+
+        if (error1) {
+          console.log(`❌ Error updating ${update.email}: ${error1.message}`);
+          failedUpdates.push(update);
+        } else {
+          console.log(`✅ Updated ${update.email}: KSH ${update.oldBalance} → KSH ${update.newBalance}`);
+          successCount++;
+        }
+      } catch (err) {
+        console.log(`❌ Exception updating ${update.email}: ${err.message}`);
+        failedUpdates.push(update);
+      }
+    }
+
+    console.log('\n' + '='.repeat(80));
+    console.log(`✨ SUCCESS: ${successCount}/${updates.length} users updated`);
+    console.log('='.repeat(80));
+
+    res.json({
+      success: true,
+      message: `Updated ${successCount}/${updates.length} user balances`,
+      updatedCount: successCount,
+      totalCount: updates.length,
+      failed: failedUpdates.length,
+      summary: report,
+      details: updates
+    });
+
+  } catch (error) {
+    console.error('❌ Calculate balances error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate user balances',
+      details: error.message
+    });
+  }
+});
+
 module.exports = router;
