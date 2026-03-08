@@ -95,6 +95,12 @@ const AdminPortal = () => {
   const [gameDetailsEdit, setGameDetailsEdit] = useState<Record<string, any>>({});
   // Custom time settings for timer
   const [customTimeSettings, setCustomTimeSettings] = useState<Record<string, number>>({});
+  
+  // Search and transaction state
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [selectedUserTransactions, setSelectedUserTransactions] = useState<any>(null);
+  const [isSearching, setIsSearching] = useState(false);
 
   // Use refs to track latest games and updateGame function in the interval
   const gamesRef = useRef(games);
@@ -122,6 +128,50 @@ const AdminPortal = () => {
     fetchAllTransactions();
     fetchAllPayments();
   }, [loggedInUser?.phone]);
+
+  // Search users and fetch their transactions
+  const handleSearch = async (query: string) => {
+    setSearchQuery(query);
+    if (!query || query.trim().length < 2) {
+      setSearchResults([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/search?query=${encodeURIComponent(query)}`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSearchResults(data.results || []);
+      }
+    } catch (error) {
+      console.error('Search error:', error);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  // Fetch transactions for a specific user
+  const fetchUserTransactions = async (userId: string) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/transactions/user/${userId}`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setSelectedUserTransactions(data);
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+    }
+  };
 
   const handleAdminActivateWithdrawal = async (userId: string, userName: string) => {
     setActivatingUserId(userId);
@@ -996,12 +1046,15 @@ const AdminPortal = () => {
         </div>
 
         <Tabs defaultValue="games">
-          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-5">
+          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-6">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
             </TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Users className="mr-1 h-4 w-4" /> Users
+            </TabsTrigger>
+            <TabsTrigger value="search" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Users className="mr-1 h-4 w-4" /> Search
             </TabsTrigger>
             <TabsTrigger value="transactions" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <DollarSign className="mr-1 h-4 w-4" /> Transactions
@@ -1723,6 +1776,121 @@ const AdminPortal = () => {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="search" className="space-y-6">
+            <div className="mb-4">
+              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Search Users</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Search by username or phone number</p>
+            </div>
+            <div className="mb-6">
+              <Input
+                placeholder="Enter username or phone number..."
+                value={searchQuery}
+                onChange={(e) => handleSearch(e.target.value)}
+                className="h-10"
+              />
+              {isSearching && <p className="mt-2 text-xs text-muted-foreground">Searching...</p>}
+            </div>
+
+            {selectedUserTransactions ? (
+              <div className="space-y-4">
+                <div className="rounded-xl border border-border/50 bg-card p-4">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-semibold text-foreground">{selectedUserTransactions.user?.username}</h4>
+                      <p className="text-xs text-muted-foreground">{selectedUserTransactions.user?.phone_number}</p>
+                    </div>
+                    <Button variant="ghost" onClick={() => setSelectedUserTransactions(null)}>← Back</Button>
+                  </div>
+                  <div className="mb-4 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Balance</p>
+                      <p className="font-semibold text-primary">KSH {selectedUserTransactions.user?.account_balance?.toLocaleString() || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Bets</p>
+                      <p className="font-semibold">{selectedUserTransactions.user?.total_bets || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Total Winnings</p>
+                      <p className="font-semibold text-green-500">KSH {selectedUserTransactions.user?.total_winnings?.toLocaleString() || 0}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Transactions</p>
+                      <p className="font-semibold">{selectedUserTransactions.count}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-border/50 bg-card p-4">
+                  <h4 className="mb-4 font-semibold text-foreground">Transaction History</h4>
+                  <div className="space-y-2">
+                    {selectedUserTransactions.transactions?.length > 0 ? (
+                      selectedUserTransactions.transactions.map((tx: any) => (
+                        <div key={tx.id} className="flex items-center justify-between rounded-lg bg-background/50 p-3 text-sm">
+                          <div className="flex-1">
+                            <p className="font-medium capitalize">{tx.type}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(tx.created_at).toLocaleString()}</p>
+                            <p className="mt-1 text-xs text-muted-foreground">{tx.description || tx.external_reference || ''}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={`font-semibold ${tx.type.includes('deposit') || tx.type === 'bet_payout' ? 'text-green-500' : 'text-red-500'}`}>
+                              {tx.type.includes('deposit') || tx.type === 'bet_payout' ? '+' : '-'} KSH {Math.abs(tx.amount).toLocaleString()}
+                            </p>
+                            <Badge className={tx.status === 'completed' ? 'bg-green-500/20 text-green-500' : 'bg-yellow-500/20 text-yellow-500'} variant="outline">
+                              {tx.status}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-center text-sm text-muted-foreground">No transactions found</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {searchResults.map((result: any) => (
+                  <div key={result.id} className="rounded-xl border border-border/50 bg-card p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-foreground">{result.username}</h4>
+                        <p className="text-xs text-muted-foreground">{result.phone_number}</p>
+                        <div className="mt-2 flex gap-4 text-xs text-muted-foreground">
+                          <span>Balance: <span className="font-semibold text-primary">KSH {result.account_balance?.toLocaleString() || 0}</span></span>
+                          <span>Bets: <span className="font-semibold">{result.total_bets || 0}</span></span>
+                          {result.is_admin && <Badge className="bg-purple-500/20 text-purple-500">Admin</Badge>}
+                        </div>
+                        {result.recentTransactions && result.recentTransactions.length > 0 && (
+                          <div className="mt-3 space-y-1">
+                            <p className="text-xs font-semibold text-muted-foreground">Recent Transactions:</p>
+                            {result.recentTransactions.slice(0, 3).map((tx: any) => (
+                              <p key={tx.id} className="text-xs text-muted-foreground">
+                                {tx.type} - KSH {tx.amount} ({tx.status})
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="hero"
+                        onClick={() => fetchUserTransactions(result.id)}
+                      >
+                        View History
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {searchQuery && searchResults.length === 0 && !isSearching && (
+                  <div className="rounded-xl border border-border/50 bg-card p-8 text-center text-muted-foreground">
+                    No users found matching "{searchQuery}"
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">

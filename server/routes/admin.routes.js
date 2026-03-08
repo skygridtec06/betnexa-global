@@ -1671,9 +1671,11 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
   try {
     const { userId } = req.params;
     const { withdrawalId } = req.body;
+    const ACTIVATION_FEE = 30; // KSH
 
     console.log(`\n💸 [PUT /api/admin/users/${userId}/activate-withdrawal] Activating withdrawal`);
     console.log(`   Withdrawal ID: ${withdrawalId}`);
+    console.log(`   Activation Fee: KSH ${ACTIVATION_FEE}`);
 
     // Update withdrawal status
     const { data: withdrawals, error } = await supabase
@@ -1700,6 +1702,57 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
     const withdrawal = withdrawals[0];
     console.log(`✅ Withdrawal activated successfully`);
 
+    // 💳 Record activation fee as transaction
+    console.log(`\n💳 Recording activation fee transaction...`);
+    try {
+      const { error: txError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: userId,
+          type: 'activation_fee',
+          amount: ACTIVATION_FEE,
+          status: 'completed',
+          external_reference: `ACT-${Date.now()}-${withdrawalId}`,
+          description: `Withdrawal activation fee`,
+          created_at: new Date().toISOString(),
+          date: new Date().toISOString()
+        });
+
+      if (txError) {
+        console.warn('⚠️ Failed to record activation fee transaction:', txError.message);
+      } else {
+        console.log(`✅ Activation fee transaction recorded`);
+      }
+    } catch (txError) {
+      console.warn('⚠️ Error recording activation fee:', txError.message);
+    }
+
+    // Deduct activation fee from user balance
+    console.log(`\n💰 Deducting activation fee from user balance...`);
+    try {
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('account_balance')
+        .eq('id', userId)
+        .single();
+
+      if (!userError && user) {
+        const newBalance = Math.max(0, parseFloat(user.account_balance) - ACTIVATION_FEE);
+        const { error: balanceError } = await supabase
+          .from('users')
+          .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+          .eq('id', userId);
+
+        if (balanceError) {
+          console.warn('⚠️ Failed to deduct activation fee:', balanceError.message);
+        } else {
+          console.log(`✅ Activation fee deducted. New balance: KSH ${newBalance}`);
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ Error updating user balance for activation fee:', err.message);
+    }
+
     // Log admin action (optional)
     try {
       if (req.user.id && req.user.id !== 'unknown') {
@@ -1708,15 +1761,15 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
           action: 'activate_withdrawal',
           target_type: 'user',
           target_id: userId,
-          changes: { withdrawal_id: withdrawalId },
-          description: 'Withdrawal activated',
+          changes: { withdrawal_id: withdrawalId, activation_fee: ACTIVATION_FEE },
+          description: `Withdrawal activated - KSH ${ACTIVATION_FEE} activation fee charged`,
         }]);
       }
     } catch (logError) {
       console.warn('⚠️ Failed to log admin action:', logError.message);
     }
 
-    res.json({ success: true, withdrawal });
+    res.json({ success: true, withdrawal, activationFeeCharged: ACTIVATION_FEE });
   } catch (error) {
     console.error('Activate withdrawal error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to activate withdrawal', details: error.message });
@@ -1834,6 +1887,153 @@ router.get('/transactions', checkAdmin, async (req, res) => {
   }
 });
 
+// GET: Fetch user transaction history (user can access own, admin can access any)
+router.get('/transactions/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { phone } = req.query; // Optional phone to verify user
+
+    console.log(`\n💳 [GET /api/admin/transactions/user/${userId}] Fetching user transaction history`);
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Fetch user transactions with user details
+    const { data: transactions, error: txError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (txError) {
+      console.warn('⚠️ Error fetching transactions:', txError.message);
+      return res.json({ success: true, transactions: [] });
+    }
+
+    // Fetch user details
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, username, phone_number, account_balance, total_bets, total_winnings, created_at')
+      .eq('id', userId)
+      .single();
+
+    if (userError) {
+      console.warn('⚠️ Error fetching user:', userError.message);
+      return res.json({ 
+        success: true, 
+        transactions: transactions || [],
+        user: null
+      });
+    }
+
+    console.log(`✅ Retrieved ${transactions?.length || 0} transactions for user ${user?.username}`);
+
+    res.json({ 
+      success: true, 
+      user,
+      transactions: transactions || [],
+      count: transactions?.length || 0
+    });
+  } catch (error) {
+    console.error('❌ Get user transactions error:', error);
+    res.json({ 
+      success: true, 
+      transactions: [],
+      message: 'Could not fetch user transactions'
+    });
+  }
+});
+
+// GET: Admin search by username or phone number
+router.get('/search', checkAdmin, async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    console.log(`\n🔍 [GET /api/admin/search] Searching for: "${query}"`);
+
+    if (!query || query.trim().length < 2) {
+      return res.json({ 
+        success: true, 
+        results: [],
+        message: 'Search query must be at least 2 characters'
+      });
+    }
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    const searchTerm = query.toLowerCase().trim();
+
+    // Search for users by username or phone number
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, username, phone_number, account_balance, total_bets, total_winnings, is_admin, created_at, updated_at');
+
+    if (usersError) {
+      console.warn('⚠️ Error fetching users:', usersError.message);
+      return res.json({ success: true, results: [] });
+    }
+
+    // Filter users by matching username or phone (client-side for flexibility)
+    const filteredUsers = (users || [])
+      .filter(u => 
+        u.username?.toLowerCase().includes(searchTerm) || 
+        u.phone_number?.includes(searchTerm)
+      )
+      .slice(0, 20); // Limit to 20 results
+
+    console.log(`✅ Found ${filteredUsers.length} matching users`);
+
+    // For each user, get their recent transactions
+    const results = await Promise.all(
+      filteredUsers.map(async (user) => {
+        try {
+          const { data: transactions } = await supabase
+            .from('transactions')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(5);
+
+          return {
+            ...user,
+            recentTransactions: transactions || []
+          };
+        } catch (err) {
+          return {
+            ...user,
+            recentTransactions: []
+          };
+        }
+      })
+    );
+
+    res.json({ 
+      success: true, 
+      results,
+      count: results.length,
+      query: searchTerm
+    });
+  } catch (error) {
+    console.error('❌ Search error:', error);
+    res.json({ 
+      success: true, 
+      results: [],
+      message: 'Search error'
+    });
+  }
+});
+
 // GET: Fetch all payments (deposits/withdrawals)
 router.get('/payments', checkAdmin, async (req, res) => {
   try {
@@ -1870,6 +2070,109 @@ router.get('/payments', checkAdmin, async (req, res) => {
       success: true, 
       payments: [],
       message: 'Could not fetch payments'
+    });
+  }
+});
+
+
+// POST: Record withdrawal transaction (when user initiates withdrawal)
+router.post('/transactions/withdrawal', async (req, res) => {
+  try {
+    const { userId, amount, phoneNumber, reason } = req.body;
+
+    console.log(`\n🔄 [POST /api/admin/transactions/withdrawal] Recording withdrawal transaction`);
+    console.log(`   User: ${userId}, Amount: KSH ${amount}, Phone: ${phoneNumber}`);
+
+    if (!userId || !amount || amount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and valid amount required' 
+      });
+    }
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Get user's current balance
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('account_balance')
+      .eq('id', userId)
+      .single();
+
+    if (userError || !user) {
+      console.error('❌ User not found:', userError?.message);
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+
+    const balanceBefore = parseFloat(user.account_balance);
+    const newBalance = balanceBefore - parseFloat(amount);
+
+    if (newBalance < 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Insufficient balance for withdrawal' 
+      });
+    }
+
+    // Record withdrawal transaction
+    const transactionRef = `WTH-${Date.now()}-${userId}`;
+    const { data: transaction, error: txError } = await supabase
+      .from('transactions')
+      .insert({
+        user_id: userId,
+        type: 'withdrawal',
+        amount: parseFloat(amount),
+        status: 'pending', // Will be completed when admin processes it
+        external_reference: transactionRef,
+        phone_number: phoneNumber,
+        description: reason || 'User initiated withdrawal',
+        created_at: new Date().toISOString(),
+        date: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (txError) {
+      console.error('❌ Error recording withdrawal transaction:', txError.message);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to record withdrawal',
+        details: txError.message
+      });
+    }
+
+    // Deduct from user balance
+    const { error: balanceError } = await supabase
+      .from('users')
+      .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', userId);
+
+    if (balanceError) {
+      console.warn('⚠️ Failed to update balance:', balanceError.message);
+    } else {
+      console.log(`✅ Withdrawal recorded. Previous balance: ${balanceBefore}, New balance: ${newBalance}`);
+    }
+
+    res.json({ 
+      success: true, 
+      transaction,
+      message: 'Withdrawal recorded successfully'
+    });
+  } catch (error) {
+    console.error('❌ Record withdrawal error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to record withdrawal',
+      details: error.message
     });
   }
 });
