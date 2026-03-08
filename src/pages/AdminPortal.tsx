@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
-import { ActiveMembers } from "@/components/ActiveMembers";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
 import { useOdds, type GameOdds } from "@/context/OddsContext";
@@ -1019,7 +1018,7 @@ const AdminPortal = () => {
         </div>
 
         {/* Stats */}
-        <div className="mb-8 grid gap-4 md:grid-cols-5">
+        <div className="mb-8 grid gap-4 md:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className="gradient-card rounded-xl border border-border/50 p-5 card-glow">
               <div className="flex items-center justify-between">
@@ -1031,7 +1030,6 @@ const AdminPortal = () => {
               </div>
             </div>
           ))}
-          <ActiveMembers />
         </div>
 
         <Tabs defaultValue="games">
