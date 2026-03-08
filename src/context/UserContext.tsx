@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import supabase from "@/services/supabaseClient";
 import { sessionService } from "@/services/sessionService";
 
 export interface UserProfile {
@@ -33,11 +33,6 @@ interface UserContextType {
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
-
-// Initialize Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const DEFAULT_USER: UserProfile = {
   id: "user1",

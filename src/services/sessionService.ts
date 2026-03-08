@@ -3,12 +3,8 @@
  * Handles multi-device login and session tracking
  */
 
-import { createClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://your-project.supabase.co';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import supabase from './supabaseClient';
 
 export interface SessionData {
   sessionId: string;

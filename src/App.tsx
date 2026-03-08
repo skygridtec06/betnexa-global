@@ -41,11 +41,11 @@ const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <PresenceProvider>
-          <PresenceTracker>
-            <UserManagementProvider>
-              <TransactionProvider>
-                <UserProvider>
+        <UserManagementProvider>
+          <TransactionProvider>
+            <UserProvider>
+              <PresenceProvider>
+                <PresenceTracker>
                   <BetProvider>
                     <MatchProvider>
                       <OddsProvider>
@@ -71,11 +71,11 @@ const App = () => {
                       </OddsProvider>
                     </MatchProvider>
                   </BetProvider>
-                </UserProvider>
-              </TransactionProvider>
-            </UserManagementProvider>
-          </PresenceTracker>
-        </PresenceProvider>
+                </PresenceTracker>
+              </PresenceProvider>
+            </UserProvider>
+          </TransactionProvider>
+        </UserManagementProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
