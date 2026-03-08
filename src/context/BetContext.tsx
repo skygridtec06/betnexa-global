@@ -32,6 +32,7 @@ interface BetContextType {
   setBalance: (amount: number) => void;
   syncBalance: (newBalance: number) => void;
   setBets: (bets: PlacedBet[]) => void;
+  fetchAllBets: () => Promise<{ success: boolean; error?: string }>;
 }
 
 const BetContext = createContext<BetContextType | undefined>(undefined);
@@ -215,8 +216,43 @@ export function BetProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchAllBets = async () => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/bets/admin/all`, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      const data = await response.json();
+      if (data.success && data.bets) {
+        // Transform database bets to PlacedBet format
+        const transformedBets: PlacedBet[] = data.bets.map((bet: any) => ({
+          id: bet.id,
+          betId: bet.bet_id || bet.id?.substring(0, 8),
+          user_id: bet.user_id,
+          date: bet.created_at ? new Date(bet.created_at).toLocaleDateString() : 'Unknown',
+          time: bet.created_at ? new Date(bet.created_at).toLocaleTimeString() : '',
+          stake: bet.stake || 0,
+          potentialWin: bet.potential_win || 0,
+          totalOdds: bet.total_odds || 0,
+          selections: bet.bet_selections || [],
+          status: (bet.status || 'Open').charAt(0).toUpperCase() + (bet.status || 'Open').slice(1).toLowerCase() as PlacedBet['status'],
+          amountWon: bet.amount_won
+        }));
+
+        setBets(transformedBets);
+        console.log(`✅ Loaded ${transformedBets.length} bets from backend`);
+        return { success: true };
+      }
+      return { success: false, error: data.error };
+    } catch (error) {
+      console.error('❌ Error fetching all bets:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  };
+
   return (
-    <BetContext.Provider value={{ bets, addBet, removeBet, balance, deposit, withdraw, placeBet, updateBetStatus, setBalance: setBalanceHandler, syncBalance, setBets }}>
+    <BetContext.Provider value={{ bets, addBet, removeBet, balance, deposit, withdraw, placeBet, updateBetStatus, setBalance: setBalanceHandler, syncBalance, setBets, fetchAllBets }}>
       {children}
     </BetContext.Provider>
   );

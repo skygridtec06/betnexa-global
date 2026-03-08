@@ -59,7 +59,7 @@ const sortGamesByKickoffTime = (gamesToSort: any[]) => {
 
 const AdminPortal = () => {
   const { matches, updateScore, setFinalScore } = useMatches();
-  const { bets, syncBalance, updateBetStatus } = useBets();
+  const { bets, syncBalance, updateBetStatus, fetchAllBets } = useBets();
   const { games, addGame, updateGame, removeGame, updateGameMarkets, refreshGames } = useOdds();
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
@@ -121,10 +121,13 @@ const AdminPortal = () => {
     console.log('📦 Fetching users from backend...');
     fetchUsersFromBackend(loggedInUser?.phone);
     
-    // Also fetch transactions and payments
+    // Also fetch transactions, payments, and bets
     console.log('📦 Fetching transactions and payments...');
     fetchAllTransactions();
     fetchAllPayments();
+    
+    console.log('📦 Fetching all bets...');
+    fetchAllBets();
   }, [loggedInUser?.phone]);
 
   // Fetch transactions for a specific user
