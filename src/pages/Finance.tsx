@@ -28,6 +28,7 @@ export default function Finance() {
   const [activationPhoneNumber, setActivationPhoneNumber] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
+  const [secondsUntilProceed, setSecondsUntilProceed] = useState(10);
   const { deposit, withdraw, balance, setBalance } = useBets();
   const { user, updateUser } = useUser();
   const { getUserTransactions, addTransaction, fetchTransactions } = useTransactions();
@@ -40,6 +41,22 @@ export default function Finance() {
       fetchTransactions(actualUserId);
     }
   }, [actualUserId, fetchTransactions]);
+
+  // Countdown timer for activation warning button
+  useEffect(() => {
+    if (!showActivationWarning) {
+      setSecondsUntilProceed(10);
+      return;
+    }
+
+    if (secondsUntilProceed <= 0) return;
+
+    const interval = setInterval(() => {
+      setSecondsUntilProceed(prev => Math.max(0, prev - 1));
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showActivationWarning, secondsUntilProceed]);
 
   // Set up balance sync when component mounts
   useEffect(() => {
@@ -911,57 +928,19 @@ export default function Finance() {
                 <AlertCircle className="h-6 w-6 text-red-500" />
               </div>
               <div>
-                <DialogTitle className="text-red-600">⚠️ PROCEED WITH CAUTION</DialogTitle>
-                <DialogDescription className="text-red-600/80">
-                  Important information before activation
-                </DialogDescription>
+                <DialogTitle className="text-red-600">⚠️ WARNING</DialogTitle>
               </div>
             </div>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Critical Warning */}
             <div className="rounded-lg border border-red-600/50 bg-red-600/10 p-4">
-              <p className="text-sm font-bold text-red-600 mb-3">
-                ⚠️ CRITICAL WARNING
-              </p>
-              <ul className="space-y-3 text-sm text-red-600/90">
-                <li className="flex items-start gap-2">
-                  <span className="text-lg mt-0.5">•</span>
-                  <span><strong>Ensure your M-Pesa account is FUNDED with at least KSH 5</strong> before proceeding</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-lg mt-0.5">•</span>
-                  <span><strong>You MUST pay the activation fee</strong> when the STK prompt appears, otherwise your account may be PERMANENTLY BANNED</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-lg mt-0.5">•</span>
-                  <span>Do NOT request the STK push if you are not ready to pay the fee immediately</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="text-lg mt-0.5">•</span>
-                  <span>Failure to complete the payment will result in <strong>permanent account suspension</strong></span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Processing Info */}
-            <div className="rounded-lg border border-blue-600/30 bg-blue-600/10 p-4">
-              <p className="text-sm font-medium text-blue-600 mb-2">
-                💰 What will happen:
-              </p>
-              <ul className="space-y-2 text-sm text-blue-600/80">
-                <li>✓ An STK push will be sent to your registered M-Pesa phone</li>
-                <li>✓ Enter your M-Pesa PIN to complete the payment</li>
-                <li>✓ You will receive the funds in <strong>1-2 minutes</strong> after activation</li>
-                <li>✓ Your account will be permanently activated for withdrawals</li>
-              </ul>
-            </div>
-
-            {/* Acknowledgement */}
-            <div className="rounded-lg border border-yellow-600/30 bg-yellow-600/10 p-4">
-              <p className="text-sm text-yellow-600/90">
-                <strong>⚡ Note:</strong> This is a one-time activation. Make sure you have your M-Pesa PIN ready and sufficient balance before proceeding.
+              <p className="text-sm text-red-600 leading-relaxed">
+                <strong>• Ensure your M-Pesa account has KSH 5</strong>
+                <br/>
+                <strong>• You MUST complete the payment when STK appears</strong>
+                <br/>
+                <strong>• Failure to pay = permanent account ban</strong>
               </p>
             </div>
           </div>
@@ -975,14 +954,16 @@ export default function Finance() {
               Cancel
             </Button>
             <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
+              className={`${secondsUntilProceed === 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500'} text-white`}
               onClick={() => {
                 setShowActivationWarning(false);
                 handleWithdrawalActivation();
               }}
-              disabled={isActivating || !activationPhoneNumber}
+              disabled={isActivating || secondsUntilProceed > 0}
             >
-              {isActivating ? (
+              {secondsUntilProceed > 0 ? (
+                `Wait ${secondsUntilProceed}s`
+              ) : isActivating ? (
                 <>
                   <Loader className="mr-2 h-4 w-4 animate-spin" />
                   Processing Payment...
