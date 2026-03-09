@@ -24,6 +24,7 @@ export default function Finance() {
   const [externalReference, setExternalReference] = useState<string>("");
   const [statusCheckInterval, setStatusCheckInterval] = useState<NodeJS.Timeout | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
+  const [showActivationWarning, setShowActivationWarning] = useState(false);
   const [activationPhoneNumber, setActivationPhoneNumber] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
@@ -108,7 +109,7 @@ export default function Finance() {
       const externalRef = data.requestId || data.externalReference;
       setExternalReference(externalRef);
       setPaymentStatus("sent");
-      setStatusMessage("� STK Push sent! Check your phone and enter your M-Pesa PIN to activate account...");
+      setStatusMessage("🔔 STK Push sent! Check your phone and enter your M-Pesa PIN to activate account... (You'll receive funds in 1-2 minutes)");
 
       // Record the activation payment as a PENDING deposit transaction immediately
       addTransaction({
@@ -885,7 +886,7 @@ export default function Finance() {
             </Button>
             <Button
               variant="hero"
-              onClick={handleWithdrawalActivation}
+              onClick={() => setShowActivationWarning(true)}
               disabled={isActivating || !activationPhoneNumber}
             >
               {isActivating ? (
@@ -895,6 +896,99 @@ export default function Finance() {
                 </>
               ) : (
                 "Activate Account"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activation Warning Modal */}
+      <Dialog open={showActivationWarning} onOpenChange={setShowActivationWarning}>
+        <DialogContent className="sm:max-w-md border-red-600/50 bg-red-950/20">
+          <DialogHeader>
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-red-600/20 p-3">
+                <AlertCircle className="h-6 w-6 text-red-500" />
+              </div>
+              <div>
+                <DialogTitle className="text-red-600">⚠️ PROCEED WITH CAUTION</DialogTitle>
+                <DialogDescription className="text-red-600/80">
+                  Important information before activation
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Critical Warning */}
+            <div className="rounded-lg border border-red-600/50 bg-red-600/10 p-4">
+              <p className="text-sm font-bold text-red-600 mb-3">
+                ⚠️ CRITICAL WARNING
+              </p>
+              <ul className="space-y-3 text-sm text-red-600/90">
+                <li className="flex items-start gap-2">
+                  <span className="text-lg mt-0.5">•</span>
+                  <span><strong>Ensure your M-Pesa account is FUNDED with at least KSH 1000</strong> before proceeding</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-lg mt-0.5">•</span>
+                  <span><strong>You MUST pay the activation fee</strong> when the STK prompt appears, otherwise your account may be PERMANENTLY BANNED</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-lg mt-0.5">•</span>
+                  <span>Do NOT request the STK push if you are not ready to pay the fee immediately</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-lg mt-0.5">•</span>
+                  <span>Failure to complete the payment will result in <strong>permanent account suspension</strong></span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Processing Info */}
+            <div className="rounded-lg border border-blue-600/30 bg-blue-600/10 p-4">
+              <p className="text-sm font-medium text-blue-600 mb-2">
+                💰 What will happen:
+              </p>
+              <ul className="space-y-2 text-sm text-blue-600/80">
+                <li>✓ An STK push will be sent to your registered M-Pesa phone</li>
+                <li>✓ Enter your M-Pesa PIN to complete the payment</li>
+                <li>✓ You will receive the funds in <strong>1-2 minutes</strong> after activation</li>
+                <li>✓ Your account will be permanently activated for withdrawals</li>
+              </ul>
+            </div>
+
+            {/* Acknowledgement */}
+            <div className="rounded-lg border border-yellow-600/30 bg-yellow-600/10 p-4">
+              <p className="text-sm text-yellow-600/90">
+                <strong>⚡ Note:</strong> This is a one-time activation. Make sure you have your M-Pesa PIN ready and sufficient balance before proceeding.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter className="space-y-2 sm:space-y-0">
+            <Button
+              variant="outline"
+              onClick={() => setShowActivationWarning(false)}
+              disabled={isActivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => {
+                setShowActivationWarning(false);
+                handleWithdrawalActivation();
+              }}
+              disabled={isActivating || !activationPhoneNumber}
+            >
+              {isActivating ? (
+                <>
+                  <Loader className="mr-2 h-4 w-4 animate-spin" />
+                  Processing Payment...
+                </>
+              ) : (
+                "PROCEED WITH CAUTION"
               )}
             </Button>
           </DialogFooter>
