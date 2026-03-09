@@ -1051,5 +1051,6 @@ export default function Finance() {
           </div>
         </DialogContent>
       </Dialog>
-
-
+    </div>
+  );
+}
