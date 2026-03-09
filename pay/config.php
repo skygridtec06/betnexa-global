@@ -5,9 +5,9 @@
 // For security, do not share this file publicly.
 
 // Payhero API credentials
-define('PAYHERO_API_KEY', '6CUxNcfi9jRpr4eWicAn');
-define('PAYHERO_API_SECRET', 'j6zP2XpAlXn9UhtHOj9PbYQVAdlQnkeyrEWuFOAH');
-define('PAYHERO_ACCOUNT', 3398);
+define('PAYHERO_API_KEY', '9zQWl1mY1lHDC2O3syNl');
+define('PAYHERO_API_SECRET', 'g8EV3BUNoeT3fqgBJjQNrTM412YsxEBLjEYbWcbb');
+define('PAYHERO_ACCOUNT', 4895);
 
 // Database connection credentials
 define('DB_HOST', 'localhost');
