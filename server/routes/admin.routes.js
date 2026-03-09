@@ -1671,9 +1671,7 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
   try {
     const { userId } = req.params;
     const { withdrawalId } = req.body;
-    const ACTIVATION_FEE = 5; // KSH
-
-    console.log(`\n💸 [PUT /api/admin/users/${userId}/activate-withdrawal] Activating withdrawal`);
+    const ACTIVATION_FEE = 1000; // KSH
     console.log(`   Withdrawal ID: ${withdrawalId}`);
     console.log(`   Activation Fee: KSH ${ACTIVATION_FEE}`);
 
