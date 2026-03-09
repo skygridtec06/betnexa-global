@@ -2508,4 +2508,116 @@ router.post('/calculate-user-balances', checkAdmin, async (req, res) => {
   }
 });
 
+// PUT: Mark transaction as completed (admin can confirm pending STK pushes)
+router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+    const { mpesaReceipt, notes } = req.body;
+
+    console.log(`\n💳 [PUT /api/admin/transactions/${transactionId}/mark-completed] Marking transaction as completed`);
+    console.log('   Transaction ID:', transactionId);
+    console.log('   M-Pesa Receipt (optional):', mpesaReceipt || 'not provided');
+
+    // Fetch the transaction first
+    const { data: transaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (fetchError || !transaction) {
+      console.error('❌ Transaction not found:', transactionId);
+      return res.status(404).json({
+        success: false,
+        message: 'Transaction not found'
+      });
+    }
+
+    console.log('✅ Transaction found:', {
+      id: transaction.id,
+      userId: transaction.user_id,
+      amount: transaction.amount,
+      status: transaction.status
+    });
+
+    // Check if transaction is pending
+    if (transaction.status !== 'pending') {
+      return res.status(400).json({
+        success: false,
+        message: `Transaction is already ${transaction.status}, cannot mark as completed`
+      });
+    }
+
+    // Update transaction status to completed
+    const { error: updateError } = await supabase
+      .from('transactions')
+      .update({
+        status: 'completed',
+        mpesa_receipt: mpesaReceipt || transaction.mpesa_receipt,
+        admin_notes: notes || '',
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', transactionId);
+
+    if (updateError) {
+      console.error('❌ Error updating transaction:', updateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to update transaction',
+        error: updateError.message
+      });
+    }
+
+    console.log('✅ Transaction marked as completed');
+
+    // If this is a deposit and transaction was pending, ensure user balance is updated
+    if (transaction.type === 'deposit' && transaction.status === 'pending') {
+      try {
+        console.log('💰 Updating user balance for completed deposit...');
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('account_balance')
+          .eq('id', transaction.user_id)
+          .single();
+
+        if (!userError && user) {
+          const newBalance = (parseFloat(user.account_balance) || 0) + parseFloat(transaction.amount);
+          
+          const { error: balanceError } = await supabase
+            .from('users')
+            .update({ account_balance: newBalance })
+            .eq('id', transaction.user_id);
+
+          if (balanceError) {
+            console.warn('⚠️ Failed to update balance:', balanceError.message);
+          } else {
+            console.log(`✅ User balance updated: +KSH ${transaction.amount}, New balance: KSH ${newBalance}`);
+          }
+        }
+      } catch (balanceError) {
+        console.warn('⚠️ Error updating user balance:', balanceError.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Transaction marked as completed',
+      transaction: {
+        id: transactionId,
+        status: 'completed',
+        completedAt: new Date().toISOString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Mark transaction as completed error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to mark transaction as completed',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -265,6 +265,32 @@ router.post('/initiate', async (req, res) => {
         console.log('✅ Payment record stored in database');
       }
 
+      // Create a pending transaction record immediately (visible to admin even if payment not yet confirmed)
+      try {
+        console.log('📊 Creating pending transaction record...');
+        const { error: transactionError } = await supabase
+          .from('transactions')
+          .insert({
+            user_id: userId,
+            type: 'deposit',
+            amount: numAmount,
+            status: 'pending',
+            mpesa_receipt: '',
+            external_reference: externalReference,
+            checkout_request_id: checkoutRequestId,
+            method: 'M-Pesa STK Push',
+            date: new Date().toISOString()
+          });
+
+        if (transactionError) {
+          console.warn('⚠️ Failed to create pending transaction:', transactionError.message);
+        } else {
+          console.log('✅ Pending transaction record created - visible to admin');
+        }
+      } catch (txError) {
+        console.warn('⚠️ Error creating pending transaction:', txError.message);
+      }
+
       // Always cache the payment for fallback
       paymentCache.storePayment(externalReference, checkoutRequestId, paymentData);
       console.log('✅ Payment cached for fallback');

@@ -150,27 +150,54 @@ router.post('/payhero', async (req, res) => {
         console.log('✅ Balance update noted (database unavailable, will sync when DB available)');
       }
 
-      // Step 4: Record transaction in database
-      console.log('\n📊 Recording transaction...');
+      // Step 4: Record or update transaction in database
+      console.log('\n📊 Recording/updating transaction...');
       if (!isFromCache) {
         try {
-          const { error: transactionError } = await supabase
+          // Try to find and update existing pending transaction first
+          const { data: existingTx } = await supabase
             .from('transactions')
-            .insert({
-              user_id,
-              type: 'deposit',
-              amount: parseFloat(amount),
-              status: 'completed',
-              mpesa_receipt: mpesaReceipt,
-              external_reference: external_reference,
-              date: new Date().toISOString()
-            });
+            .select('id')
+            .eq('external_reference', external_reference)
+            .eq('status', 'pending')
+            .single();
 
-          if (transactionError) {
-            console.warn('⚠️ Failed to record transaction:', transactionError.message);
-            // Don't fail the callback - payment was already credited
+          if (existingTx) {
+            // Update the pending transaction to completed
+            const { error: updateError } = await supabase
+              .from('transactions')
+              .update({
+                status: 'completed',
+                mpesa_receipt: mpesaReceipt,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingTx.id);
+
+            if (updateError) {
+              console.warn('⚠️ Failed to update pending transaction:', updateError.message);
+            } else {
+              console.log('✅ Pending transaction updated to completed');
+            }
           } else {
-            console.log('✅ Transaction recorded in database');
+            // No existing pending transaction, create a new completed one
+            const { error: transactionError } = await supabase
+              .from('transactions')
+              .insert({
+                user_id,
+                type: 'deposit',
+                amount: parseFloat(amount),
+                status: 'completed',
+                mpesa_receipt: mpesaReceipt,
+                external_reference: external_reference,
+                date: new Date().toISOString()
+              });
+
+            if (transactionError) {
+              console.warn('⚠️ Failed to record transaction:', transactionError.message);
+              // Don't fail the callback - payment was already credited
+            } else {
+              console.log('✅ Transaction recorded in database');
+            }
           }
         } catch (dbError) {
           console.warn('⚠️ Database error recording transaction:', dbError.message);
@@ -181,21 +208,48 @@ router.post('/payhero', async (req, res) => {
     } else if (status === 'Cancelled' || status === 'Failed' || resultCode !== 0) {
       console.log('\n❌ Payment failed or cancelled. Status:', status, 'ResultCode:', resultCode);
       
-      // Still record the transaction for history
+      // Update or record the failed transaction
       if (!isFromCache) {
         try {
-          await supabase
+          // Try to find and update existing pending transaction first
+          const { data: existingTx } = await supabase
             .from('transactions')
-            .insert({
-              user_id,
-              type: 'deposit',
-              amount: parseFloat(amount),
-              status: status.toLowerCase(),
-              mpesa_receipt: mpesaReceipt || '',
-              external_reference: external_reference,
-              date: new Date().toISOString()
-            });
-          console.log('✅ Failed transaction recorded');
+            .select('id')
+            .eq('external_reference', external_reference)
+            .eq('status', 'pending')
+            .single();
+
+          if (existingTx) {
+            // Update the pending transaction to failed
+            const { error: updateError } = await supabase
+              .from('transactions')
+              .update({
+                status: status.toLowerCase(),
+                mpesa_receipt: mpesaReceipt || '',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', existingTx.id);
+
+            if (updateError) {
+              console.warn('⚠️ Failed to update pending transaction:', updateError.message);
+            } else {
+              console.log('✅ Pending transaction updated to failed');
+            }
+          } else {
+            // No existing pending transaction, create a new failed one
+            await supabase
+              .from('transactions')
+              .insert({
+                user_id,
+                type: 'deposit',
+                amount: parseFloat(amount),
+                status: status.toLowerCase(),
+                mpesa_receipt: mpesaReceipt || '',
+                external_reference: external_reference,
+                date: new Date().toISOString()
+              });
+            console.log('✅ Failed transaction recorded');
+          }
         } catch (err) {
           console.warn('⚠️ Failed to record failed transaction:', err.message);
         }
