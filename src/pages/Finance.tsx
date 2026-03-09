@@ -29,8 +29,16 @@ export default function Finance() {
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
   const { deposit, withdraw, balance, setBalance } = useBets();
   const { user, updateUser } = useUser();
-  const { getUserTransactions, addTransaction } = useTransactions();
-  const userTransactions = getUserTransactions("user1"); // Default to first user for now
+  const { getUserTransactions, addTransaction, fetchTransactions } = useTransactions();
+  const actualUserId = user?.id || "user1";
+  const userTransactions = getUserTransactions(actualUserId);
+
+  // Fetch transactions from database on component mount and when user changes
+  useEffect(() => {
+    if (actualUserId) {
+      fetchTransactions(actualUserId);
+    }
+  }, [actualUserId, fetchTransactions]);
 
   // Set up balance sync when component mounts
   useEffect(() => {
@@ -151,6 +159,9 @@ export default function Finance() {
             
             // Update balance
             setBalance(newBalance);
+
+            // Refresh transactions from database
+            await fetchTransactions(actualUserId);
 
             setPaymentStatus("success");
             setStatusMessage(`✅ Account activated! KSH 500 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
@@ -345,6 +356,9 @@ export default function Finance() {
                 // Update balance from context
                 deposit(transactionAmount);
                 updateUser({ accountBalance: (user?.accountBalance || balance) + transactionAmount });
+
+                // Refresh transactions from database
+                await fetchTransactions(actualUserId);
 
                 // Give user feedback
                 setTimeout(() => {
