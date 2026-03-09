@@ -30,7 +30,7 @@ export default function Finance() {
   const [activationPhoneNumber, setActivationPhoneNumber] = useState("");
   const [isActivating, setIsActivating] = useState(false);
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
-  const [secondsUntilProceed, setSecondsUntilProceed] = useState(10);
+  const [secondsUntilProceed, setSecondsUntilProceed] = useState(20);
   const { deposit, withdraw, balance, setBalance } = useBets();
   const { user, updateUser } = useUser();
   const { getUserTransactions, addTransaction, fetchTransactions } = useTransactions();
@@ -47,7 +47,7 @@ export default function Finance() {
   // Countdown timer for activation warning button
   useEffect(() => {
     if (!showActivationWarning) {
-      setSecondsUntilProceed(10);
+      setSecondsUntilProceed(20);
       return;
     }
 
@@ -968,7 +968,7 @@ export default function Finance() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg border border-red-600/50 bg-red-600/10 p-4">
               <p className="text-sm text-red-600 leading-relaxed">
-                <strong>• Ensure your M-Pesa account has KSH 5</strong>
+                <strong>• Ensure your M-Pesa account has KSH 1000</strong>
                 <br/>
                 <strong>• You MUST complete the payment when STK appears</strong>
                 <br/>
