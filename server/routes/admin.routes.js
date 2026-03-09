@@ -1949,6 +1949,111 @@ router.get('/transactions/user/:userId', async (req, res) => {
   }
 });
 
+// GET: Fetch pending deposits (STK pushes waiting for admin confirmation)
+router.get('/transactions/pending/deposits', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n💳 [GET /api/admin/transactions/pending/deposits] Fetching pending deposits');
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Fetch all pending deposit transactions
+    const { data: transactions, error: txError } = await supabase
+      .from('transactions')
+      .select(`
+        *,
+        user:users(id, username, phone_number, account_balance)
+      `)
+      .eq('type', 'deposit')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (txError) {
+      console.warn('⚠️ Error fetching pending deposits:', txError.message);
+      return res.json({ success: true, pending_deposits: [], count: 0 });
+    }
+
+    console.log(`✅ Retrieved ${transactions?.length || 0} pending deposits`);
+
+    res.json({ 
+      success: true, 
+      pending_deposits: transactions || [],
+      count: transactions?.length || 0
+    });
+  } catch (error) {
+    console.error('❌ Get pending deposits error:', error);
+    res.json({ 
+      success: true, 
+      pending_deposits: [],
+      message: 'Could not fetch pending deposits'
+    });
+  }
+});
+
+// GET: Fetch transactions by status and type
+router.get('/transactions/filter', checkAdmin, async (req, res) => {
+  try {
+    const { status, type, limit = 100, offset = 0 } = req.query;
+
+    console.log('\n💳 [GET /api/admin/transactions/filter] Fetching filtered transactions');
+    console.log('   Filters:', { status, type, limit, offset });
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    let query = supabase
+      .from('transactions')
+      .select(`
+        *,
+        user:users(id, username, phone_number, account_balance)
+      `);
+
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    if (type) {
+      query = query.eq('type', type);
+    }
+
+    query = query
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    const { data: transactions, error: txError, count } = await query;
+
+    if (txError) {
+      console.warn('⚠️ Error filtering transactions:', txError.message);
+      return res.json({ success: true, transactions: [], count: 0 });
+    }
+
+    console.log(`✅ Retrieved ${transactions?.length || 0} filtered transactions`);
+
+    res.json({ 
+      success: true, 
+      transactions: transactions || [],
+      count: count || 0
+    });
+  } catch (error) {
+    console.error('❌ Filter transactions error:', error);
+    res.json({ 
+      success: true, 
+      transactions: [],
+      message: 'Could not filter transactions'
+    });
+  }
+});
+
 // GET: Admin search by username or phone number
 router.get('/search', checkAdmin, async (req, res) => {
   try {
@@ -2556,6 +2661,7 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
         mpesa_receipt: mpesaReceipt || transaction.mpesa_receipt,
         admin_notes: notes || '',
         completed_at: new Date().toISOString(),
+        completed_by: req.user?.id,
         updated_at: new Date().toISOString()
       })
       .eq('id', transactionId);
