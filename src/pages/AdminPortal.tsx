@@ -1912,9 +1912,29 @@ const AdminPortal = () => {
                               size="sm"
                               variant="ghost"
                               className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
-                              onClick={() => updateTransactionStatus(transaction.id, "completed")}
+                              onClick={async () => {
+                                try {
+                                  await updateTransactionStatus(transaction.id, "completed");
+                                } catch (e) {
+                                  console.error('Failed to approve:', e);
+                                }
+                              }}
                             >
                               Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-xs h-6 text-red-500 hover:text-red-600"
+                              onClick={async () => {
+                                try {
+                                  await updateTransactionStatus(transaction.id, "failed");
+                                } catch (e) {
+                                  console.error('Failed to reject:', e);
+                                }
+                              }}
+                            >
+                              Reject
                             </Button>
                           </>
                         )}

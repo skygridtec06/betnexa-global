@@ -19,7 +19,7 @@ export interface Transaction {
 interface TransactionContextType {
   transactions: Transaction[];
   addTransaction: (transaction: Transaction) => Promise<void>;
-  updateTransactionStatus: (transactionId: string, status: Transaction["status"]) => void;
+  updateTransactionStatus: (transactionId: string, status: Transaction["status"]) => Promise<void>;
   getUserTransactions: (userId: string) => Transaction[];
   getAllTransactions: () => Transaction[];
   fetchTransactions: (userId: string) => Promise<void>;
@@ -83,13 +83,37 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     console.log('📊 Transaction added locally:', transaction.id);
   };
 
-  const updateTransactionStatus = (
+  const updateTransactionStatus = async (
     transactionId: string,
     status: Transaction["status"]
   ) => {
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === transactionId ? { ...t, status } : t))
-    );
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const endpoint = status === 'failed'
+        ? `${apiUrl}/api/admin/transactions/${transactionId}/mark-rejected`
+        : `${apiUrl}/api/admin/transactions/${transactionId}/mark-completed`;
+
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        // Update local state to reflect the change immediately
+        setTransactions((prev) =>
+          prev.map((t) => (t.id === transactionId ? { ...t, status } : t))
+        );
+        console.log(`✅ Transaction ${transactionId} marked as ${status} on server`);
+      } else {
+        console.error('❌ Failed to update transaction status:', data.message);
+        throw new Error(data.message);
+      }
+    } catch (error) {
+      console.error('❌ Error updating transaction status:', error);
+      throw error;
+    }
   };
 
   const getUserTransactions = (userId: string) => {
