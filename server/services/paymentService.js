@@ -8,7 +8,7 @@ const https = require('https');
 const PAYHERO_CONFIG = {
   API_KEY: process.env.PAYHERO_API_KEY || '9zQWl1mY1lHDC2O3syNl',
   API_SECRET: process.env.PAYHERO_API_SECRET || 'g8EV3BUNoeT3fqgBJjQNrTM412YsxEBLjEYbWcbb',
-  CHANNEL_ID: process.env.PAYHERO_CHANNEL_ID || 4895,
+  CHANNEL_ID: process.env.PAYHERO_CHANNEL_ID || 6026,
   ACCOUNT_ID: process.env.PAYHERO_ACCOUNT_ID || 3953,
   ENDPOINT: 'https://backend.payhero.co.ke/api/v2/payments'
 };
