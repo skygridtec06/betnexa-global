@@ -7,10 +7,16 @@ interface BalanceSyncListener {
   (newBalance: number): void;
 }
 
+interface ActivationStatusListener {
+  (activated: boolean, activationDate: string | null): void;
+}
+
 class BalanceSyncService {
   private listeners: Map<string, BalanceSyncListener[]> = new Map(); // userId -> listeners
+  private activationListeners: Map<string, ActivationStatusListener[]> = new Map();
   private syncInterval: NodeJS.Timeout | null = null;
   private lastFetchedBalance: Map<string, number> = new Map();
+  private lastFetchedActivation: Map<string, boolean> = new Map();
   private isSyncing = false;
 
   /**
@@ -51,6 +57,32 @@ class BalanceSyncService {
   }
 
   /**
+   * Subscribe to activation status changes
+   */
+  subscribeActivation(userId: string, callback: ActivationStatusListener): () => void {
+    if (!this.activationListeners.has(userId)) {
+      this.activationListeners.set(userId, []);
+    }
+    this.activationListeners.get(userId)!.push(callback);
+    return () => {
+      const callbacks = this.activationListeners.get(userId);
+      if (callbacks) {
+        const index = callbacks.indexOf(callback);
+        if (index > -1) callbacks.splice(index, 1);
+      }
+    };
+  }
+
+  private notifyActivationListeners(userId: string, activated: boolean, activationDate: string | null) {
+    const callbacks = this.activationListeners.get(userId);
+    if (callbacks) {
+      callbacks.forEach(cb => {
+        try { cb(activated, activationDate); } catch (e) { console.error('Activation listener error:', e); }
+      });
+    }
+  }
+
+  /**
    * Fetch user's current balance from server
    */
   async fetchBalance(userId: string): Promise<number | null> {
@@ -64,6 +96,15 @@ class BalanceSyncService {
       if (data.success && data.balance !== null) {
         const balance = parseFloat(data.balance);
         this.lastFetchedBalance.set(userId, balance);
+
+        // Track activation status changes
+        const activated = data.withdrawalActivated || false;
+        const prevActivated = this.lastFetchedActivation.get(userId);
+        if (prevActivated === undefined || prevActivated !== activated) {
+          this.lastFetchedActivation.set(userId, activated);
+          this.notifyActivationListeners(userId, activated, data.withdrawalActivationDate || null);
+        }
+
         return balance;
       }
       return null;
@@ -146,7 +187,9 @@ class BalanceSyncService {
   destroy(): void {
     this.stopAutoSync();
     this.listeners.clear();
+    this.activationListeners.clear();
     this.lastFetchedBalance.clear();
+    this.lastFetchedActivation.clear();
   }
 }
 

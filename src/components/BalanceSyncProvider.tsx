@@ -9,7 +9,7 @@ import balanceSyncService from '@/lib/balanceSyncService';
  * This component should wrap the main app content
  */
 export function BalanceSyncProvider({ children }: { children: React.ReactNode }) {
-  const { user, isLoggedIn } = useUser();
+  const { user, isLoggedIn, updateUser } = useUser();
   const { syncBalance } = useBets();
 
   useEffect(() => {
@@ -26,11 +26,18 @@ export function BalanceSyncProvider({ children }: { children: React.ReactNode })
       syncBalance(newBalance);
     });
 
+    // Subscribe to activation status changes
+    const unsubActivation = balanceSyncService.subscribeActivation(user.id, (activated, activationDate) => {
+      console.log(`🔐 Activation status synced: ${activated}`);
+      updateUser({ withdrawalActivated: activated, withdrawalActivationDate: activationDate });
+    });
+
     // Start auto-sync every 5 seconds
     balanceSyncService.startAutoSync(user.id, 5000);
 
     return () => {
       unsubscribe();
+      unsubActivation();
       balanceSyncService.stopAutoSync();
     };
   }, [isLoggedIn, user?.id, syncBalance]);

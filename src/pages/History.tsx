@@ -10,6 +10,7 @@ import { useTransactions } from "@/context/TransactionContext";
 import { useUser } from "@/context/UserContext";
 import { useNavigate } from "react-router-dom";
 import { formatTransactionDateInEAT } from "@/lib/timezoneFormatter";
+import { useEffect } from "react";
 
 interface HistoryEntry {
   id: string;
@@ -23,9 +24,16 @@ interface HistoryEntry {
 
 export default function History() {
   const { bets } = useBets();
-  const { getUserTransactions, getUserActivationFees } = useTransactions();
+  const { getUserTransactions, getUserActivationFees, fetchTransactions } = useTransactions();
   const { user } = useUser();
   const navigate = useNavigate();
+
+  // Fetch transactions + activation fees on mount
+  useEffect(() => {
+    if (user?.id) {
+      fetchTransactions(user.id);
+    }
+  }, [user?.id]);
   
   // Get user's transactions
   const userTransactions = getUserTransactions(user?.id || "user1");

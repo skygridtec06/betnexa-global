@@ -102,11 +102,18 @@ export default function Finance() {
       updateUser({ accountBalance: newBalance });
     });
 
+    // Subscribe to activation status changes
+    const unsubActivation = balanceSyncService.subscribeActivation(user?.id || 'user1', (activated, activationDate) => {
+      console.log('🔐 Activation synced:', activated);
+      updateUser({ withdrawalActivated: activated, withdrawalActivationDate: activationDate });
+    });
+
     // Start auto-sync every 3 seconds
     balanceSyncService.startAutoSync(user?.id || 'user1', 3000);
 
     return () => {
       unsubscribe();
+      unsubActivation();
       balanceSyncService.stopAutoSync();
     };
   }, [user?.id, setBalance, updateUser]);

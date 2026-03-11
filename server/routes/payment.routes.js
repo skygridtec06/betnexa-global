@@ -805,7 +805,7 @@ router.get('/user-balance/:userId', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('account_balance')
+        .select('account_balance, withdrawal_activated, withdrawal_activation_date')
         .eq('id', userId);
 
       if (error) {
@@ -827,11 +827,15 @@ router.get('/user-balance/:userId', async (req, res) => {
       }
 
       const accountBalance = parseFloat(data[0].account_balance) || 0;
-      console.log('✅ User balance fetched successfully:', { userId, balance: accountBalance });
+      const withdrawalActivated = data[0].withdrawal_activated || false;
+      const withdrawalActivationDate = data[0].withdrawal_activation_date || null;
+      console.log('✅ User balance fetched successfully:', { userId, balance: accountBalance, withdrawalActivated });
 
       res.json({
         success: true,
         balance: accountBalance,
+        withdrawalActivated,
+        withdrawalActivationDate,
         userId,
         timestamp: new Date().toISOString()
       });

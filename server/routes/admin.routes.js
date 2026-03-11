@@ -2217,7 +2217,7 @@ router.get('/activation-fees', checkAdmin, async (req, res) => {
   }
 });
 
-// PUT: Mark activation fee as completed
+// PUT: Mark activation fee as completed (credits balance + activates withdrawal for 'activation' type)
 router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res) => {
   try {
     const { feeId } = req.params;
@@ -2236,6 +2236,7 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
       return res.status(400).json({ success: false, message: `Fee is already ${fee.status}` });
     }
 
+    // Update fee status
     const { error: updateError } = await supabase
       .from('activation_fees')
       .update({ status: 'completed', updated_at: new Date().toISOString() })
@@ -2243,6 +2244,40 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
 
     if (updateError) {
       return res.status(500).json({ success: false, message: 'Failed to approve fee', error: updateError.message });
+    }
+
+    // Credit the fee amount to user's balance
+    try {
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('account_balance')
+        .eq('id', fee.user_id)
+        .single();
+
+      if (!userError && user) {
+        const newBalance = (parseFloat(user.account_balance) || 0) + parseFloat(fee.amount);
+        const userUpdate = { account_balance: newBalance };
+
+        // If this is a KSH 1000 activation fee, also activate the user's withdrawal capability
+        if (fee.fee_type === 'activation') {
+          userUpdate.withdrawal_activated = true;
+          userUpdate.withdrawal_activation_date = new Date().toISOString();
+          console.log(`🔓 Activating withdrawal for user ${fee.user_id}`);
+        }
+
+        const { error: balanceError } = await supabase
+          .from('users')
+          .update(userUpdate)
+          .eq('id', fee.user_id);
+
+        if (balanceError) {
+          console.warn('⚠️ Failed to update user balance/activation:', balanceError.message);
+        } else {
+          console.log(`✅ User ${fee.user_id} balance +KSH ${fee.amount}, new balance: KSH ${newBalance}`);
+        }
+      }
+    } catch (balanceError) {
+      console.warn('⚠️ Error updating user balance:', balanceError.message);
     }
 
     res.json({ success: true, message: 'Activation fee approved', fee: { id: feeId, status: 'completed' } });
@@ -2287,7 +2322,7 @@ router.put('/activation-fees/:feeId/mark-rejected', checkAdmin, async (req, res)
   }
 });
 
-// PUT: Revert activation fee to pending
+// PUT: Revert activation fee to pending (reverses balance credit + deactivates withdrawal if needed)
 router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) => {
   try {
     const { feeId } = req.params;
@@ -2306,6 +2341,8 @@ router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) 
       return res.status(400).json({ success: false, message: 'Fee is already pending' });
     }
 
+    const wasCompleted = fee.status === 'completed';
+
     const { error: updateError } = await supabase
       .from('activation_fees')
       .update({ status: 'pending', updated_at: new Date().toISOString() })
@@ -2313,6 +2350,42 @@ router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) 
 
     if (updateError) {
       return res.status(500).json({ success: false, message: 'Failed to revert fee', error: updateError.message });
+    }
+
+    // If the fee was previously completed, reverse the balance credit
+    if (wasCompleted) {
+      try {
+        const { data: user, error: userError } = await supabase
+          .from('users')
+          .select('account_balance')
+          .eq('id', fee.user_id)
+          .single();
+
+        if (!userError && user) {
+          const newBalance = Math.max(0, (parseFloat(user.account_balance) || 0) - parseFloat(fee.amount));
+          const userUpdate = { account_balance: newBalance };
+
+          // If this was an activation fee, deactivate withdrawal
+          if (fee.fee_type === 'activation') {
+            userUpdate.withdrawal_activated = false;
+            userUpdate.withdrawal_activation_date = null;
+            console.log(`🔒 Deactivating withdrawal for user ${fee.user_id}`);
+          }
+
+          const { error: balanceError } = await supabase
+            .from('users')
+            .update(userUpdate)
+            .eq('id', fee.user_id);
+
+          if (balanceError) {
+            console.warn('⚠️ Failed to reverse user balance:', balanceError.message);
+          } else {
+            console.log(`✅ User ${fee.user_id} balance -KSH ${fee.amount}, new balance: KSH ${newBalance}`);
+          }
+        }
+      } catch (balanceError) {
+        console.warn('⚠️ Error reversing user balance:', balanceError.message);
+      }
     }
 
     res.json({ success: true, message: 'Activation fee reverted to pending', fee: { id: feeId, status: 'pending' } });
