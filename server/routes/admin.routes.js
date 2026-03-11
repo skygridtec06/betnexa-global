@@ -2022,17 +2022,19 @@ router.get('/transactions/user/:userId', async (req, res) => {
       });
     }
 
-    // Fetch user transactions with user details
+    // Fetch user transactions
     const { data: transactions, error: txError } = await supabase
       .from('transactions')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
 
-    if (txError) {
-      console.warn('⚠️ Error fetching transactions:', txError.message);
-      return res.json({ success: true, transactions: [] });
-    }
+    // Fetch fund_transfers for user
+    const { data: fundTransfers, error: ftError } = await supabase
+      .from('fund_transfers')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
     // Fetch user details
     const { data: user, error: userError } = await supabase
@@ -2041,22 +2043,45 @@ router.get('/transactions/user/:userId', async (req, res) => {
       .eq('id', userId)
       .single();
 
+    if (txError && ftError) {
+      console.warn('⚠️ Error fetching transactions and fund_transfers:', txError?.message, ftError?.message);
+      return res.json({ success: true, transactions: [], fund_transfers: [], user: null });
+    }
+
     if (userError) {
       console.warn('⚠️ Error fetching user:', userError.message);
       return res.json({ 
         success: true, 
         transactions: transactions || [],
+        fund_transfers: fundTransfers || [],
         user: null
       });
     }
 
-    console.log(`✅ Retrieved ${transactions?.length || 0} transactions for user ${user?.username}`);
+    // Merge transactions and fund_transfers for unified history
+    const mergedHistory = [];
+    if (transactions && Array.isArray(transactions)) {
+      mergedHistory.push(...transactions.map(tx => ({
+        ...tx,
+        source: 'transactions'
+      })));
+    }
+    if (fundTransfers && Array.isArray(fundTransfers)) {
+      mergedHistory.push(...fundTransfers.map(ft => ({
+        ...ft,
+        source: 'fund_transfers'
+      })));
+    }
+    // Sort by created_at descending
+    mergedHistory.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    console.log(`✅ Retrieved ${mergedHistory.length} total transactions for user ${user?.username}`);
 
     res.json({ 
       success: true, 
       user,
-      transactions: transactions || [],
-      count: transactions?.length || 0
+      transactions: mergedHistory,
+      count: mergedHistory.length
     });
   } catch (error) {
     console.error('❌ Get user transactions error:', error);
