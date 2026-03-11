@@ -434,32 +434,23 @@ export default function Finance() {
 
             if (statusData.success && statusData.payment) {
               if (statusData.payment.status === "Success") {
-                // Payment successful - only NOW update balance
+                // M-Pesa payment received — deposit stays pending until admin approves
                 clearInterval(interval);
                 setStatusCheckInterval(null);
                 setPaymentStatus("success");
-                setStatusMessage("✅ Payment successful! Updating your balance...");
 
-                // Update balance from context
-                deposit(transactionAmount);
-                updateUser({ accountBalance: (user?.accountBalance || balance) + transactionAmount });
-
-                // Refresh transactions from database
+                // Refresh transactions from database (will show as pending)
                 await fetchTransactions(actualUserId);
 
-                // Give user feedback
+                setStatusMessage("✅ Payment received! Your deposit is pending admin approval.");
+                setAmount("");
+                setMpesaNumber("");
+                
                 setTimeout(() => {
-                  setStatusMessage("✅ Balance updated successfully!");
-                  setAmount("");
-                  setMpesaNumber("");
-                  
-                  // Clear status after 3 seconds
-                  setTimeout(() => {
-                    setPaymentStatus(null);
-                    setStatusMessage("");
-                    setIsProcessing(false);
-                  }, 3000);
-                }, 1000);
+                  setPaymentStatus(null);
+                  setStatusMessage("");
+                  setIsProcessing(false);
+                }, 4000);
               } else if (statusData.payment.status === "Failed") {
                 // Payment failed
                 clearInterval(interval);
