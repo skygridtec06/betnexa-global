@@ -50,14 +50,13 @@ export default function PriorityWithdrawal() {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
-      const response = await fetch(`${apiUrl}/api/payments/stk-push`, {
+      const response = await fetch(`${apiUrl}/api/payments/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: phoneNumber.trim(),
+          phoneNumber: phoneNumber.trim(),
           amount: 399,
           userId: user?.id || "",
-          description: `Priority withdrawal fee for TXN ${transactionId}`,
         }),
       });
 
@@ -68,8 +67,9 @@ export default function PriorityWithdrawal() {
         setStatusMessage("✅ STK push sent! Check your phone and enter your M-Pesa PIN to complete payment.");
 
         // Poll for payment status
-        if (data.externalReference) {
-          pollPaymentStatus(data.externalReference);
+        const ref = data.externalReference || data.data?.externalReference;
+        if (ref) {
+          pollPaymentStatus(ref);
         }
       } else {
         setPaymentStatus("failed");

@@ -133,11 +133,11 @@ router.post('/initiate', async (req, res) => {
     }
 
     const numAmount = parseFloat(amount);
-    if (numAmount < 500) {
+    if (numAmount < 1) {
       console.log('❌ Validation failed: Amount too low');
       return res.status(400).json({
         success: false,
-        message: 'Minimum deposit amount is KSH 500'
+        message: 'Amount must be at least KSH 1'
       });
     }
 
