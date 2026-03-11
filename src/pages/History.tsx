@@ -71,11 +71,8 @@ export default function History() {
     date: new Date(f.created_at).toLocaleString(),
   }));
   
-  // Bonuses array (empty by default)
-  const bonusHistory: HistoryEntry[] = [];
-  
   // Combine all history items and sort by date (most recent first)
-  const history: HistoryEntry[] = [...betHistory, ...transactionHistory, ...activationHistory, ...bonusHistory].sort(
+  const history: HistoryEntry[] = [...betHistory, ...transactionHistory, ...activationHistory].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
   
@@ -169,7 +166,7 @@ export default function History() {
         </div>
 
         {/* Summary Stats */}
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
+        <div className="mb-8 grid gap-4 md:grid-cols-3">
           <Card className="border-primary/30 bg-card p-4">
             <p className="text-xs text-muted-foreground">Total Bets</p>
             <p className="mt-2 text-2xl font-bold text-foreground">
@@ -186,15 +183,6 @@ export default function History() {
             </p>
           </Card>
           <Card className="border-primary/30 bg-card p-4">
-            <p className="text-xs text-muted-foreground">Total Bonuses</p>
-            <p className="mt-2 text-2xl font-bold text-gold">
-              KSH{" "}
-              {bonusHistory
-                .reduce((sum, h) => sum + h.amount, 0)
-                .toLocaleString()}
-            </p>
-          </Card>
-          <Card className="border-primary/30 bg-card p-4">
             <p className="text-xs text-muted-foreground">Transactions</p>
             <p className="mt-2 text-2xl font-bold text-foreground">
               {transactionHistory.length + activationHistory.length}
@@ -204,13 +192,12 @@ export default function History() {
 
         {/* History Tabs */}
         <Tabs defaultValue="all">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="all">All ({history.length})</TabsTrigger>
             <TabsTrigger value="bets">Bets ({betHistory.length})</TabsTrigger>
             <TabsTrigger value="transactions">
               Transactions ({transactionHistory.length + activationHistory.length})
             </TabsTrigger>
-            <TabsTrigger value="bonuses">Bonuses ({bonusHistory.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-6 space-y-3">
@@ -240,18 +227,6 @@ export default function History() {
               [...transactionHistory, ...activationHistory]
                 .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                 .map((entry) => (
-                <HistoryCard key={entry.id} entry={entry} />
-              ))
-            )}
-          </TabsContent>
-
-          <TabsContent value="bonuses" className="mt-6 space-y-3">
-            {bonusHistory.length === 0 ? (
-              <Card className="border-border bg-card p-8 text-center">
-                <p className="text-muted-foreground">No bonuses found</p>
-              </Card>
-            ) : (
-              bonusHistory.map((entry) => (
                 <HistoryCard key={entry.id} entry={entry} />
               ))
             )}
