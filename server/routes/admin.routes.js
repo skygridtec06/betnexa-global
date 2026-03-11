@@ -1707,14 +1707,13 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
         .from('transactions')
         .insert({
           user_id: userId,
-          type: 'activation_fee',
+          type: 'admin_adjustment',
           amount: ACTIVATION_FEE,
           status: 'completed',
           method: 'Admin Activation',
           external_reference: `ACT-ADMIN-${Date.now()}-${userId}`,
           description: `Withdrawal account activated by admin`,
-          created_at: new Date().toISOString(),
-          date: new Date().toISOString()
+          created_at: new Date().toISOString()
         })
         .select();
 
@@ -1833,14 +1832,13 @@ router.put('/users/:userId/deactivate-withdrawal', checkAdmin, async (req, res) 
         .from('transactions')
         .insert({
           user_id: userId,
-          type: 'deactivation',
+          type: 'admin_adjustment',
           amount: 0,
           status: 'completed',
           method: 'Admin Deactivation',
           external_reference: `DEACT-ADMIN-${Date.now()}-${userId}`,
           description: `Withdrawal account deactivated by admin`,
-          created_at: new Date().toISOString(),
-          date: new Date().toISOString()
+          created_at: new Date().toISOString()
         })
         .select();
 

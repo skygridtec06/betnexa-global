@@ -211,7 +211,7 @@ router.post('/payhero', async (req, res) => {
                 status: 'completed',
                 mpesa_receipt: mpesaReceipt,
                 external_reference: external_reference,
-                date: new Date().toISOString()
+                created_at: new Date().toISOString()
               });
 
             if (transactionError) {
@@ -289,7 +289,7 @@ router.post('/payhero', async (req, res) => {
                 status: status.toLowerCase(),
                 mpesa_receipt: mpesaReceipt || '',
                 external_reference: external_reference,
-                date: new Date().toISOString()
+                created_at: new Date().toISOString()
               });
             console.log('✅ Failed transaction recorded');
           }

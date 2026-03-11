@@ -85,8 +85,8 @@ async function handlePaymentTimeout(externalReference, checkoutRequestId, paymen
                 status: 'failed',
                 mpesa_receipt: '',
                 external_reference: externalReference,
-                reason: 'Timeout - No callback received within 10 seconds',
-                date: new Date().toISOString()
+                description: 'Timeout - No callback received within 10 seconds',
+                created_at: new Date().toISOString()
               });
 
             if (transactionError) {
@@ -279,7 +279,7 @@ router.post('/initiate', async (req, res) => {
             external_reference: externalReference,
             checkout_request_id: checkoutRequestId,
             method: 'M-Pesa STK Push',
-            date: new Date().toISOString()
+            created_at: new Date().toISOString()
           });
 
         if (transactionError) {
@@ -669,8 +669,8 @@ router.post('/admin/resolve/:externalReference', async (req, res) => {
             status: 'completed',
             mpesa_receipt: mpesaReceipt || 'ADMIN-RESOLVED',
             external_reference: externalReference,
-            notes: 'Admin resolved - Failed payment marked as success',
-            date: new Date().toISOString()
+            description: 'Admin resolved - Failed payment marked as success',
+            created_at: new Date().toISOString()
           });
 
         if (transactionError) {
@@ -841,8 +841,8 @@ router.put('/admin/update-balance/:userId', async (req, res) => {
           amount: Math.abs(balanceDiff),
           status: 'completed',
           external_reference: `ADMIN-${Date.now()}`,
-          notes: reason || 'Admin balance adjustment',
-          date: new Date().toISOString()
+          description: reason || 'Admin balance adjustment',
+          created_at: new Date().toISOString()
         });
 
       if (transactionError) {
