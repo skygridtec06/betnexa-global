@@ -63,7 +63,7 @@ const AdminPortal = () => {
   const { games, addGame, updateGame, removeGame, updateGameMarkets, refreshGames } = useOdds();
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
-  const { getAllTransactions, updateTransactionStatus } = useTransactions();
+  const { updateTransactionStatus } = useTransactions();
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [editingGame, setEditingGame] = useState<string | null>(null);
@@ -1035,16 +1035,16 @@ const AdminPortal = () => {
   
   const activeBets = bets.filter(b => b.status === "Open").length;
   
-  const todayRevenue = getAllTransactions()
-    .filter(t => {
+  const todayRevenue = allTransactions
+    .filter((t: any) => {
       // Check if transaction is from today
       const today = new Date();
-      const transDate = new Date(t.date || new Date());
+      const transDate = new Date(t.created_at || t.date || new Date());
       return t.type === "deposit" && 
              t.status === "completed" &&
              transDate.toDateString() === today.toDateString();
     })
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum: number, t: any) => sum + Number(t.amount), 0);
 
   const stats = [
     { icon: Users, label: "Total Users", value: totalUsers.toLocaleString(), color: "text-primary" },
@@ -1857,7 +1857,7 @@ const AdminPortal = () => {
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">All Transactions</h3>
             </div>
             <div className="space-y-3">
-              {getAllTransactions().map((transaction) => (
+              {allTransactions.map((transaction: any) => (
                 <Card key={transaction.id} className="border-border bg-card p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
@@ -1876,10 +1876,10 @@ const AdminPortal = () => {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
-                          {transaction.username} - {transaction.type === "deposit" ? "Deposit" : "Withdrawal"}
+                          {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "deposit" ? "Deposit" : transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatTransactionDateInEAT(transaction.date)} via {transaction.method}
+                          {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}
                         </p>
                       </div>
                     </div>
@@ -1891,7 +1891,7 @@ const AdminPortal = () => {
                             : "text-blue-500"
                         }`}
                       >
-                        {transaction.type === "deposit" ? "+" : "-"}KSH {transaction.amount.toLocaleString()}
+                        {transaction.type === "deposit" ? "+" : "-"}KSH {Number(transaction.amount).toLocaleString()}
                       </p>
                       <div className="flex items-center justify-end gap-2 mt-1">
                         {transaction.status === "completed" && (
@@ -1915,6 +1915,7 @@ const AdminPortal = () => {
                               onClick={async () => {
                                 try {
                                   await updateTransactionStatus(transaction.id, "completed");
+                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'completed' } : t));
                                 } catch (e) {
                                   console.error('Failed to approve:', e);
                                 }
@@ -1929,6 +1930,7 @@ const AdminPortal = () => {
                               onClick={async () => {
                                 try {
                                   await updateTransactionStatus(transaction.id, "failed");
+                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'failed' } : t));
                                 } catch (e) {
                                   console.error('Failed to reject:', e);
                                 }
