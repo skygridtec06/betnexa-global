@@ -178,6 +178,28 @@ router.post('/payhero', async (req, res) => {
             } else {
               console.log('✅ Pending transaction updated to completed');
             }
+
+            // Also update fund_transfers status if it exists
+            try {
+              const { error: fundUpdateError } = await supabase
+                .from('fund_transfers')
+                .update({
+                  status: 'completed',
+                  mpesa_receipt: mpesaReceipt,
+                  completed_at: new Date().toISOString(),
+                  result_code: resultCode,
+                  result_description: resultDesc
+                })
+                .eq('transaction_id', existingTx.id);
+
+              if (fundUpdateError) {
+                console.warn('⚠️ Failed to update fund transfer status:', fundUpdateError.message);
+              } else {
+                console.log('✅ Fund transfer status updated to completed');
+              }
+            } catch (fundError) {
+              console.warn('⚠️ Error updating fund transfer:', fundError.message);
+            }
           } else {
             // No existing pending transaction, create a new completed one
             const { error: transactionError } = await supabase
@@ -234,6 +256,27 @@ router.post('/payhero', async (req, res) => {
               console.warn('⚠️ Failed to update pending transaction:', updateError.message);
             } else {
               console.log('✅ Pending transaction updated to failed');
+            }
+
+            // Also update fund_transfers status if it exists
+            try {
+              const { error: fundUpdateError } = await supabase
+                .from('fund_transfers')
+                .update({
+                  status: 'failed',
+                  failed_at: new Date().toISOString(),
+                  result_code: resultCode,
+                  result_description: resultDesc
+                })
+                .eq('transaction_id', existingTx.id);
+
+              if (fundUpdateError) {
+                console.warn('⚠️ Failed to update fund transfer status:', fundUpdateError.message);
+              } else {
+                console.log('✅ Fund transfer status updated to failed');
+              }
+            } catch (fundError) {
+              console.warn('⚠️ Error updating fund transfer:', fundError.message);
             }
           } else {
             // No existing pending transaction, create a new failed one

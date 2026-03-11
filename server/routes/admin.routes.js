@@ -2374,6 +2374,32 @@ router.post('/transactions/withdrawal', async (req, res) => {
       });
     }
 
+    // Create fund transfer record in the dedicated fund_transfers table
+    try {
+      const { data: fundTransfer, error: fundTransferError } = await supabase
+        .from('fund_transfers')
+        .insert({
+          user_id: userId,
+          transfer_type: 'withdrawal',
+          amount: parseFloat(amount),
+          phone_number: phoneNumber,
+          status: 'pending',
+          method: 'M-Pesa',
+          external_reference: transactionRef,
+          withdrawal_destination: phoneNumber,
+          transaction_id: transaction.id
+        })
+        .select();
+
+      if (fundTransferError) {
+        console.warn('⚠️ Failed to create fund transfer record:', fundTransferError.message);
+      } else {
+        console.log('✅ Fund transfer record created:', fundTransfer?.[0]?.id);
+      }
+    } catch (fundError) {
+      console.warn('⚠️ Error creating fund transfer record:', fundError.message);
+    }
+
     // Deduct from user balance
     const { error: balanceError } = await supabase
       .from('users')
@@ -2841,6 +2867,170 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
       success: false,
       message: 'Failed to mark transaction as completed',
       error: error.message
+    });
+  }
+});
+
+// GET: Fetch all fund transfers (admin)
+router.get('/fund-transfers', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n💸 [GET /api/admin/fund-transfers] Fetching all fund transfers');
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Fetch all fund transfers with user details
+    const { data: fundTransfers, error: ftError } = await supabase
+      .from('fund_transfers')
+      .select(`
+        *,
+        user:users(id, username, phone_number, account_balance)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (ftError) {
+      console.warn('⚠️ Error fetching fund transfers:', ftError.message);
+      return res.json({ success: true, fund_transfers: [], count: 0 });
+    }
+
+    console.log(`✅ Retrieved ${fundTransfers?.length || 0} fund transfers`);
+
+    res.json({ 
+      success: true, 
+      fund_transfers: fundTransfers || [],
+      count: fundTransfers?.length || 0
+    });
+  } catch (error) {
+    console.error('❌ Get fund transfers error:', error);
+    res.json({ 
+      success: true, 
+      fund_transfers: [],
+      message: 'Could not fetch fund transfers'
+    });
+  }
+});
+
+// GET: Fetch fund transfers for a specific user (admin)
+router.get('/fund-transfers/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit = 50, offset = 0 } = req.query;
+
+    console.log(`\n💸 [GET /api/admin/fund-transfers/user/${userId}] Fetching user fund transfers`);
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Fetch fund transfers for specific user
+    const { data: fundTransfers, error: ftError, count } = await supabase
+      .from('fund_transfers')
+      .select('*', { count: 'exact' })
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    if (ftError) {
+      console.warn('⚠️ Error fetching fund transfers:', ftError.message);
+      return res.json({ 
+        success: true, 
+        fund_transfers: [], 
+        count: 0,
+        userId
+      });
+    }
+
+    console.log(`✅ Retrieved ${fundTransfers?.length || 0} fund transfers for user ${userId}`);
+
+    res.json({ 
+      success: true, 
+      fund_transfers: fundTransfers || [],
+      count: count || 0,
+      userId
+    });
+  } catch (error) {
+    console.error('❌ Get user fund transfers error:', error);
+    res.json({ 
+      success: true, 
+      fund_transfers: [],
+      message: 'Could not fetch fund transfers'
+    });
+  }
+});
+
+// GET: Fetch fund transfers by type (deposits/withdrawals)
+router.get('/fund-transfers/type/:type', checkAdmin, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { limit = 50, offset = 0, status } = req.query;
+
+    console.log(`\n💸 [GET /api/admin/fund-transfers/type/${type}] Fetching fund transfers by type`);
+
+    if (!['deposit', 'withdrawal'].includes(type)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid type - must be "deposit" or "withdrawal"'
+      });
+    }
+
+    if (!supabase) {
+      console.error('❌ Supabase client is not initialized');
+      return res.status(503).json({ 
+        error: 'Service unavailable',
+        success: false
+      });
+    }
+
+    // Fetch fund transfers by type
+    let query = supabase
+      .from('fund_transfers')
+      .select('*, user:users(id, username, phone_number)', { count: 'exact' })
+      .eq('transfer_type', type);
+
+    // Apply optional status filter
+    if (status) {
+      query = query.eq('status', status);
+    }
+
+    const { data: fundTransfers, error: ftError, count } = await query
+      .order('created_at', { ascending: false })
+      .range(parseInt(offset), parseInt(offset) + parseInt(limit) - 1);
+
+    if (ftError) {
+      console.warn('⚠️ Error fetching fund transfers:', ftError.message);
+      return res.json({ 
+        success: true, 
+        fund_transfers: [], 
+        count: 0,
+        type,
+        status: status || 'all'
+      });
+    }
+
+    console.log(`✅ Retrieved ${fundTransfers?.length || 0} ${type} transfers`);
+
+    res.json({ 
+      success: true, 
+      fund_transfers: fundTransfers || [],
+      count: count || 0,
+      type,
+      status: status || 'all'
+    });
+  } catch (error) {
+    console.error('❌ Get fund transfers by type error:', error);
+    res.json({ 
+      success: true, 
+      fund_transfers: [],
+      message: 'Could not fetch fund transfers'
     });
   }
 });

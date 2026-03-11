@@ -291,6 +291,34 @@ router.post('/initiate', async (req, res) => {
         console.warn('⚠️ Error creating pending transaction:', txError.message);
       }
 
+      // Create fund transfer record in the dedicated fund_transfers table
+      try {
+        console.log('💳 Creating fund transfer record...');
+        const { data: fundTransfer, error: fundTransferError } = await supabase
+          .from('fund_transfers')
+          .insert({
+            user_id: userId,
+            transfer_type: 'deposit',
+            amount: numAmount,
+            phone_number: phoneNumber,
+            status: 'pending',
+            method: 'M-Pesa',
+            external_reference: externalReference,
+            checkout_request_id: checkoutRequestId,
+            is_stk_push_sent: true,
+            stk_sent_at: new Date().toISOString()
+          })
+          .select();
+
+        if (fundTransferError) {
+          console.warn('⚠️ Failed to create fund transfer record:', fundTransferError.message);
+        } else {
+          console.log('✅ Fund transfer record created:', fundTransfer?.[0]?.id);
+        }
+      } catch (fundError) {
+        console.warn('⚠️ Error creating fund transfer record:', fundError.message);
+      }
+
       // Always cache the payment for fallback
       paymentCache.storePayment(externalReference, checkoutRequestId, paymentData);
       console.log('✅ Payment cached for fallback');
