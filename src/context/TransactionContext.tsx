@@ -16,11 +16,24 @@ export interface Transaction {
   completedAt?: string;
 }
 
+export interface ActivationFee {
+  id: string;
+  user_id: string;
+  fee_type: 'activation' | 'priority';
+  amount: number;
+  phone_number?: string;
+  status: string;
+  method?: string;
+  created_at: string;
+}
+
 interface TransactionContextType {
   transactions: Transaction[];
+  activationFees: ActivationFee[];
   addTransaction: (transaction: Transaction) => Promise<void>;
   updateTransactionStatus: (transactionId: string, status: Transaction["status"], phone?: string) => Promise<void>;
   getUserTransactions: (userId: string) => Transaction[];
+  getUserActivationFees: (userId: string) => ActivationFee[];
   getAllTransactions: () => Transaction[];
   fetchTransactions: (userId: string) => Promise<void>;
   isLoading: boolean;
@@ -30,6 +43,7 @@ const TransactionContext = createContext<TransactionContextType | undefined>(und
 
 export function TransactionProvider({ children }: { children: ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [activationFees, setActivationFees] = useState<ActivationFee[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch transactions from server for a specific user
@@ -67,6 +81,12 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
         setTransactions(transformedTransactions);
         console.log(`✅ Fetched ${transformedTransactions.length} transactions from server for user ${userId}`);
+
+        // Store activation fees if returned
+        if (data.activation_fees) {
+          setActivationFees(data.activation_fees);
+          console.log(`✅ Fetched ${data.activation_fees.length} activation fees`);
+        }
       }
     } catch (error) {
       console.error('❌ Error fetching transactions:', error);
@@ -123,6 +143,10 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     return transactions.filter((t) => t.userId === userId);
   };
 
+  const getUserActivationFees = (userId: string) => {
+    return activationFees.filter((f) => f.user_id === userId);
+  };
+
   const getAllTransactions = () => {
     return transactions;
   };
@@ -131,9 +155,11 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     <TransactionContext.Provider
       value={{
         transactions,
+        activationFees,
         addTransaction,
         updateTransactionStatus,
         getUserTransactions,
+        getUserActivationFees,
         getAllTransactions,
         fetchTransactions,
         isLoading

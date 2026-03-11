@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -81,6 +81,7 @@ const AdminPortal = () => {
   const [resolutionData, setResolutionData] = useState<Record<string, { mpesaReceipt?: string; resultDesc?: string }>>({});
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
+  const [activationFees, setActivationFees] = useState<any[]>([]);
   
   // User balance editing state
   const [editingBalance, setEditingBalance] = useState<string | null>(null);
@@ -964,6 +965,7 @@ const AdminPortal = () => {
       const data = await response.json();
       if (data.success) {
         setAllTransactions(data.transactions || []);
+        setActivationFees(data.activation_fees || []);
       }
     } catch (error) {
       console.error("Failed to fetch transactions:", error);
@@ -1860,26 +1862,27 @@ const AdminPortal = () => {
               const deposits = allTransactions.filter((t: any) => t.type === 'deposit');
               const resolved = deposits.filter((t: any) => t.status === 'completed' || t.status === 'failed');
               const completed = resolved.filter((t: any) => t.status === 'completed');
+              const failed = resolved.filter((t: any) => t.status === 'failed');
               const successRate = resolved.length > 0 ? Math.round((completed.length / resolved.length) * 100) : 0;
+              const failRate = resolved.length > 0 ? 100 - successRate : 0;
 
               return (
                 <>
                   <div className="mb-2">
                     <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Deposits</h3>
                     {resolved.length > 0 && (
-                      <div className="mt-2 flex items-center gap-3">
-                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{
-                              width: `${successRate}%`,
-                              backgroundColor: successRate >= 70 ? '#22c55e' : successRate >= 40 ? '#eab308' : '#ef4444'
-                            }}
-                          />
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden flex">
+                            <div className="h-full transition-all bg-green-500" style={{ width: `${successRate}%` }} />
+                            <div className="h-full transition-all bg-red-500" style={{ width: `${failRate}%` }} />
+                          </div>
                         </div>
-                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
-                          {successRate}% success ({completed.length}/{resolved.length} resolved)
-                        </span>
+                        <div className="flex justify-between text-xs font-medium">
+                          <span className="text-green-500">{successRate}% Success ({completed.length})</span>
+                          <span className="text-red-500">{failRate}% Failed ({failed.length})</span>
+                          <span className="text-muted-foreground">{deposits.length - resolved.length} Pending</span>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1938,6 +1941,129 @@ const AdminPortal = () => {
                                   <span className="text-xs text-red-500">Failed</span>
                                   <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
                                     onClick={async () => { try { await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t)); } catch (e) { console.error('Failed to revert:', e); } }}>
+                                    Revert
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* --- ACTIVATION FEES SECTION (KSH 1000 + KSH 399) --- */}
+            {(() => {
+              const resolved = activationFees.filter((f: any) => f.status === 'completed' || f.status === 'failed');
+              const completed = resolved.filter((f: any) => f.status === 'completed');
+              const failed = resolved.filter((f: any) => f.status === 'failed');
+              const successRate = resolved.length > 0 ? Math.round((completed.length / resolved.length) * 100) : 0;
+              const failRate = resolved.length > 0 ? 100 - successRate : 0;
+
+              const updateFeeStatus = async (feeId: string, status: string) => {
+                const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+                const endpoint = status === 'failed'
+                  ? `${apiUrl}/api/admin/activation-fees/${feeId}/mark-rejected`
+                  : status === 'pending'
+                  ? `${apiUrl}/api/admin/activation-fees/${feeId}/mark-pending`
+                  : `${apiUrl}/api/admin/activation-fees/${feeId}/mark-completed`;
+
+                const response = await fetch(endpoint, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ phone: loggedInUser?.phone || '' })
+                });
+                const data = await response.json();
+                if (data.success) {
+                  setActivationFees(prev => prev.map(f => f.id === feeId ? { ...f, status } : f));
+                } else {
+                  throw new Error(data.message);
+                }
+              };
+
+              return (
+                <>
+                  <div className="mt-8 mb-2">
+                    <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Activation Fees</h3>
+                    <p className="text-xs text-muted-foreground mt-1">KSH 1,000 withdrawal activation &amp; KSH 399 priority fees</p>
+                    {resolved.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden flex">
+                            <div className="h-full transition-all bg-green-500" style={{ width: `${successRate}%` }} />
+                            <div className="h-full transition-all bg-red-500" style={{ width: `${failRate}%` }} />
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs font-medium">
+                          <span className="text-green-500">{successRate}% Success ({completed.length})</span>
+                          <span className="text-red-500">{failRate}% Failed ({failed.length})</span>
+                          <span className="text-muted-foreground">{activationFees.length - resolved.length} Pending</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {activationFees.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No activation fees found</p>
+                    )}
+                    {activationFees.map((fee: any) => (
+                      <Card key={fee.id} className="border-border bg-card p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className={`rounded-full p-2 ${fee.fee_type === 'activation' ? 'bg-purple-500/20' : 'bg-orange-500/20'}`}>
+                              {fee.fee_type === 'activation' ? (
+                                <Shield className="h-4 w-4 text-purple-500" />
+                              ) : (
+                                <Zap className="h-4 w-4 text-orange-500" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {fee.phone_number || fee.user_id?.substring(0, 8) || 'User'} - {fee.fee_type === 'activation' ? 'Activation Fee' : 'Priority Fee'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatTransactionDateInEAT(fee.created_at)} via {fee.method || 'M-Pesa'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className={`font-bold text-sm ${fee.fee_type === 'activation' ? 'text-purple-500' : 'text-orange-500'}`}>
+                              KSH {Number(fee.amount).toLocaleString()}
+                            </p>
+                            <div className="flex items-center justify-end gap-2 mt-1">
+                              {fee.status === "completed" && (
+                                <>
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                  <span className="text-xs text-green-500">Completed</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                                    onClick={async () => { try { await updateFeeStatus(fee.id, "pending"); } catch (e) { console.error('Failed to revert:', e); } }}>
+                                    Revert
+                                  </Button>
+                                </>
+                              )}
+                              {fee.status === "pending" && (
+                                <>
+                                  <Clock className="h-4 w-4 text-yellow-500" />
+                                  <span className="text-xs text-yellow-500">Pending</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
+                                    onClick={async () => { try { await updateFeeStatus(fee.id, "completed"); } catch (e) { console.error('Failed to approve:', e); } }}>
+                                    Approve
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="text-xs h-6 text-red-500 hover:text-red-600"
+                                    onClick={async () => { try { await updateFeeStatus(fee.id, "failed"); } catch (e) { console.error('Failed to reject:', e); } }}>
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              {fee.status === "failed" && (
+                                <>
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                  <span className="text-xs text-red-500">Failed</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                                    onClick={async () => { try { await updateFeeStatus(fee.id, "pending"); } catch (e) { console.error('Failed to revert:', e); } }}>
                                     Revert
                                   </Button>
                                 </>

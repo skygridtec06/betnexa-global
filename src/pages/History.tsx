@@ -23,12 +23,13 @@ interface HistoryEntry {
 
 export default function History() {
   const { bets } = useBets();
-  const { getUserTransactions } = useTransactions();
+  const { getUserTransactions, getUserActivationFees } = useTransactions();
   const { user } = useUser();
   const navigate = useNavigate();
   
   // Get user's transactions
   const userTransactions = getUserTransactions(user?.id || "user1");
+  const userActivationFees = getUserActivationFees(user?.id || "user1");
   
   // Convert bets to history entries
   const betHistory: HistoryEntry[] = bets.map((bet) => ({
@@ -50,12 +51,23 @@ export default function History() {
     status: t.status as "completed" | "pending" | "failed",
     date: t.date,
   }));
+
+  // Convert activation fees to history entries
+  const activationHistory: HistoryEntry[] = userActivationFees.map((f) => ({
+    id: f.id,
+    type: "transaction" as const,
+    originalType: f.fee_type === 'activation' ? 'activation' : 'priority',
+    description: f.fee_type === 'activation' ? 'Activation Fee' : 'Priority Fee',
+    amount: -f.amount,
+    status: (f.status === 'completed' || f.status === 'pending' || f.status === 'failed' ? f.status : 'pending') as "completed" | "pending" | "failed",
+    date: new Date(f.created_at).toLocaleString(),
+  }));
   
   // Bonuses array (empty by default)
   const bonusHistory: HistoryEntry[] = [];
   
   // Combine all history items and sort by date (most recent first)
-  const history: HistoryEntry[] = [...betHistory, ...transactionHistory, ...bonusHistory].sort(
+  const history: HistoryEntry[] = [...betHistory, ...transactionHistory, ...activationHistory, ...bonusHistory].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
   );
   
@@ -177,7 +189,7 @@ export default function History() {
           <Card className="border-primary/30 bg-card p-4">
             <p className="text-xs text-muted-foreground">Transactions</p>
             <p className="mt-2 text-2xl font-bold text-foreground">
-              {transactionHistory.length}
+              {transactionHistory.length + activationHistory.length}
             </p>
           </Card>
         </div>
@@ -188,7 +200,7 @@ export default function History() {
             <TabsTrigger value="all">All ({history.length})</TabsTrigger>
             <TabsTrigger value="bets">Bets ({betHistory.length})</TabsTrigger>
             <TabsTrigger value="transactions">
-              Transactions ({transactionHistory.length})
+              Transactions ({transactionHistory.length + activationHistory.length})
             </TabsTrigger>
             <TabsTrigger value="bonuses">Bonuses ({bonusHistory.length})</TabsTrigger>
           </TabsList>
@@ -212,12 +224,14 @@ export default function History() {
           </TabsContent>
 
           <TabsContent value="transactions" className="mt-6 space-y-3">
-            {transactionHistory.length === 0 ? (
+            {transactionHistory.length === 0 && activationHistory.length === 0 ? (
               <Card className="border-border bg-card p-8 text-center">
                 <p className="text-muted-foreground">No transactions found</p>
               </Card>
             ) : (
-              transactionHistory.map((entry) => (
+              [...transactionHistory, ...activationHistory]
+                .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                .map((entry) => (
                 <HistoryCard key={entry.id} entry={entry} />
               ))
             )}

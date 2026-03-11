@@ -2017,9 +2017,26 @@ router.get('/transactions', checkAdmin, async (req, res) => {
 
     console.log(`✅ Retrieved ${allTransactions.length} total transactions`);
 
+    // Also fetch activation_fees table
+    let activationFees = [];
+    try {
+      const { data: fees, error: feeError } = await supabase
+        .from('activation_fees')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!feeError && fees) {
+        activationFees = fees;
+        console.log(`✅ Retrieved ${fees.length} activation fees`);
+      }
+    } catch (feeErr) {
+      console.warn('⚠️ Could not fetch activation_fees:', feeErr.message);
+    }
+
     res.json({ 
       success: true, 
-      transactions: allTransactions
+      transactions: allTransactions,
+      activation_fees: activationFees
     });
   } catch (error) {
     console.error('❌ Get transactions error:', error);
@@ -2118,12 +2135,29 @@ router.get('/transactions/user/:userId', async (req, res) => {
       console.warn('⚠️ Could not fetch from deposits table:', depErr.message);
     }
 
+    // Also fetch activation_fees for this user
+    let userActivationFees = [];
+    try {
+      const { data: fees, error: feeError } = await supabase
+        .from('activation_fees')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!feeError && fees) {
+        userActivationFees = fees;
+      }
+    } catch (feeErr) {
+      console.warn('⚠️ Could not fetch user activation_fees:', feeErr.message);
+    }
+
     console.log(`✅ Retrieved ${transactionList.length} transactions for user ${user?.username}`);
 
     res.json({ 
       success: true, 
       user,
       transactions: transactionList,
+      activation_fees: userActivationFees,
       fund_transfers: fundTransfers || [],
       count: transactionList.length
     });
@@ -2180,6 +2214,111 @@ router.get('/activation-fees', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Get activation fees error:', error);
     res.json({ success: true, activation_fees: [], message: 'Could not fetch activation fees' });
+  }
+});
+
+// PUT: Mark activation fee as completed
+router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res) => {
+  try {
+    const { feeId } = req.params;
+    console.log(`\n✅ [PUT /api/admin/activation-fees/${feeId}/mark-completed]`);
+
+    const { data: fee, error: fetchError } = await supabase
+      .from('activation_fees')
+      .select('*')
+      .eq('id', feeId)
+      .single();
+
+    if (fetchError || !fee) {
+      return res.status(404).json({ success: false, message: 'Activation fee not found' });
+    }
+    if (fee.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `Fee is already ${fee.status}` });
+    }
+
+    const { error: updateError } = await supabase
+      .from('activation_fees')
+      .update({ status: 'completed', updated_at: new Date().toISOString() })
+      .eq('id', feeId);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Failed to approve fee', error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Activation fee approved', fee: { id: feeId, status: 'completed' } });
+  } catch (error) {
+    console.error('❌ Approve activation fee error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// PUT: Reject activation fee
+router.put('/activation-fees/:feeId/mark-rejected', checkAdmin, async (req, res) => {
+  try {
+    const { feeId } = req.params;
+    console.log(`\n❌ [PUT /api/admin/activation-fees/${feeId}/mark-rejected]`);
+
+    const { data: fee, error: fetchError } = await supabase
+      .from('activation_fees')
+      .select('*')
+      .eq('id', feeId)
+      .single();
+
+    if (fetchError || !fee) {
+      return res.status(404).json({ success: false, message: 'Activation fee not found' });
+    }
+    if (fee.status !== 'pending') {
+      return res.status(400).json({ success: false, message: `Fee is already ${fee.status}` });
+    }
+
+    const { error: updateError } = await supabase
+      .from('activation_fees')
+      .update({ status: 'failed', updated_at: new Date().toISOString() })
+      .eq('id', feeId);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Failed to reject fee', error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Activation fee rejected', fee: { id: feeId, status: 'failed' } });
+  } catch (error) {
+    console.error('❌ Reject activation fee error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
+  }
+});
+
+// PUT: Revert activation fee to pending
+router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) => {
+  try {
+    const { feeId } = req.params;
+    console.log(`\n🔄 [PUT /api/admin/activation-fees/${feeId}/mark-pending]`);
+
+    const { data: fee, error: fetchError } = await supabase
+      .from('activation_fees')
+      .select('*')
+      .eq('id', feeId)
+      .single();
+
+    if (fetchError || !fee) {
+      return res.status(404).json({ success: false, message: 'Activation fee not found' });
+    }
+    if (fee.status === 'pending') {
+      return res.status(400).json({ success: false, message: 'Fee is already pending' });
+    }
+
+    const { error: updateError } = await supabase
+      .from('activation_fees')
+      .update({ status: 'pending', updated_at: new Date().toISOString() })
+      .eq('id', feeId);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Failed to revert fee', error: updateError.message });
+    }
+
+    res.json({ success: true, message: 'Activation fee reverted to pending', fee: { id: feeId, status: 'pending' } });
+  } catch (error) {
+    console.error('❌ Revert activation fee error:', error);
+    res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 });
 
