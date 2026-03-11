@@ -133,11 +133,11 @@ router.post('/initiate', async (req, res) => {
     }
 
     const numAmount = parseFloat(amount);
-    if (numAmount < 1) {
+    if (numAmount < 500) {
       console.log('❌ Validation failed: Amount too low');
       return res.status(400).json({
         success: false,
-        message: 'Amount must be at least KSH 1'
+        message: 'Amount must be at least KSH 500'
       });
     }
 
