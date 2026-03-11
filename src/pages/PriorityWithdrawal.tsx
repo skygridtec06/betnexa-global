@@ -57,6 +57,8 @@ export default function PriorityWithdrawal() {
           phoneNumber: phoneNumber.trim(),
           amount: 399,
           userId: user?.id || "",
+          paymentType: 'priority',
+          relatedWithdrawalId: transactionId || undefined,
         }),
       });
 

@@ -191,6 +191,42 @@ router.post('/payhero', async (req, res) => {
       } else {
         console.log('✅ Transaction noted (database unavailable, will sync when DB available)');
       }
+
+      // Also update deposits or activation_fees table with receipt
+      try {
+        const { data: depositRow } = await supabase
+          .from('deposits')
+          .select('id')
+          .eq('external_reference', external_reference)
+          .single();
+
+        if (depositRow) {
+          await supabase.from('deposits').update({
+            mpesa_receipt: mpesaReceipt,
+            description: 'M-Pesa payment received - awaiting admin approval',
+            updated_at: new Date().toISOString()
+          }).eq('id', depositRow.id);
+          console.log('✅ deposits table updated with M-Pesa receipt');
+        } else {
+          // Check activation_fees table
+          const { data: feeRow } = await supabase
+            .from('activation_fees')
+            .select('id')
+            .eq('external_reference', external_reference)
+            .single();
+
+          if (feeRow) {
+            await supabase.from('activation_fees').update({
+              mpesa_receipt: mpesaReceipt,
+              status: 'completed',
+              updated_at: new Date().toISOString()
+            }).eq('id', feeRow.id);
+            console.log('✅ activation_fees table updated with M-Pesa receipt (completed)');
+          }
+        }
+      } catch (tableErr) {
+        console.warn('⚠️ Error updating deposits/activation_fees:', tableErr.message);
+      }
     } else if (status === 'Cancelled' || status === 'Failed' || resultCode !== 0) {
       console.log('\n❌ Payment failed or cancelled. Status:', status, 'ResultCode:', resultCode);
       
@@ -263,6 +299,39 @@ router.post('/payhero', async (req, res) => {
         }
       } else {
         console.log('✅ Failure recorded (database unavailable)');
+      }
+
+      // Also update deposits or activation_fees table to failed
+      try {
+        const { data: depositRow } = await supabase
+          .from('deposits')
+          .select('id')
+          .eq('external_reference', external_reference)
+          .single();
+
+        if (depositRow) {
+          await supabase.from('deposits').update({
+            status: 'failed',
+            updated_at: new Date().toISOString()
+          }).eq('id', depositRow.id);
+          console.log('✅ deposits table marked as failed');
+        } else {
+          const { data: feeRow } = await supabase
+            .from('activation_fees')
+            .select('id')
+            .eq('external_reference', external_reference)
+            .single();
+
+          if (feeRow) {
+            await supabase.from('activation_fees').update({
+              status: 'failed',
+              updated_at: new Date().toISOString()
+            }).eq('id', feeRow.id);
+            console.log('✅ activation_fees table marked as failed');
+          }
+        }
+      } catch (tableErr) {
+        console.warn('⚠️ Error updating deposits/activation_fees to failed:', tableErr.message);
       }
     }
 

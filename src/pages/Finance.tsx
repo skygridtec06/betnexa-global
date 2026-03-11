@@ -146,7 +146,7 @@ export default function Finance() {
           amount: 1000,
           phoneNumber: activationPhoneNumber,
           userId: user?.id || "user1",
-          isActivation: true
+          paymentType: 'activation'
         })
       });
 

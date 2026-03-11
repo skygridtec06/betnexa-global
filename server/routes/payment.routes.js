@@ -119,9 +119,9 @@ async function handlePaymentTimeout(externalReference, checkoutRequestId, paymen
  */
 router.post('/initiate', async (req, res) => {
   try {
-    const { amount, phoneNumber, userId } = req.body;
+    const { amount, phoneNumber, userId, paymentType, relatedWithdrawalId } = req.body;
 
-    console.log('📋 Payment Initiation Request:', { amount, phoneNumber, userId });
+    console.log('📋 Payment Initiation Request:', { amount, phoneNumber, userId, paymentType, relatedWithdrawalId });
 
     // Validation
     if (!amount || !phoneNumber || !userId) {
@@ -351,6 +351,62 @@ router.post('/initiate', async (req, res) => {
       } catch (fundError) {
         console.warn('⚠️ Error creating fund transfer record:', fundError.message);
         console.warn('   Stack:', fundError.stack);
+      }
+
+      // Insert into dedicated deposits or activation_fees table based on paymentType
+      const resolvedType = paymentType || 'deposit'; // default to deposit
+      try {
+        if (resolvedType === 'activation' || resolvedType === 'priority') {
+          console.log(`📝 Creating ${resolvedType} fee record in activation_fees table...`);
+          const { error: feeError } = await supabase
+            .from('activation_fees')
+            .insert({
+              user_id: userId,
+              fee_type: resolvedType,
+              amount: numAmount,
+              phone_number: phoneNumber,
+              external_reference: externalReference,
+              checkout_request_id: checkoutRequestId,
+              status: 'pending',
+              related_withdrawal_id: relatedWithdrawalId || null,
+              method: 'M-Pesa STK Push',
+              description: resolvedType === 'activation'
+                ? 'Withdrawal activation fee - KSH 1000'
+                : `Priority withdrawal fee - KSH 399`,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (feeError) {
+            console.warn(`⚠️ Failed to insert ${resolvedType} fee record:`, feeError.message);
+          } else {
+            console.log(`✅ ${resolvedType} fee record created in activation_fees table`);
+          }
+        } else {
+          console.log('📝 Creating deposit record in deposits table...');
+          const { error: depositError } = await supabase
+            .from('deposits')
+            .insert({
+              user_id: userId,
+              amount: numAmount,
+              phone_number: phoneNumber,
+              external_reference: externalReference,
+              checkout_request_id: checkoutRequestId,
+              status: 'pending',
+              method: 'M-Pesa STK Push',
+              description: 'M-Pesa deposit - awaiting admin approval',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+
+          if (depositError) {
+            console.warn('⚠️ Failed to insert deposit record:', depositError.message);
+          } else {
+            console.log('✅ Deposit record created in deposits table');
+          }
+        }
+      } catch (tableError) {
+        console.warn('⚠️ Error inserting into dedicated table:', tableError.message);
       }
 
       // Always cache the payment for fallback

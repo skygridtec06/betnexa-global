@@ -2927,6 +2927,30 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
       console.warn('⚠️ fund_transfers sync error:', ftErr.message);
     }
 
+    // Also sync deposits table if this deposit has a matching record there
+    if (transaction.type === 'deposit' && transaction.external_reference) {
+      try {
+        const { error: depError } = await supabase
+          .from('deposits')
+          .update({
+            status: 'completed',
+            admin_notes: notes || '',
+            completed_at: new Date().toISOString(),
+            completed_by: req.user?.id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('external_reference', transaction.external_reference);
+
+        if (depError) {
+          console.warn('⚠️ Could not update deposits table:', depError.message);
+        } else {
+          console.log('✅ deposits table synced to completed');
+        }
+      } catch (depErr) {
+        console.warn('⚠️ deposits table sync error:', depErr.message);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Transaction marked as completed',
@@ -3014,6 +3038,27 @@ router.put('/transactions/:transactionId/mark-rejected', checkAdmin, async (req,
       console.warn('⚠️ fund_transfers sync error:', ftErr.message);
     }
 
+    // Also sync deposits table if this is a deposit
+    if (transaction.type === 'deposit' && transaction.external_reference) {
+      try {
+        const { error: depError } = await supabase
+          .from('deposits')
+          .update({
+            status: 'failed',
+            updated_at: new Date().toISOString()
+          })
+          .eq('external_reference', transaction.external_reference);
+
+        if (depError) {
+          console.warn('⚠️ Could not update deposits table:', depError.message);
+        } else {
+          console.log('✅ deposits table synced to failed');
+        }
+      } catch (depErr) {
+        console.warn('⚠️ deposits table sync error:', depErr.message);
+      }
+    }
+
     res.json({
       success: true,
       message: 'Transaction rejected',
@@ -3098,6 +3143,29 @@ router.put('/transactions/:transactionId/mark-pending', checkAdmin, async (req, 
         .eq('status', previousStatus);
     } catch (ftErr) {
       console.warn('⚠️ fund_transfers sync error:', ftErr.message);
+    }
+
+    // Sync deposits table if this is a deposit
+    if (transaction.type === 'deposit' && transaction.external_reference) {
+      try {
+        const { error: depError } = await supabase
+          .from('deposits')
+          .update({
+            status: 'pending',
+            completed_at: null,
+            completed_by: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('external_reference', transaction.external_reference);
+
+        if (depError) {
+          console.warn('⚠️ Could not update deposits table:', depError.message);
+        } else {
+          console.log('✅ deposits table synced to pending');
+        }
+      } catch (depErr) {
+        console.warn('⚠️ deposits table sync error:', depErr.message);
+      }
     }
 
     res.json({
