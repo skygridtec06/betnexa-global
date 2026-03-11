@@ -2918,15 +2918,35 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
     console.log('   Transaction ID:', transactionId);
     console.log('   M-Pesa Receipt (optional):', mpesaReceipt || 'not provided');
 
-    // Fetch the transaction first
-    const { data: transaction, error: fetchError } = await supabase
+    // Fetch the transaction — try transactions table first, then deposits table
+    let transaction = null;
+    let fromDepositsTable = false;
+
+    const { data: txData, error: fetchError } = await supabase
       .from('transactions')
       .select('*')
       .eq('id', transactionId)
       .single();
 
-    if (fetchError || !transaction) {
-      console.error('❌ Transaction not found:', transactionId);
+    if (!fetchError && txData) {
+      transaction = txData;
+    } else {
+      // Fallback: check deposits table
+      const { data: depData, error: depError } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (!depError && depData) {
+        transaction = { ...depData, type: 'deposit' };
+        fromDepositsTable = true;
+        console.log('✅ Transaction found in deposits table (not in transactions)');
+      }
+    }
+
+    if (!transaction) {
+      console.error('❌ Transaction not found in any table:', transactionId);
       return res.status(404).json({
         success: false,
         message: 'Transaction not found'
@@ -2937,7 +2957,8 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
       id: transaction.id,
       userId: transaction.user_id,
       amount: transaction.amount,
-      status: transaction.status
+      status: transaction.status,
+      source: fromDepositsTable ? 'deposits' : 'transactions'
     });
 
     // Check if transaction is pending
@@ -2948,26 +2969,41 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
       });
     }
 
-    // Update transaction status to completed
-    const { error: updateError } = await supabase
-      .from('transactions')
-      .update({
-        status: 'completed',
-        mpesa_receipt: mpesaReceipt || transaction.mpesa_receipt,
-        admin_notes: notes || '',
-        completed_at: new Date().toISOString(),
-        completed_by: req.user?.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', transactionId);
+    // Update the source table
+    if (fromDepositsTable) {
+      const { error: updateError } = await supabase
+        .from('deposits')
+        .update({
+          status: 'completed',
+          mpesa_receipt: mpesaReceipt || transaction.mpesa_receipt,
+          admin_notes: notes || '',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
 
-    if (updateError) {
-      console.error('❌ Error updating transaction:', updateError);
-      return res.status(500).json({
-        success: false,
-        message: 'Failed to update transaction',
-        error: updateError.message
-      });
+      if (updateError) {
+        console.error('❌ Error updating deposit:', updateError);
+        return res.status(500).json({ success: false, message: 'Failed to update deposit', error: updateError.message });
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({
+          status: 'completed',
+          mpesa_receipt: mpesaReceipt || transaction.mpesa_receipt,
+          admin_notes: notes || '',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
+
+      if (updateError) {
+        console.error('❌ Error updating transaction:', updateError);
+        return res.status(500).json({ success: false, message: 'Failed to update transaction', error: updateError.message });
+      }
     }
 
     console.log('✅ Transaction marked as completed');
@@ -3075,14 +3111,33 @@ router.put('/transactions/:transactionId/mark-rejected', checkAdmin, async (req,
 
     console.log(`\n❌ [PUT /api/admin/transactions/${transactionId}/mark-rejected] Rejecting transaction`);
 
-    // Fetch the transaction
-    const { data: transaction, error: fetchError } = await supabase
+    // Fetch the transaction — try transactions table first, then deposits table
+    let transaction = null;
+    let fromDepositsTable = false;
+
+    const { data: txData, error: fetchError } = await supabase
       .from('transactions')
       .select('*')
       .eq('id', transactionId)
       .single();
 
-    if (fetchError || !transaction) {
+    if (!fetchError && txData) {
+      transaction = txData;
+    } else {
+      const { data: depData, error: depError } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (!depError && depData) {
+        transaction = { ...depData, type: 'deposit' };
+        fromDepositsTable = true;
+        console.log('✅ Transaction found in deposits table');
+      }
+    }
+
+    if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
     }
 
@@ -3093,21 +3148,39 @@ router.put('/transactions/:transactionId/mark-rejected', checkAdmin, async (req,
       });
     }
 
-    // Update transaction status to failed
-    const { error: updateError } = await supabase
-      .from('transactions')
-      .update({
-        status: 'failed',
-        admin_notes: reason || 'Rejected by admin',
-        completed_at: new Date().toISOString(),
-        completed_by: req.user?.id,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', transactionId);
+    // Update the source table
+    if (fromDepositsTable) {
+      const { error: updateError } = await supabase
+        .from('deposits')
+        .update({
+          status: 'failed',
+          admin_notes: reason || 'Rejected by admin',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
 
-    if (updateError) {
-      console.error('❌ Error rejecting transaction:', updateError);
-      return res.status(500).json({ success: false, message: 'Failed to reject transaction', error: updateError.message });
+      if (updateError) {
+        console.error('❌ Error rejecting deposit:', updateError);
+        return res.status(500).json({ success: false, message: 'Failed to reject deposit', error: updateError.message });
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({
+          status: 'failed',
+          admin_notes: reason || 'Rejected by admin',
+          completed_at: new Date().toISOString(),
+          completed_by: req.user?.id,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
+
+      if (updateError) {
+        console.error('❌ Error rejecting transaction:', updateError);
+        return res.status(500).json({ success: false, message: 'Failed to reject transaction', error: updateError.message });
+      }
     }
 
     console.log('✅ Transaction rejected');
@@ -3178,13 +3251,33 @@ router.put('/transactions/:transactionId/mark-pending', checkAdmin, async (req, 
 
     console.log(`\n🔄 [PUT /api/admin/transactions/${transactionId}/mark-pending] Reverting to pending`);
 
-    const { data: transaction, error: fetchError } = await supabase
+    // Fetch the transaction — try transactions table first, then deposits table
+    let transaction = null;
+    let fromDepositsTable = false;
+
+    const { data: txData, error: fetchError } = await supabase
       .from('transactions')
       .select('*')
       .eq('id', transactionId)
       .single();
 
-    if (fetchError || !transaction) {
+    if (!fetchError && txData) {
+      transaction = txData;
+    } else {
+      const { data: depData, error: depError } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('id', transactionId)
+        .single();
+
+      if (!depError && depData) {
+        transaction = { ...depData, type: 'deposit' };
+        fromDepositsTable = true;
+        console.log('✅ Transaction found in deposits table');
+      }
+    }
+
+    if (!transaction) {
       return res.status(404).json({ success: false, message: 'Transaction not found' });
     }
 
@@ -3213,19 +3306,37 @@ router.put('/transactions/:transactionId/mark-pending', checkAdmin, async (req, 
       }
     }
 
-    const { error: updateError } = await supabase
-      .from('transactions')
-      .update({
-        status: 'pending',
-        admin_notes: `Reverted from ${previousStatus} by admin`,
-        completed_at: null,
-        completed_by: null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', transactionId);
+    // Update the source table
+    if (fromDepositsTable) {
+      const { error: updateError } = await supabase
+        .from('deposits')
+        .update({
+          status: 'pending',
+          admin_notes: `Reverted from ${previousStatus} by admin`,
+          completed_at: null,
+          completed_by: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
 
-    if (updateError) {
-      return res.status(500).json({ success: false, message: 'Failed to revert transaction', error: updateError.message });
+      if (updateError) {
+        return res.status(500).json({ success: false, message: 'Failed to revert deposit', error: updateError.message });
+      }
+    } else {
+      const { error: updateError } = await supabase
+        .from('transactions')
+        .update({
+          status: 'pending',
+          admin_notes: `Reverted from ${previousStatus} by admin`,
+          completed_at: null,
+          completed_by: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', transactionId);
+
+      if (updateError) {
+        return res.status(500).json({ success: false, message: 'Failed to revert transaction', error: updateError.message });
+      }
     }
 
     // Sync fund_transfers
