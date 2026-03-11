@@ -473,37 +473,48 @@ export default function Finance() {
 
       // Check if withdrawal needs activation
       if (balance > 0 && !user?.withdrawalActivated) {
-        // Show activation modal instead of withdrawing
         setPendingWithdrawalAmount(transactionAmount);
         setShowActivationModal(true);
         setIsProcessing(false);
         return;
       }
 
-      const success = withdraw(transactionAmount);
-      if (!success) {
-        alert("Withdrawal failed. Insufficient balance.");
+      setIsProcessing(true);
+      setStatusMessage("Processing withdrawal...");
+
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user?.id || "user1",
+            amount: transactionAmount,
+            phoneNumber: user?.phone || "",
+            reason: "User initiated withdrawal"
+          })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || "Withdrawal failed");
+        }
+
+        // Refresh transactions and balance
+        await fetchTransactions(user?.id || "user1");
+        if (data.transaction && data.transaction.user_id && data.transaction.amount) {
+          setBalance((prev) => prev - transactionAmount);
+          updateUser({ accountBalance: balance - transactionAmount });
+        }
+
+        setAmount("");
         setIsProcessing(false);
-        return;
+        setStatusMessage("✅ Withdrawal request submitted");
+        setPaymentStatus("success");
+      } catch (error) {
+        setIsProcessing(false);
+        setStatusMessage(`❌ Error: ${error.message || error}`);
+        setPaymentStatus("failed");
       }
-
-      const newTransactionData = {
-        id: `t${Date.now()}`,
-        userId: user?.id || "user1",
-        username: user?.username || "User",
-        type: "withdrawal" as const,
-        amount: transactionAmount,
-        status: "pending" as const,
-        method: "M-Pesa",
-        date: new Date().toLocaleString()
-      };
-
-      addTransaction(newTransactionData);
-      setAmount("");
-      setIsProcessing(false);
-      setStatusMessage("✅ Withdrawal request submitted");
-      setPaymentStatus("success");
-
       setTimeout(() => {
         setStatusMessage("");
         setPaymentStatus(null);
