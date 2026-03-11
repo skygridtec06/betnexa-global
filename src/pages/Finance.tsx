@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
@@ -21,6 +21,7 @@ export default function Finance() {
   const [amount, setAmount] = useState("");
   const [mpesaNumber, setMpesaNumber] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
+  const withdrawalInProgress = useRef(false);
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [externalReference, setExternalReference] = useState<string>("");
@@ -271,6 +272,8 @@ export default function Finance() {
   };
 
   const processPendingWithdrawal = async (withdrawalAmount: number) => {
+    if (withdrawalInProgress.current) return;
+    withdrawalInProgress.current = true;
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
@@ -299,6 +302,8 @@ export default function Finance() {
     } catch (error) {
       setStatusMessage(`❌ Withdrawal failed: ${error instanceof Error ? error.message : error}`);
       setPaymentStatus("failed");
+    } finally {
+      withdrawalInProgress.current = false;
     }
 
     setTimeout(() => {
@@ -308,6 +313,9 @@ export default function Finance() {
   };
 
   const handleTransaction = async () => {
+    // Prevent double submission
+    if (isProcessing) return;
+    
     if (!amount) {
       alert("Please fill in the amount");
       return;
@@ -506,6 +514,10 @@ export default function Finance() {
         return;
       }
 
+      // Prevent double withdrawal submission
+      if (withdrawalInProgress.current) return;
+      withdrawalInProgress.current = true;
+
       setIsProcessing(true);
       setStatusMessage("Processing withdrawal...");
 
@@ -541,6 +553,8 @@ export default function Finance() {
         setIsProcessing(false);
         setStatusMessage(`❌ Error: ${error.message || error}`);
         setPaymentStatus("failed");
+      } finally {
+        withdrawalInProgress.current = false;
       }
       setTimeout(() => {
         setStatusMessage("");
