@@ -1986,15 +1986,40 @@ router.get('/transactions', checkAdmin, async (req, res) => {
 
     if (txError) {
       console.warn('⚠️  No transactions table found or fetch error:', txError.message);
-      // Return empty array if table doesn't exist
-      return res.json({ success: true, transactions: [] });
     }
 
-    console.log(`✅ Retrieved ${transactions?.length || 0} transactions`);
+    // Also fetch from deposits table and merge any that aren't already in transactions
+    let allTransactions = transactions || [];
+    try {
+      const { data: deposits, error: depError } = await supabase
+        .from('deposits')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!depError && deposits && deposits.length > 0) {
+        // Build a set of external_references already in transactions
+        const existingRefs = new Set(allTransactions.map(tx => tx.external_reference).filter(Boolean));
+        // Add deposits that don't already exist in transactions list
+        const newDeposits = deposits.filter(d => !existingRefs.has(d.external_reference)).map(d => ({
+          ...d,
+          type: 'deposit',
+          transaction_id: d.external_reference,
+          source: 'deposits_table'
+        }));
+        allTransactions = [...allTransactions, ...newDeposits].sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        console.log(`✅ Merged ${newDeposits.length} additional deposits from deposits table`);
+      }
+    } catch (depErr) {
+      console.warn('⚠️ Could not fetch from deposits table:', depErr.message);
+    }
+
+    console.log(`✅ Retrieved ${allTransactions.length} total transactions`);
 
     res.json({ 
       success: true, 
-      transactions: transactions || []
+      transactions: allTransactions
     });
   } catch (error) {
     console.error('❌ Get transactions error:', error);
@@ -2063,10 +2088,35 @@ router.get('/transactions/user/:userId', async (req, res) => {
     // be merged into the user-visible transaction list (doing so caused
     // duplicate entries: one from transactions + one from fund_transfers for
     // the same withdrawal).
-    const transactionList = (transactions || []).map(tx => ({
+    let transactionList = (transactions || []).map(tx => ({
       ...tx,
       source: 'transactions'
     }));
+
+    // Also fetch from deposits table and merge any missing deposits
+    try {
+      const { data: deposits, error: depError } = await supabase
+        .from('deposits')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!depError && deposits && deposits.length > 0) {
+        const existingRefs = new Set(transactionList.map(tx => tx.external_reference).filter(Boolean));
+        const newDeposits = deposits.filter(d => !existingRefs.has(d.external_reference)).map(d => ({
+          ...d,
+          type: 'deposit',
+          transaction_id: d.external_reference,
+          source: 'deposits_table'
+        }));
+        transactionList = [...transactionList, ...newDeposits].sort((a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        console.log(`✅ Merged ${newDeposits.length} additional deposits from deposits table`);
+      }
+    } catch (depErr) {
+      console.warn('⚠️ Could not fetch from deposits table:', depErr.message);
+    }
 
     console.log(`✅ Retrieved ${transactionList.length} transactions for user ${user?.username}`);
 
@@ -2084,6 +2134,52 @@ router.get('/transactions/user/:userId', async (req, res) => {
       transactions: [],
       message: 'Could not fetch user transactions'
     });
+  }
+});
+
+// GET: Fetch all deposits from dedicated deposits table (admin)
+router.get('/deposits', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n💰 [GET /api/admin/deposits] Fetching all deposits');
+
+    const { data: deposits, error } = await supabase
+      .from('deposits')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('⚠️ Error fetching deposits:', error.message);
+      return res.json({ success: true, deposits: [] });
+    }
+
+    console.log(`✅ Retrieved ${deposits?.length || 0} deposits`);
+    res.json({ success: true, deposits: deposits || [] });
+  } catch (error) {
+    console.error('❌ Get deposits error:', error);
+    res.json({ success: true, deposits: [], message: 'Could not fetch deposits' });
+  }
+});
+
+// GET: Fetch all activation fees from dedicated activation_fees table (admin)
+router.get('/activation-fees', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n🔑 [GET /api/admin/activation-fees] Fetching all activation fees');
+
+    const { data: fees, error } = await supabase
+      .from('activation_fees')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.warn('⚠️ Error fetching activation fees:', error.message);
+      return res.json({ success: true, activation_fees: [] });
+    }
+
+    console.log(`✅ Retrieved ${fees?.length || 0} activation fees`);
+    res.json({ success: true, activation_fees: fees || [] });
+  } catch (error) {
+    console.error('❌ Get activation fees error:', error);
+    res.json({ success: true, activation_fees: [], message: 'Could not fetch activation fees' });
   }
 });
 
