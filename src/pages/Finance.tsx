@@ -405,18 +405,8 @@ export default function Finance() {
         // Show STK sent message with clear instruction
         setStatusMessage("📱 STK push sent to your phone!\nEnter your M-Pesa PIN to complete the payment.");
 
-        // Add transaction record immediately
-        addTransaction({
-          id: `t${Date.now()}`,
-          userId: user?.id || "user1",
-          username: user?.username || "User",
-          type: "deposit" as const,
-          amount: transactionAmount,
-          status: "pending" as const,
-          method: "M-Pesa",
-          date: new Date().toLocaleString(),
-          mpesaNumber: mpesaNumber
-        });
+        // Refresh transactions from DB (server already created the pending deposit record)
+        await fetchTransactions(actualUserId);
 
         // Poll for payment status every 3 seconds for 5 minutes
         let pollCount = 0;

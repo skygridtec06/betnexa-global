@@ -268,29 +268,51 @@ router.post('/initiate', async (req, res) => {
 
       // Create a pending transaction record immediately (visible to admin even if payment not yet confirmed)
       try {
-        console.log('📊 Creating pending transaction record...');
-        const { error: transactionError } = await supabase
+        console.log('📊 Creating pending deposit transaction record...');
+        const depositTxData = {
+          transaction_id: `DEP-${Date.now()}-${externalReference}`,
+          user_id: userId,
+          type: 'deposit',
+          amount: numAmount,
+          status: 'pending',
+          external_reference: externalReference,
+          method: 'M-Pesa STK Push',
+          phone_number: phoneNumber,
+          description: 'M-Pesa deposit - awaiting admin approval',
+          created_at: new Date().toISOString()
+        };
+
+        // Try insert with all fields first
+        let { error: transactionError } = await supabase
           .from('transactions')
-          .insert({
-            transaction_id: `DEP-${Date.now()}-${externalReference}`,
-            user_id: userId,
-            type: 'deposit',
-            amount: numAmount,
-            status: 'pending',
-            mpesa_receipt: '',
-            external_reference: externalReference,
-            checkout_request_id: checkoutRequestId,
-            method: 'M-Pesa STK Push',
-            created_at: new Date().toISOString()
-          });
+          .insert(depositTxData);
 
         if (transactionError) {
-          console.warn('⚠️ Failed to create pending transaction:', transactionError.message);
+          console.warn('⚠️ First insert attempt failed:', transactionError.message, '- Details:', transactionError.details);
+          // Retry with minimal fields
+          console.log('🔄 Retrying with minimal fields...');
+          const { error: retryError } = await supabase
+            .from('transactions')
+            .insert({
+              transaction_id: depositTxData.transaction_id,
+              user_id: userId,
+              type: 'deposit',
+              amount: numAmount,
+              status: 'pending',
+              external_reference: externalReference,
+              created_at: new Date().toISOString()
+            });
+
+          if (retryError) {
+            console.error('❌ Deposit transaction insert FAILED:', retryError.message, retryError.details, retryError.code);
+          } else {
+            console.log('✅ Pending deposit transaction created (minimal fields)');
+          }
         } else {
-          console.log('✅ Pending transaction record created - visible to admin');
+          console.log('✅ Pending deposit transaction created - visible to admin and user');
         }
       } catch (txError) {
-        console.warn('⚠️ Error creating pending transaction:', txError.message);
+        console.error('❌ Error creating pending deposit transaction:', txError.message);
       }
 
       // Create fund transfer record in the dedicated fund_transfers table
