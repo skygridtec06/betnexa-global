@@ -294,29 +294,39 @@ router.post('/initiate', async (req, res) => {
       // Create fund transfer record in the dedicated fund_transfers table
       try {
         console.log('💳 Creating fund transfer record...');
+        const fundTransferData = {
+          user_id: userId,
+          transfer_type: 'deposit',
+          amount: numAmount,
+          phone_number: phoneNumber,
+          status: 'pending',
+          method: 'M-Pesa',
+          external_reference: externalReference,
+          checkout_request_id: checkoutRequestId,
+          is_stk_push_sent: true,
+          stk_sent_at: new Date().toISOString(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        
+        console.log('   Fund transfer data:', JSON.stringify(fundTransferData, null, 2));
+        
         const { data: fundTransfer, error: fundTransferError } = await supabase
           .from('fund_transfers')
-          .insert({
-            user_id: userId,
-            transfer_type: 'deposit',
-            amount: numAmount,
-            phone_number: phoneNumber,
-            status: 'pending',
-            method: 'M-Pesa',
-            external_reference: externalReference,
-            checkout_request_id: checkoutRequestId,
-            is_stk_push_sent: true,
-            stk_sent_at: new Date().toISOString()
-          })
+          .insert([fundTransferData])
           .select();
 
         if (fundTransferError) {
-          console.warn('⚠️ Failed to create fund transfer record:', fundTransferError.message);
+          console.warn('⚠️ Failed to create fund transfer record:');
+          console.warn('   Error message:', fundTransferError.message);
+          console.warn('   Error details:', fundTransferError.details);
+          console.warn('   Error code:', fundTransferError.code);
         } else {
           console.log('✅ Fund transfer record created:', fundTransfer?.[0]?.id);
         }
       } catch (fundError) {
         console.warn('⚠️ Error creating fund transfer record:', fundError.message);
+        console.warn('   Stack:', fundError.stack);
       }
 
       // Always cache the payment for fallback

@@ -134,9 +134,35 @@ $$ LANGUAGE plpgsql;
 -- FOR EACH ROW
 -- EXECUTE FUNCTION update_fund_transfer_on_transaction_change();
 
+-- ==================== ROW LEVEL SECURITY ====================
+-- Enable RLS on fund_transfers table
+ALTER TABLE fund_transfers ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Allow authenticated users to INSERT their own fund transfers
+CREATE POLICY IF NOT EXISTS "allow_insert_own_fund_transfers" ON fund_transfers
+  FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- Policy 2: Allow authenticated users to SELECT their own fund transfers
+CREATE POLICY IF NOT EXISTS "allow_select_own_fund_transfers" ON fund_transfers
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Policy 3: Allow authenticated users to UPDATE their own fund transfers
+CREATE POLICY IF NOT EXISTS "allow_update_own_fund_transfers" ON fund_transfers
+  FOR UPDATE
+  USING (auth.uid() = user_id);
+
+-- Policy 4: Allow service role (backend) full access (for admin operations and callbacks)
+CREATE POLICY IF NOT EXISTS "allow_service_role_all_operations" ON fund_transfers
+  FOR ALL
+  USING (true)
+  WITH CHECK (true);
+
 -- ==================== GRANTS ====================
 GRANT SELECT, INSERT, UPDATE, DELETE ON fund_transfers TO authenticated;
 GRANT SELECT ON fund_transfers TO anon;
+GRANT ALL ON fund_transfers TO service_role;
 
 -- ==================== COMMENTS ====================
 COMMENT ON TABLE fund_transfers IS 'Dedicated table for tracking all deposit and withdrawal transactions, linked to transactions and payments tables';
