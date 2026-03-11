@@ -19,7 +19,7 @@ export interface Transaction {
 interface TransactionContextType {
   transactions: Transaction[];
   addTransaction: (transaction: Transaction) => Promise<void>;
-  updateTransactionStatus: (transactionId: string, status: Transaction["status"]) => Promise<void>;
+  updateTransactionStatus: (transactionId: string, status: Transaction["status"], phone?: string) => Promise<void>;
   getUserTransactions: (userId: string) => Transaction[];
   getAllTransactions: () => Transaction[];
   fetchTransactions: (userId: string) => Promise<void>;
@@ -85,7 +85,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
 
   const updateTransactionStatus = async (
     transactionId: string,
-    status: Transaction["status"]
+    status: Transaction["status"],
+    phone?: string
   ) => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
@@ -96,7 +97,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       const response = await fetch(endpoint, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ phone: phone || '' })
       });
 
       const data = await response.json();

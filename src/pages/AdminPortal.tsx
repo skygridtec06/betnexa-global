@@ -1916,7 +1916,7 @@ const AdminPortal = () => {
                               className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
                               onClick={async () => {
                                 try {
-                                  await updateTransactionStatus(transaction.id, "completed");
+                                  await updateTransactionStatus(transaction.id, "completed", loggedInUser?.phone);
                                   setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'completed' } : t));
                                 } catch (e) {
                                   console.error('Failed to approve:', e);
@@ -1931,7 +1931,7 @@ const AdminPortal = () => {
                               className="text-xs h-6 text-red-500 hover:text-red-600"
                               onClick={async () => {
                                 try {
-                                  await updateTransactionStatus(transaction.id, "failed");
+                                  await updateTransactionStatus(transaction.id, "failed", loggedInUser?.phone);
                                   setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'failed' } : t));
                                 } catch (e) {
                                   console.error('Failed to reject:', e);
