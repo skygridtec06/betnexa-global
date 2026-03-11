@@ -274,6 +274,7 @@ export default function Finance() {
   const processPendingWithdrawal = async (withdrawalAmount: number) => {
     if (withdrawalInProgress.current) return;
     withdrawalInProgress.current = true;
+    const withdrawalKey = `WTH-${Date.now()}-${user?.id || 'user1'}`;
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
@@ -283,7 +284,8 @@ export default function Finance() {
           userId: user?.id || "user1",
           amount: withdrawalAmount,
           phoneNumber: user?.phone || "",
-          reason: "User initiated withdrawal"
+          reason: "User initiated withdrawal",
+          idempotencyKey: withdrawalKey
         })
       });
       const data = await response.json();
@@ -313,8 +315,8 @@ export default function Finance() {
   };
 
   const handleTransaction = async () => {
-    // Prevent double submission
-    if (isProcessing) return;
+    // Prevent double submission (ref is synchronous, unlike React state)
+    if (isProcessing || withdrawalInProgress.current) return;
     
     if (!amount) {
       alert("Please fill in the amount");
@@ -514,13 +516,14 @@ export default function Finance() {
         return;
       }
 
-      // Prevent double withdrawal submission
+      // Prevent double withdrawal submission (ref guard is synchronous)
       if (withdrawalInProgress.current) return;
       withdrawalInProgress.current = true;
 
       setIsProcessing(true);
       setStatusMessage("Processing withdrawal...");
 
+      const withdrawalKey = `WTH-${Date.now()}-${user?.id || 'user1'}`;
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
         const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
@@ -530,7 +533,8 @@ export default function Finance() {
             userId: user?.id || "user1",
             amount: transactionAmount,
             phoneNumber: user?.phone || "",
-            reason: "User initiated withdrawal"
+            reason: "User initiated withdrawal",
+            idempotencyKey: withdrawalKey
           })
         });
         const data = await response.json();

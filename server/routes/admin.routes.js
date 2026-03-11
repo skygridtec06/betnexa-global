@@ -2327,10 +2327,10 @@ router.get('/payments', checkAdmin, async (req, res) => {
 // POST: Record withdrawal transaction (when user initiates withdrawal)
 router.post('/transactions/withdrawal', async (req, res) => {
   try {
-    const { userId, amount, phoneNumber, reason } = req.body;
+    const { userId, amount, phoneNumber, reason, idempotencyKey } = req.body;
 
     console.log(`\n🔄 [POST /api/admin/transactions/withdrawal] Recording withdrawal transaction`);
-    console.log(`   User: ${userId}, Amount: KSH ${amount}, Phone: ${phoneNumber}`);
+    console.log(`   User: ${userId}, Amount: KSH ${amount}, Phone: ${phoneNumber}, Key: ${idempotencyKey || 'none'}`);
 
     if (!userId || !amount || amount <= 0) {
       return res.status(400).json({ 
@@ -2344,6 +2344,28 @@ router.post('/transactions/withdrawal', async (req, res) => {
       return res.status(503).json({ 
         error: 'Service unavailable',
         success: false
+      });
+    }
+
+    // Duplicate withdrawal guard: reject if same user has a pending withdrawal
+    // for the same amount created within the last 30 seconds
+    const thirtySecondsAgo = new Date(Date.now() - 30000).toISOString();
+    const { data: recentDup } = await supabase
+      .from('transactions')
+      .select('id, transaction_id, created_at')
+      .eq('user_id', userId)
+      .eq('type', 'withdrawal')
+      .eq('amount', parseFloat(amount))
+      .gte('created_at', thirtySecondsAgo)
+      .limit(1)
+      .maybeSingle();
+
+    if (recentDup) {
+      console.warn(`⚠️ Duplicate withdrawal blocked: user ${userId}, amount ${amount}, existing tx ${recentDup.transaction_id}`);
+      return res.json({
+        success: true,
+        transaction: recentDup,
+        message: 'Withdrawal already recorded (duplicate request ignored)'
       });
     }
 
