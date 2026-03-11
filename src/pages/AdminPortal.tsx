@@ -1855,30 +1855,121 @@ const AdminPortal = () => {
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">
-            <div className="mb-4">
-              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">All Transactions</h3>
+            {/* --- DEPOSITS SECTION --- */}
+            {(() => {
+              const deposits = allTransactions.filter((t: any) => t.type === 'deposit');
+              const resolved = deposits.filter((t: any) => t.status === 'completed' || t.status === 'failed');
+              const completed = resolved.filter((t: any) => t.status === 'completed');
+              const successRate = resolved.length > 0 ? Math.round((completed.length / resolved.length) * 100) : 0;
+
+              return (
+                <>
+                  <div className="mb-2">
+                    <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Deposits</h3>
+                    {resolved.length > 0 && (
+                      <div className="mt-2 flex items-center gap-3">
+                        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${successRate}%`,
+                              backgroundColor: successRate >= 70 ? '#22c55e' : successRate >= 40 ? '#eab308' : '#ef4444'
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-muted-foreground whitespace-nowrap">
+                          {successRate}% success ({completed.length}/{resolved.length} resolved)
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {deposits.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">No deposits found</p>
+                    )}
+                    {deposits.map((transaction: any) => (
+                      <Card key={transaction.id} className="border-border bg-card p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-1">
+                            <div className="rounded-full p-2 bg-green-500/20">
+                              <ArrowDown className="h-4 w-4 text-green-500" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-foreground">
+                                {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - Deposit
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-sm text-green-500">
+                              +KSH {Number(transaction.amount).toLocaleString()}
+                            </p>
+                            <div className="flex items-center justify-end gap-2 mt-1">
+                              {transaction.status === "completed" && (
+                                <>
+                                  <CheckCircle className="h-4 w-4 text-green-500" />
+                                  <span className="text-xs text-green-500">Completed</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                                    onClick={async () => { try { await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t)); } catch (e) { console.error('Failed to revert:', e); } }}>
+                                    Revert
+                                  </Button>
+                                </>
+                              )}
+                              {transaction.status === "pending" && (
+                                <>
+                                  <Clock className="h-4 w-4 text-yellow-500" />
+                                  <span className="text-xs text-yellow-500">Pending</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
+                                    onClick={async () => { try { await updateTransactionStatus(transaction.id, "completed", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'completed' } : t)); } catch (e) { console.error('Failed to approve:', e); } }}>
+                                    Approve
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="text-xs h-6 text-red-500 hover:text-red-600"
+                                    onClick={async () => { try { await updateTransactionStatus(transaction.id, "failed", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'failed' } : t)); } catch (e) { console.error('Failed to reject:', e); } }}>
+                                    Reject
+                                  </Button>
+                                </>
+                              )}
+                              {transaction.status === "failed" && (
+                                <>
+                                  <XCircle className="h-4 w-4 text-red-500" />
+                                  <span className="text-xs text-red-500">Failed</span>
+                                  <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                                    onClick={async () => { try { await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t)); } catch (e) { console.error('Failed to revert:', e); } }}>
+                                    Revert
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* --- WITHDRAWALS SECTION --- */}
+            <div className="mt-8 mb-2">
+              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Withdrawals</h3>
             </div>
             <div className="space-y-3">
-              {allTransactions.map((transaction: any) => (
+              {allTransactions.filter((t: any) => t.type !== 'deposit').length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">No withdrawals found</p>
+              )}
+              {allTransactions.filter((t: any) => t.type !== 'deposit').map((transaction: any) => (
                 <Card key={transaction.id} className="border-border bg-card p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
-                      <div
-                        className={`rounded-full p-2 ${
-                          transaction.type === "deposit"
-                            ? "bg-green-500/20"
-                            : "bg-blue-500/20"
-                        }`}
-                      >
-                        {transaction.type === "deposit" ? (
-                          <ArrowDown className="h-4 w-4 text-green-500" />
-                        ) : (
-                          <ArrowUp className="h-4 w-4 text-blue-500" />
-                        )}
+                      <div className="rounded-full p-2 bg-blue-500/20">
+                        <ArrowUp className="h-4 w-4 text-blue-500" />
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
-                          {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "deposit" ? "Deposit" : transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
+                          {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}
@@ -1886,35 +1977,16 @@ const AdminPortal = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p
-                        className={`font-bold text-sm ${
-                          transaction.type === "deposit"
-                            ? "text-green-500"
-                            : "text-blue-500"
-                        }`}
-                      >
-                        {transaction.type === "deposit" ? "+" : "-"}KSH {Number(transaction.amount).toLocaleString()}
+                      <p className="font-bold text-sm text-blue-500">
+                        -KSH {Number(transaction.amount).toLocaleString()}
                       </p>
                       <div className="flex items-center justify-end gap-2 mt-1">
                         {transaction.status === "completed" && (
                           <>
                             <CheckCircle className="h-4 w-4 text-green-500" />
-                            <span className="text-xs text-green-500">
-                              Completed
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
-                              onClick={async () => {
-                                try {
-                                  await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone);
-                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t));
-                                } catch (e) {
-                                  console.error('Failed to revert:', e);
-                                }
-                              }}
-                            >
+                            <span className="text-xs text-green-500">Completed</span>
+                            <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                              onClick={async () => { try { await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t)); } catch (e) { console.error('Failed to revert:', e); } }}>
                               Revert
                             </Button>
                           </>
@@ -1922,37 +1994,13 @@ const AdminPortal = () => {
                         {transaction.status === "pending" && (
                           <>
                             <Clock className="h-4 w-4 text-yellow-500" />
-                            <span className="text-xs text-yellow-500">
-                              Pending
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
-                              onClick={async () => {
-                                try {
-                                  await updateTransactionStatus(transaction.id, "completed", loggedInUser?.phone);
-                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'completed' } : t));
-                                } catch (e) {
-                                  console.error('Failed to approve:', e);
-                                }
-                              }}
-                            >
+                            <span className="text-xs text-yellow-500">Pending</span>
+                            <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-green-500 hover:text-green-600"
+                              onClick={async () => { try { await updateTransactionStatus(transaction.id, "completed", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'completed' } : t)); } catch (e) { console.error('Failed to approve:', e); } }}>
                               Approve
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs h-6 text-red-500 hover:text-red-600"
-                              onClick={async () => {
-                                try {
-                                  await updateTransactionStatus(transaction.id, "failed", loggedInUser?.phone);
-                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'failed' } : t));
-                                } catch (e) {
-                                  console.error('Failed to reject:', e);
-                                }
-                              }}
-                            >
+                            <Button size="sm" variant="ghost" className="text-xs h-6 text-red-500 hover:text-red-600"
+                              onClick={async () => { try { await updateTransactionStatus(transaction.id, "failed", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'failed' } : t)); } catch (e) { console.error('Failed to reject:', e); } }}>
                               Reject
                             </Button>
                           </>
@@ -1960,22 +2008,9 @@ const AdminPortal = () => {
                         {transaction.status === "failed" && (
                           <>
                             <XCircle className="h-4 w-4 text-red-500" />
-                            <span className="text-xs text-red-500">
-                              Failed
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
-                              onClick={async () => {
-                                try {
-                                  await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone);
-                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t));
-                                } catch (e) {
-                                  console.error('Failed to revert:', e);
-                                }
-                              }}
-                            >
+                            <span className="text-xs text-red-500">Failed</span>
+                            <Button size="sm" variant="ghost" className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                              onClick={async () => { try { await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone); setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t)); } catch (e) { console.error('Failed to revert:', e); } }}>
                               Revert
                             </Button>
                           </>
