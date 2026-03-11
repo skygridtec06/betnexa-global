@@ -133,12 +133,17 @@ router.post('/initiate', async (req, res) => {
     }
 
     const numAmount = parseFloat(amount);
-    if (numAmount < 500) {
-      console.log('❌ Validation failed: Amount too low');
+    const resolvedPaymentType = paymentType || 'deposit';
+    // Only enforce KSH 500 minimum for regular deposits; activation (1000) and priority (399) fees are exempt
+    if (resolvedPaymentType === 'deposit' && numAmount < 500) {
+      console.log('❌ Validation failed: Deposit amount too low');
       return res.status(400).json({
         success: false,
         message: 'Amount must be at least KSH 500'
       });
+    }
+    if (numAmount < 1) {
+      return res.status(400).json({ success: false, message: 'Amount must be at least KSH 1' });
     }
 
     // Generate reference
