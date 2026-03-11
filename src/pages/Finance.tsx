@@ -195,9 +195,26 @@ export default function Finance() {
             clearInterval(interval);
             setStatusCheckInterval(null);
 
-            // Activation successful - add 500 to balance and mark as activated
+            // Activation successful - add 1000 to balance and mark as activated
             const newBalance = balance + 1000;
             
+            // PERSIST activation to database
+            try {
+              const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+              await fetch(`${apiUrl}/api/auth/update-profile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  userId: user?.id || actualUserId,
+                  withdrawal_activated: true,
+                  withdrawal_activation_date: new Date().toISOString()
+                })
+              });
+              console.log('✅ Withdrawal activation persisted to database');
+            } catch (dbErr) {
+              console.warn('⚠️ Failed to persist activation to DB:', dbErr);
+            }
+
             // Update user with activation info
             updateUser({
               withdrawalActivated: true,
@@ -251,28 +268,36 @@ export default function Finance() {
     }
   };
 
-  const processPendingWithdrawal = (withdrawalAmount: number) => {
-    const success = withdraw(withdrawalAmount);
-    if (!success) {
-      alert("Withdrawal failed. Insufficient balance.");
-      return;
+  const processPendingWithdrawal = async (withdrawalAmount: number) => {
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user?.id || "user1",
+          amount: withdrawalAmount,
+          phoneNumber: user?.phone || "",
+          reason: "User initiated withdrawal"
+        })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || "Withdrawal failed");
+      }
+
+      // Refresh transactions and balance from DB
+      await fetchTransactions(user?.id || "user1");
+      setBalance((prev) => prev - withdrawalAmount);
+      updateUser({ accountBalance: balance - withdrawalAmount });
+
+      setAmount("");
+      setStatusMessage("✅ Withdrawal request submitted");
+      setPaymentStatus("success");
+    } catch (error) {
+      setStatusMessage(`❌ Withdrawal failed: ${error instanceof Error ? error.message : error}`);
+      setPaymentStatus("failed");
     }
-
-    const newTransactionData = {
-      id: `t${Date.now()}`,
-      userId: user?.id || "user1",
-      username: user?.username || "User",
-      type: "withdrawal" as const,
-      amount: withdrawalAmount,
-      status: "pending" as const,
-      method: "M-Pesa",
-      date: new Date().toLocaleString()
-    };
-
-    addTransaction(newTransactionData);
-    setAmount("");
-    setStatusMessage("✅ Withdrawal request submitted");
-    setPaymentStatus("success");
 
     setTimeout(() => {
       setStatusMessage("");

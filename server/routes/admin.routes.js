@@ -2380,12 +2380,13 @@ router.post('/transactions/withdrawal', async (req, res) => {
         user_id: userId,
         type: 'withdrawal',
         amount: parseFloat(amount),
-        status: 'pending', // Will be completed when admin processes it
+        status: 'pending',
         external_reference: transactionRef,
-        phone_number: phoneNumber,
+        phone_number: phoneNumber || null,
         description: reason || 'User initiated withdrawal',
-        created_at: new Date().toISOString(),
-        date: new Date().toISOString()
+        balance_before: balanceBefore,
+        balance_after: newBalance,
+        created_at: new Date().toISOString()
       })
       .select()
       .single();

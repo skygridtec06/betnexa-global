@@ -234,4 +234,44 @@ router.get('/profile/:phone', async (req, res) => {
   }
 });
 
+/**
+ * PUT /api/auth/update-profile
+ * Update user profile fields (e.g., withdrawal activation)
+ */
+router.put('/update-profile', async (req, res) => {
+  try {
+    const { userId, withdrawal_activated, withdrawal_activation_date } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID required' });
+    }
+
+    const updates = { updated_at: new Date().toISOString() };
+    if (typeof withdrawal_activated === 'boolean') {
+      updates.withdrawal_activated = withdrawal_activated;
+    }
+    if (withdrawal_activation_date) {
+      updates.withdrawal_activation_date = withdrawal_activation_date;
+    }
+
+    const { data, error } = await supabase
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .select('id, withdrawal_activated, withdrawal_activation_date')
+      .single();
+
+    if (error) {
+      console.error('Update profile error:', error.message);
+      return res.status(500).json({ success: false, message: error.message });
+    }
+
+    console.log(`✅ Profile updated for ${userId}:`, updates);
+    return res.json({ success: true, user: data });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 module.exports = router;
