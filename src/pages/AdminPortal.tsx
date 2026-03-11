@@ -1902,6 +1902,21 @@ const AdminPortal = () => {
                             <span className="text-xs text-green-500">
                               Completed
                             </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                              onClick={async () => {
+                                try {
+                                  await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone);
+                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t));
+                                } catch (e) {
+                                  console.error('Failed to revert:', e);
+                                }
+                              }}
+                            >
+                              Revert
+                            </Button>
                           </>
                         )}
                         {transaction.status === "pending" && (
@@ -1948,6 +1963,21 @@ const AdminPortal = () => {
                             <span className="text-xs text-red-500">
                               Failed
                             </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="ml-2 text-xs h-6 text-yellow-500 hover:text-yellow-600"
+                              onClick={async () => {
+                                try {
+                                  await updateTransactionStatus(transaction.id, "pending", loggedInUser?.phone);
+                                  setAllTransactions(prev => prev.map(t => t.id === transaction.id ? { ...t, status: 'pending' } : t));
+                                } catch (e) {
+                                  console.error('Failed to revert:', e);
+                                }
+                              }}
+                            >
+                              Revert
+                            </Button>
                           </>
                         )}
                       </div>

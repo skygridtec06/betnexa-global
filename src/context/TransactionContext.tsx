@@ -92,6 +92,8 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const endpoint = status === 'failed'
         ? `${apiUrl}/api/admin/transactions/${transactionId}/mark-rejected`
+        : status === 'pending'
+        ? `${apiUrl}/api/admin/transactions/${transactionId}/mark-pending`
         : `${apiUrl}/api/admin/transactions/${transactionId}/mark-completed`;
 
       const response = await fetch(endpoint, {

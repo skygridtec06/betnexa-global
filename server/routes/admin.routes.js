@@ -3014,6 +3014,88 @@ router.put('/transactions/:transactionId/mark-rejected', checkAdmin, async (req,
   }
 });
 
+// PUT: Revert a completed/failed transaction back to pending (admin)
+router.put('/transactions/:transactionId/mark-pending', checkAdmin, async (req, res) => {
+  try {
+    const { transactionId } = req.params;
+
+    console.log(`\n🔄 [PUT /api/admin/transactions/${transactionId}/mark-pending] Reverting to pending`);
+
+    const { data: transaction, error: fetchError } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('id', transactionId)
+      .single();
+
+    if (fetchError || !transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    if (transaction.status === 'pending') {
+      return res.status(400).json({ success: false, message: 'Transaction is already pending' });
+    }
+
+    const previousStatus = transaction.status;
+
+    // If it was a completed deposit, reverse the balance credit
+    if (previousStatus === 'completed' && transaction.type === 'deposit') {
+      try {
+        const { data: user } = await supabase
+          .from('users')
+          .select('account_balance')
+          .eq('id', transaction.user_id)
+          .single();
+
+        if (user) {
+          const newBalance = Math.max(0, (parseFloat(user.account_balance) || 0) - parseFloat(transaction.amount));
+          await supabase.from('users').update({ account_balance: newBalance }).eq('id', transaction.user_id);
+          console.log(`✅ Reversed deposit balance: -KSH ${transaction.amount}`);
+        }
+      } catch (balErr) {
+        console.warn('⚠️ Could not reverse balance:', balErr.message);
+      }
+    }
+
+    const { error: updateError } = await supabase
+      .from('transactions')
+      .update({
+        status: 'pending',
+        admin_notes: `Reverted from ${previousStatus} by admin`,
+        completed_at: null,
+        completed_by: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', transactionId);
+
+    if (updateError) {
+      return res.status(500).json({ success: false, message: 'Failed to revert transaction', error: updateError.message });
+    }
+
+    // Sync fund_transfers
+    try {
+      await supabase
+        .from('fund_transfers')
+        .update({ status: 'pending', updated_at: new Date().toISOString() })
+        .eq('user_id', transaction.user_id)
+        .eq('amount', transaction.amount)
+        .eq('type', transaction.type)
+        .eq('status', previousStatus);
+    } catch (ftErr) {
+      console.warn('⚠️ fund_transfers sync error:', ftErr.message);
+    }
+
+    res.json({
+      success: true,
+      message: 'Transaction reverted to pending',
+      transaction: { id: transactionId, status: 'pending' }
+    });
+
+  } catch (error) {
+    console.error('❌ Revert transaction error:', error);
+    res.status(500).json({ success: false, message: 'Failed to revert transaction', error: error.message });
+  }
+});
+
 // GET: Fetch all fund transfers (admin)
 router.get('/fund-transfers', checkAdmin, async (req, res) => {
   try {
