@@ -2058,30 +2058,24 @@ router.get('/transactions/user/:userId', async (req, res) => {
       });
     }
 
-    // Merge transactions and fund_transfers for unified history
-    const mergedHistory = [];
-    if (transactions && Array.isArray(transactions)) {
-      mergedHistory.push(...transactions.map(tx => ({
-        ...tx,
-        source: 'transactions'
-      })));
-    }
-    if (fundTransfers && Array.isArray(fundTransfers)) {
-      mergedHistory.push(...fundTransfers.map(ft => ({
-        ...ft,
-        source: 'fund_transfers'
-      })));
-    }
-    // Sort by created_at descending
-    mergedHistory.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    // Return only the transactions table — fund_transfers is an internal
+    // implementation detail for tracking M-Pesa transfer state and should NOT
+    // be merged into the user-visible transaction list (doing so caused
+    // duplicate entries: one from transactions + one from fund_transfers for
+    // the same withdrawal).
+    const transactionList = (transactions || []).map(tx => ({
+      ...tx,
+      source: 'transactions'
+    }));
 
-    console.log(`✅ Retrieved ${mergedHistory.length} total transactions for user ${user?.username}`);
+    console.log(`✅ Retrieved ${transactionList.length} transactions for user ${user?.username}`);
 
     res.json({ 
       success: true, 
       user,
-      transactions: mergedHistory,
-      count: mergedHistory.length
+      transactions: transactionList,
+      fund_transfers: fundTransfers || [],
+      count: transactionList.length
     });
   } catch (error) {
     console.error('❌ Get user transactions error:', error);
