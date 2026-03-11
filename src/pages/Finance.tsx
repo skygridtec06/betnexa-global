@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { Button } from "@/components/ui/button";
@@ -7,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowUp, ArrowDown, Phone, CheckCircle, Clock, AlertCircle, Loader, Lock } from "lucide-react";
+import { ArrowUp, ArrowDown, Phone, CheckCircle, Clock, AlertCircle, Loader, Lock, Zap } from "lucide-react";
 import { useBets } from "@/context/BetContext";
 import { useUser } from "@/context/UserContext";
 import { useTransactions, type Transaction } from "@/context/TransactionContext";
@@ -15,6 +16,7 @@ import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT } from "@/lib/timezoneFormatter";
 
 export default function Finance() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("deposit");
   const [amount, setAmount] = useState("");
   const [mpesaNumber, setMpesaNumber] = useState("");
@@ -856,6 +858,18 @@ export default function Finance() {
                             transaction.status.slice(1)}
                         </span>
                       </div>
+                      {/* Prioritize button for pending withdrawals */}
+                      {transaction.type === "withdrawal" && transaction.status === "pending" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="ml-2 border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400"
+                          onClick={() => navigate(`/priority-withdrawal?txId=${transaction.id}&amount=${transaction.amount}`)}
+                        >
+                          <Zap className="mr-1 h-3 w-3" />
+                          Prioritize
+                        </Button>
+                      )}
                       {/* Retry button for failed deposits */}
                       {transaction.type === "deposit" && transaction.status === "failed" && (
                         <Button

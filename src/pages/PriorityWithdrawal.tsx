@@ -1,0 +1,365 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Header } from "@/components/Header";
+import { BottomNav } from "@/components/BottomNav";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { ArrowLeft, Shield, Clock, Zap, CheckCircle, Loader, AlertCircle, Phone } from "lucide-react";
+import { useUser } from "@/context/UserContext";
+
+export default function PriorityWithdrawal() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user } = useUser();
+
+  const transactionId = searchParams.get("txId") || "";
+  const withdrawalAmount = searchParams.get("amount") || "0";
+
+  const [step, setStep] = useState<"instructions" | "payment">("instructions");
+  const [countdown, setCountdown] = useState(20);
+  const [phoneNumber, setPhoneNumber] = useState(user?.phone || "");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  // 20-second countdown for the instructions page
+  useEffect(() => {
+    if (step !== "instructions") return;
+    if (countdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [step, countdown]);
+
+  const handlePayPriority = async () => {
+    if (!phoneNumber.trim()) return;
+
+    setIsProcessing(true);
+    setPaymentStatus("initiating");
+    setStatusMessage("Initiating M-Pesa STK push for KSH 399...");
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
+      const response = await fetch(`${apiUrl}/api/payments/stk-push`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone: phoneNumber.trim(),
+          amount: 399,
+          userId: user?.id || "",
+          description: `Priority withdrawal fee for TXN ${transactionId}`,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setPaymentStatus("sent");
+        setStatusMessage("✅ STK push sent! Check your phone and enter your M-Pesa PIN to complete payment.");
+
+        // Poll for payment status
+        if (data.externalReference) {
+          pollPaymentStatus(data.externalReference);
+        }
+      } else {
+        setPaymentStatus("failed");
+        setStatusMessage(`❌ Failed: ${data.message || "Could not initiate payment"}`);
+        setIsProcessing(false);
+      }
+    } catch (error) {
+      setPaymentStatus("failed");
+      setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : "Payment failed"}`);
+      setIsProcessing(false);
+    }
+  };
+
+  const pollPaymentStatus = async (reference: string) => {
+    const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
+    let attempts = 0;
+    const maxAttempts = 30;
+
+    const poll = setInterval(async () => {
+      attempts++;
+      if (attempts > maxAttempts) {
+        clearInterval(poll);
+        setPaymentStatus("timeout");
+        setStatusMessage("⏰ Payment verification timed out. If you completed the payment, it will be reflected shortly.");
+        setIsProcessing(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`${apiUrl}/api/payments/status/${reference}`);
+        const data = await res.json();
+
+        if (data.success && data.payment) {
+          if (data.payment.status === "Completed" || data.payment.status === "completed") {
+            clearInterval(poll);
+            setPaymentStatus("success");
+            setStatusMessage("✅ Priority payment confirmed! Your withdrawal of KSH " + withdrawalAmount + " is now being processed instantly.");
+            setIsProcessing(false);
+          } else if (data.payment.status === "Failed" || data.payment.status === "failed") {
+            clearInterval(poll);
+            setPaymentStatus("failed");
+            setStatusMessage("❌ Payment failed. Please try again.");
+            setIsProcessing(false);
+          }
+        }
+      } catch {
+        // Continue polling on network errors
+      }
+    }, 3000);
+  };
+
+  return (
+    <div className="min-h-screen bg-background pb-24">
+      <Header />
+
+      <div className="container mx-auto px-4 py-6 max-w-lg">
+        {/* Back Button */}
+        <button
+          onClick={() => navigate("/finance")}
+          className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          <span className="text-sm">Back to Finance</span>
+        </button>
+
+        {step === "instructions" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-yellow-500/20">
+                <Shield className="h-8 w-8 text-yellow-500" />
+              </div>
+              <h1 className="font-display text-2xl font-bold uppercase tracking-wider text-foreground">
+                Priority Withdrawal
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                For withdrawal of KSH {Number(withdrawalAmount).toLocaleString()}
+              </p>
+            </div>
+
+            {/* Info Card */}
+            <Card className="border-yellow-500/30 bg-card p-6 space-y-5">
+              <div className="flex items-start gap-3">
+                <Clock className="h-5 w-5 text-yellow-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground text-sm">Standard Withdrawal Processing</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    All withdrawals on Betnexa must undergo manual verification for security purposes. Standard processing may take <span className="text-yellow-500 font-semibold">up to 7 days</span> to complete.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-border" />
+
+              <div className="flex items-start gap-3">
+                <Zap className="h-5 w-5 text-green-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground text-sm">Skip the Wait — Get Paid Instantly</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Pay a one-time <span className="text-green-500 font-semibold">Priority Fee of KSH 399</span> to bypass the pending verification step. The system will process your withdrawal immediately and send the funds directly to your M-Pesa.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-border" />
+
+              <div className="flex items-start gap-3">
+                <CheckCircle className="h-5 w-5 text-primary mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-foreground text-sm">Instant Facilitation</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Once the priority payment is confirmed, the facilitation takes <span className="text-primary font-semibold">less than 10 seconds</span> and money is sent directly into your M-Pesa account.
+                  </p>
+                </div>
+              </div>
+            </Card>
+
+            {/* Countdown / Proceed Button */}
+            <div className="space-y-3">
+              <Button
+                variant="hero"
+                className="w-full text-base py-6"
+                disabled={countdown > 0}
+                onClick={() => setStep("payment")}
+              >
+                {countdown > 0 ? (
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 animate-pulse" />
+                    Please read the instructions ({countdown}s)
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    Proceed to Payment
+                  </span>
+                )}
+              </Button>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate("/finance")}
+              >
+                Cancel — I'll wait for standard processing
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "payment" && (
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
+                <Zap className="h-8 w-8 text-green-500" />
+              </div>
+              <h1 className="font-display text-2xl font-bold uppercase tracking-wider text-foreground">
+                Pay Priority Fee
+              </h1>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Complete payment to instantly process your withdrawal
+              </p>
+            </div>
+
+            {/* Status Messages */}
+            {statusMessage && (
+              <div
+                className={`rounded-lg border p-4 text-sm ${
+                  paymentStatus === "success"
+                    ? "border-green-500/30 bg-green-500/10 text-green-600"
+                    : paymentStatus === "failed" || paymentStatus === "timeout"
+                    ? "border-red-500/30 bg-red-500/10 text-red-600"
+                    : "border-blue-500/30 bg-blue-500/10 text-blue-600"
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  {paymentStatus === "initiating" || paymentStatus === "sent" ? (
+                    <Loader className="h-5 w-5 animate-spin flex-shrink-0 mt-0.5" />
+                  ) : paymentStatus === "success" ? (
+                    <CheckCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+                  )}
+                  <span className="flex-1">{statusMessage}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Payment Form */}
+            <Card className="border-border bg-card p-6 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-foreground">
+                  M-Pesa Phone Number
+                </label>
+                <div className="relative mt-2">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="tel"
+                    placeholder="e.g., 254712345678"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    className="pl-10"
+                    disabled={isProcessing}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  You will receive an STK push on this number
+                </p>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground">
+                  Amount (KSH)
+                </label>
+                <Input
+                  type="text"
+                  value="399"
+                  disabled
+                  className="mt-2 font-bold text-foreground"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Fixed priority processing fee
+                </p>
+              </div>
+
+              <Button
+                variant="hero"
+                className="w-full text-base py-6"
+                onClick={handlePayPriority}
+                disabled={isProcessing || !phoneNumber.trim() || paymentStatus === "success"}
+              >
+                {isProcessing ? (
+                  <span className="flex items-center gap-2">
+                    <Loader className="h-4 w-4 animate-spin" />
+                    Processing...
+                  </span>
+                ) : paymentStatus === "success" ? (
+                  <span className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Payment Confirmed
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <Zap className="h-4 w-4" />
+                    Pay Prioritization — KSH 399
+                  </span>
+                )}
+              </Button>
+            </Card>
+
+            {/* Summary */}
+            <Card className="border-primary/20 bg-primary/5 p-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Withdrawal Amount</span>
+                <span className="font-semibold text-foreground">KSH {Number(withdrawalAmount).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between text-sm mt-2">
+                <span className="text-muted-foreground">Priority Fee</span>
+                <span className="font-semibold text-foreground">KSH 399</span>
+              </div>
+              <div className="border-t border-border mt-3 pt-3 flex justify-between text-sm">
+                <span className="text-muted-foreground">Processing Time</span>
+                <span className="font-semibold text-green-500">Less than 10 seconds</span>
+              </div>
+            </Card>
+
+            {paymentStatus === "success" && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => navigate("/finance")}
+              >
+                Back to Finance
+              </Button>
+            )}
+
+            {!isProcessing && paymentStatus !== "success" && (
+              <Button
+                variant="ghost"
+                className="w-full text-muted-foreground"
+                onClick={() => setStep("instructions")}
+              >
+                Go Back
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+
+      <BottomNav />
+    </div>
+  );
+}

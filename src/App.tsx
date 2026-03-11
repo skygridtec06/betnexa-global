@@ -22,6 +22,7 @@ import Profile from "./pages/Profile";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
+import PriorityWithdrawal from "./pages/PriorityWithdrawal";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => {
                             <Route path="/my-bets" element={<ProtectedRoute element={<MyBets />} />} />
                             <Route path="/history" element={<ProtectedRoute element={<History />} />} />
                             <Route path="/profile" element={<ProtectedRoute element={<Profile />} />} />
+                            <Route path="/priority-withdrawal" element={<ProtectedRoute element={<PriorityWithdrawal />} />} />
                             <Route path="/muleiadmin" element={<AdminProtectedRoute element={<AdminPortal />} />} />
                             <Route path="*" element={<NotFound />} />
                           </Routes>
