@@ -164,31 +164,40 @@ const AdminPortal = () => {
     setActivatingUserId(userId);
     
     try {
+      console.log(`🔓 Admin activating withdrawal for user: ${userId} (${userName})`);
+      
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/users/${userId}/activate-withdrawal`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: loggedInUser.phone,
-          withdrawalId: `withdrawal-${userId}-${Date.now()}`
+          phone: loggedInUser.phone
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        // Update local state
+        console.log(`✅ Withdrawal activated successfully for ${userName}`);
+        
+        // Update local state immediately
         updateUser(userId, {
           withdrawalActivated: true,
           withdrawalActivationDate: new Date().toISOString()
         });
-        alert(`✅ Withdrawal activated for ${userName}`);
+        
+        // Show success message
+        alert(`✅ Withdrawal activated for ${userName}\n\nKSH ${data.activationFeeCharged || 1000} activation fee charged.`);
+        
+        // Refresh user list to reflect changes
+        await getAllUsers();
       } else {
+        console.error(`❌ Activation failed:`, data.error);
         alert(`Error: ${data.error || 'Failed to activate withdrawal'}`);
       }
     } catch (error) {
-      console.error('Error activating withdrawal:', error);
-      alert('Failed to activate withdrawal');
+      console.error('❌ Error activating withdrawal:', error);
+      alert(`Failed to activate withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setActivatingUserId(null);
     }

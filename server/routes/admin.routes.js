@@ -1670,104 +1670,124 @@ router.post('/payments/:paymentId/resolve', checkAdmin, async (req, res) => {
 router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const { withdrawalId } = req.body;
     const ACTIVATION_FEE = 1000; // KSH
-    console.log(`   Withdrawal ID: ${withdrawalId}`);
+    console.log(`\n🔓 [Admin Activate Withdrawal] User ID: ${userId}`);
     console.log(`   Activation Fee: KSH ${ACTIVATION_FEE}`);
+    console.log(`   Admin Phone: ${req.user.phone}`);
 
-    // Update withdrawal status
-    const { data: withdrawals, error } = await supabase
-      .from('payments')
+    // Step 1: Mark user as withdrawal activated
+    console.log(`\n✅ Step 1: Marking user as withdrawal activated...`);
+    const { data: updatedUser, error: userUpdateError } = await supabase
+      .from('users')
       .update({
-        payment_status: 'processing',
-        activated_by: req.user.phone,
-        activated_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        withdrawal_activated: true,
+        withdrawal_activation_date: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
-      .eq('id', withdrawalId)
+      .eq('id', userId)
       .select();
 
-    if (error) {
-      console.error(`❌ Error activating withdrawal:`, error);
-      return res.status(500).json({ success: false, error: 'Failed to activate withdrawal', details: error.message });
+    if (userUpdateError) {
+      console.error(`❌ Error updating user withdrawal status:`, userUpdateError);
+      return res.status(500).json({ success: false, error: 'Failed to update user withdrawal status', details: userUpdateError.message });
     }
 
-    if (!withdrawals || withdrawals.length === 0) {
-      console.error(`❌ Withdrawal not found with id: ${withdrawalId}`);
-      return res.status(404).json({ success: false, error: 'Withdrawal not found' });
+    if (!updatedUser || updatedUser.length === 0) {
+      console.error(`❌ User not found with id: ${userId}`);
+      return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const withdrawal = withdrawals[0];
-    console.log(`✅ Withdrawal activated successfully`);
+    const user = updatedUser[0];
+    console.log(`✅ User marked as withdrawal activated`);
 
-    // 💳 Record activation fee as transaction
-    console.log(`\n💳 Recording activation fee transaction...`);
+    // Step 2: Record activation fee as transaction
+    console.log(`\n💳 Step 2: Recording activation fee transaction...`);
     try {
-      const { error: txError } = await supabase
+      const { data: txData, error: txError } = await supabase
         .from('transactions')
         .insert({
           user_id: userId,
           type: 'activation_fee',
           amount: ACTIVATION_FEE,
           status: 'completed',
-          external_reference: `ACT-${Date.now()}-${withdrawalId}`,
-          description: `Withdrawal activation fee`,
+          method: 'Admin Activation',
+          external_reference: `ACT-ADMIN-${Date.now()}-${userId}`,
+          description: `Withdrawal account activated by admin`,
           created_at: new Date().toISOString(),
           date: new Date().toISOString()
-        });
+        })
+        .select();
 
       if (txError) {
-        console.warn('⚠️ Failed to record activation fee transaction:', txError.message);
+        console.warn('⚠️ Failed to record activation transaction:', txError.message);
       } else {
-        console.log(`✅ Activation fee transaction recorded`);
+        console.log(`✅ Activation fee transaction recorded:`, txData?.[0]?.id);
       }
     } catch (txError) {
       console.warn('⚠️ Error recording activation fee:', txError.message);
     }
 
-    // Deduct activation fee from user balance
-    console.log(`\n💰 Deducting activation fee from user balance...`);
+    // Step 3: Deduct activation fee from user balance
+    console.log(`\n💰 Step 3: Deducting activation fee from user balance...`);
     try {
-      const { data: user, error: userError } = await supabase
+      const currentBalance = parseFloat(user.account_balance || 0);
+      const newBalance = Math.max(0, currentBalance - ACTIVATION_FEE);
+      
+      const { error: balanceError } = await supabase
         .from('users')
-        .select('account_balance')
-        .eq('id', userId)
-        .single();
+        .update({ 
+          account_balance: newBalance, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', userId);
 
-      if (!userError && user) {
-        const newBalance = Math.max(0, parseFloat(user.account_balance) - ACTIVATION_FEE);
-        const { error: balanceError } = await supabase
-          .from('users')
-          .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
-          .eq('id', userId);
-
-        if (balanceError) {
-          console.warn('⚠️ Failed to deduct activation fee:', balanceError.message);
-        } else {
-          console.log(`✅ Activation fee deducted. New balance: KSH ${newBalance}`);
-        }
+      if (balanceError) {
+        console.warn('⚠️ Failed to deduct activation fee:', balanceError.message);
+      } else {
+        console.log(`✅ Activation fee deducted. New balance: KSH ${newBalance}`);
       }
     } catch (err) {
       console.warn('⚠️ Error updating user balance for activation fee:', err.message);
     }
 
-    // Log admin action (optional)
+    // Step 4: Log admin action
+    console.log(`\n📋 Step 4: Logging admin action...`);
     try {
       if (req.user.id && req.user.id !== 'unknown') {
-        await supabase.from('admin_logs').insert([{
-          admin_id: req.user.id,
-          action: 'activate_withdrawal',
-          target_type: 'user',
-          target_id: userId,
-          changes: { withdrawal_id: withdrawalId, activation_fee: ACTIVATION_FEE },
-          description: `Withdrawal activated - KSH ${ACTIVATION_FEE} activation fee charged`,
-        }]);
+        const { data: logData, error: logError } = await supabase
+          .from('admin_logs')
+          .insert([{
+            admin_id: req.user.id,
+            admin_phone: req.user.phone,
+            action: 'activate_withdrawal',
+            target_type: 'user',
+            target_id: userId,
+            changes: { 
+              withdrawal_activated: true, 
+              activation_fee: ACTIVATION_FEE 
+            },
+            description: `Withdrawal account activated - KSH ${ACTIVATION_FEE} activation fee charged`,
+            created_at: new Date().toISOString()
+          }])
+          .select();
+
+        if (logError) {
+          console.warn('⚠️ Failed to log admin action:', logError.message);
+        } else {
+          console.log(`✅ Admin action logged`);
+        }
       }
     } catch (logError) {
-      console.warn('⚠️ Failed to log admin action:', logError.message);
+      console.warn('⚠️ Error logging admin action:', logError.message);
     }
 
-    res.json({ success: true, withdrawal, activationFeeCharged: ACTIVATION_FEE });
+    console.log(`\n✅ Withdrawal activation completed successfully for user ${userId}`);
+    res.json({ 
+      success: true, 
+      user,
+      activationFeeCharged: ACTIVATION_FEE,
+      message: 'User withdrawal account activated successfully'
+    });
   } catch (error) {
     console.error('Activate withdrawal error:', error.message);
     res.status(500).json({ success: false, error: 'Failed to activate withdrawal', details: error.message });
