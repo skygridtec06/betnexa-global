@@ -194,17 +194,19 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       
       if (validResults.length > 0) {
         setGames(prev => {
-          // Update games while maintaining stable sort order by ID
+          // Check if any values actually changed before creating new array
+          let hasChanges = false;
           const updated = prev.map(g => {
             const timerUpdate = validResults.find(r => r.gameId === g.id);
-            return timerUpdate
-              ? { ...g, minute: timerUpdate.minute, seconds: timerUpdate.seconds, isHalftime: timerUpdate.isHalftime, gamePaused: timerUpdate.gamePaused }
-              : g;
+            if (timerUpdate && (g.minute !== timerUpdate.minute || g.seconds !== timerUpdate.seconds || g.isHalftime !== timerUpdate.isHalftime || g.gamePaused !== timerUpdate.gamePaused)) {
+              hasChanges = true;
+              return { ...g, minute: timerUpdate.minute, seconds: timerUpdate.seconds, isHalftime: timerUpdate.isHalftime, gamePaused: timerUpdate.gamePaused };
+            }
+            return g;
           });
-          // Ensure games remain sorted by ID for consistency
-          const stableSorted = updated.sort((a, b) => a.id.localeCompare(b.id));
-          gamesRef.current = stableSorted;
-          return stableSorted;
+          if (!hasChanges) return prev; // No changes, skip re-render
+          gamesRef.current = updated;
+          return updated;
         });
       }
     }, 1000); // Poll every second for live games
