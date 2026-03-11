@@ -4,6 +4,7 @@ import heroImage from "@/assets/hero-stadium.svg";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { MatchCard, type Match, generateMarketOdds } from "@/components/MatchCard";
+import { FinishedMatchCard } from "@/components/FinishedMatchCard";
 import { BettingSlip, type BetSlipItem } from "@/components/BettingSlip";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
@@ -39,6 +40,7 @@ const sortGamesByKickoffTime = (games: any[]) => {
 const Index = () => {
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>([]);
   const [selectedOdds, setSelectedOdds] = useState<Record<string, string>>({});
+  const [showAllFinished, setShowAllFinished] = useState(false);
   const { games: apiGames } = useOdds();;
   const { isLoggedIn } = useUser();
 
@@ -204,29 +206,43 @@ const Index = () => {
                 Finished Matches
               </h2>
             </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {games.filter(g => g.status === 'finished').map((game) => {
-                const match: Match = {
-                  id: game.id,
-                  league: game.league,
-                  homeTeam: game.homeTeam,
-                  awayTeam: game.awayTeam,
-                  homeOdds: game.homeOdds,
-                  drawOdds: game.drawOdds,
-                  awayOdds: game.awayOdds,
-                  time: game.time,
-                  markets: game.markets,
-                };
-                return (
-                  <MatchCard
+            <div className="grid gap-4 md:grid-cols-2">
+              {games
+                .filter(g => g.status === 'finished')
+                .slice(0, showAllFinished ? undefined : 2)
+                .map((game) => (
+                  <FinishedMatchCard
                     key={game.id}
-                    match={match}
-                    onSelectOdd={(id, type, odds) => handleSelectOdd(id, type, odds, match)}
-                    selectedOdd={selectedOdds[game.id] || null}
+                    match={{
+                      id: game.id,
+                      league: game.league,
+                      homeTeam: game.homeTeam,
+                      awayTeam: game.awayTeam,
+                      time: game.time,
+                      homeScore: game.homeScore,
+                      awayScore: game.awayScore,
+                    }}
                   />
-                );
-              })}
+                ))}
             </div>
+            {games.filter(g => g.status === 'finished').length > 2 && !showAllFinished && (
+              <Button
+                onClick={() => setShowAllFinished(true)}
+                className="mt-4 w-full"
+                variant="outline"
+              >
+                Show More Matches
+              </Button>
+            )}
+            {showAllFinished && games.filter(g => g.status === 'finished').length > 2 && (
+              <Button
+                onClick={() => setShowAllFinished(false)}
+                className="mt-4 w-full"
+                variant="outline"
+              >
+                Show Less
+              </Button>
+            )}
           </div>
         )}
 
