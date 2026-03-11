@@ -859,7 +859,7 @@ export default function Finance() {
                         </span>
                       </div>
                       {/* Prioritize button for pending withdrawals */}
-                      {transaction.type === "withdrawal" && transaction.status === "pending" && (
+                      {transaction.type.toLowerCase() === "withdrawal" && transaction.status.toLowerCase() === "pending" && (
                         <Button
                           variant="outline"
                           size="sm"

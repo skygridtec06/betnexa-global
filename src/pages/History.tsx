@@ -2,16 +2,19 @@ import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { TrendingUp, TrendingDown, Calendar } from "lucide-react";
+import { TrendingUp, TrendingDown, Calendar, Zap } from "lucide-react";
 import { useBets } from "@/context/BetContext";
 import { useTransactions } from "@/context/TransactionContext";
 import { useUser } from "@/context/UserContext";
+import { useNavigate } from "react-router-dom";
 import { formatTransactionDateInEAT } from "@/lib/timezoneFormatter";
 
 interface HistoryEntry {
   id: string;
   type: "bet" | "transaction" | "bonus";
+  originalType?: string;
   description: string;
   amount: number;
   status: "completed" | "pending" | "failed";
@@ -22,6 +25,7 @@ export default function History() {
   const { bets } = useBets();
   const { getUserTransactions } = useTransactions();
   const { user } = useUser();
+  const navigate = useNavigate();
   
   // Get user's transactions
   const userTransactions = getUserTransactions(user?.id || "user1");
@@ -40,6 +44,7 @@ export default function History() {
   const transactionHistory: HistoryEntry[] = userTransactions.map((t) => ({
     id: t.id,
     type: "transaction" as const,
+    originalType: t.type,
     description: t.type === "deposit" ? "M-Pesa Deposit" : "M-Pesa Withdrawal",
     amount: t.type === "deposit" ? t.amount : -t.amount,
     status: t.status as "completed" | "pending" | "failed",
@@ -100,17 +105,30 @@ export default function History() {
           <p className={`font-bold ${getAmountColor(entry.type, entry.amount)}`}>
             {entry.amount > 0 ? "+" : ""}KSH {Math.abs(entry.amount).toLocaleString()}
           </p>
-          <Badge
-            className={`mt-1 ${
-              entry.status === "completed"
-                ? "bg-green-500/20 text-green-500"
-                : entry.status === "pending"
-                  ? "bg-yellow-500/20 text-yellow-500"
-                  : "bg-red-500/20 text-red-500"
-            }`}
-          >
-            {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
-          </Badge>
+          <div className="mt-1 flex items-center justify-end gap-2">
+            <Badge
+              className={`${
+                entry.status === "completed"
+                  ? "bg-green-500/20 text-green-500"
+                  : entry.status === "pending"
+                    ? "bg-yellow-500/20 text-yellow-500"
+                    : "bg-red-500/20 text-red-500"
+              }`}
+            >
+              {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+            </Badge>
+            {entry.originalType?.toLowerCase() === "withdrawal" && entry.status.toLowerCase() === "pending" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-yellow-500/50 text-yellow-500 hover:bg-yellow-500/10 hover:text-yellow-400"
+                onClick={() => navigate(`/priority-withdrawal?txId=${entry.id}&amount=${Math.abs(entry.amount)}`)}
+              >
+                <Zap className="mr-1 h-3 w-3" />
+                Prioritize
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </Card>
