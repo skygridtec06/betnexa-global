@@ -956,7 +956,8 @@ const AdminPortal = () => {
     setLoadingPayments(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/admin/transactions`, {
+      const phone = loggedInUser?.phone || '';
+      const response = await fetch(`${apiUrl}/api/admin/transactions?phone=${encodeURIComponent(phone)}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -976,7 +977,8 @@ const AdminPortal = () => {
     setLoadingPayments(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/admin/payments`, {
+      const phone = loggedInUser?.phone || '';
+      const response = await fetch(`${apiUrl}/api/admin/payments?phone=${encodeURIComponent(phone)}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
