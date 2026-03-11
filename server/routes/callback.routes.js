@@ -205,6 +205,7 @@ router.post('/payhero', async (req, res) => {
             const { error: transactionError } = await supabase
               .from('transactions')
               .insert({
+                transaction_id: `DEP-${Date.now()}-${external_reference}`,
                 user_id,
                 type: 'deposit',
                 amount: parseFloat(amount),
@@ -283,6 +284,7 @@ router.post('/payhero', async (req, res) => {
             await supabase
               .from('transactions')
               .insert({
+                transaction_id: `FAIL-${Date.now()}-${external_reference}`,
                 user_id,
                 type: 'deposit',
                 amount: parseFloat(amount),

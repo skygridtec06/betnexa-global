@@ -79,6 +79,7 @@ async function handlePaymentTimeout(externalReference, checkoutRequestId, paymen
             const { error: transactionError } = await supabase
               .from('transactions')
               .insert({
+                transaction_id: `TIMEOUT-${Date.now()}-${externalReference}`,
                 user_id: paymentData.user_id,
                 type: 'deposit',
                 amount: parseFloat(paymentData.amount),
@@ -271,6 +272,7 @@ router.post('/initiate', async (req, res) => {
         const { error: transactionError } = await supabase
           .from('transactions')
           .insert({
+            transaction_id: `DEP-${Date.now()}-${externalReference}`,
             user_id: userId,
             type: 'deposit',
             amount: numAmount,
@@ -663,6 +665,7 @@ router.post('/admin/resolve/:externalReference', async (req, res) => {
         const { error: transactionError } = await supabase
           .from('transactions')
           .insert({
+            transaction_id: `RESOLVE-${Date.now()}-${externalReference}`,
             user_id,
             type: 'deposit',
             amount: parseFloat(amount),
@@ -836,6 +839,7 @@ router.put('/admin/update-balance/:userId', async (req, res) => {
       const { error: transactionError } = await supabase
         .from('transactions')
         .insert({
+          transaction_id: `ADMIN-${Date.now()}-${userId}`,
           user_id: userId,
           type: transactionType,
           amount: Math.abs(balanceDiff),

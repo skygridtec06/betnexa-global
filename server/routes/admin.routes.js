@@ -1706,6 +1706,7 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .insert({
+          transaction_id: `ACT-ADMIN-${Date.now()}-${userId}`,
           user_id: userId,
           type: 'admin_adjustment',
           amount: ACTIVATION_FEE,
@@ -1831,6 +1832,7 @@ router.put('/users/:userId/deactivate-withdrawal', checkAdmin, async (req, res) 
       const { data: txData, error: txError } = await supabase
         .from('transactions')
         .insert({
+          transaction_id: `DEACT-ADMIN-${Date.now()}-${userId}`,
           user_id: userId,
           type: 'admin_adjustment',
           amount: 0,
@@ -2375,6 +2377,7 @@ router.post('/transactions/withdrawal', async (req, res) => {
     const { data: transaction, error: txError } = await supabase
       .from('transactions')
       .insert({
+        transaction_id: transactionRef,
         user_id: userId,
         type: 'withdrawal',
         amount: parseFloat(amount),
