@@ -1794,6 +1794,107 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
   }
 });
 
+// PUT: Deactivate/Revert user withdrawal activation (admin)
+router.put('/users/:userId/deactivate-withdrawal', checkAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    console.log(`\n🔒 [Admin Deactivate Withdrawal] User ID: ${userId}`);
+    console.log(`   Admin Phone: ${req.user.phone}`);
+
+    // Step 1: Mark user as withdrawal NOT activated
+    console.log(`\n✅ Step 1: Marking user as withdrawal deactivated...`);
+    const { data: updatedUser, error: userUpdateError } = await supabase
+      .from('users')
+      .update({
+        withdrawal_activated: false,
+        withdrawal_activation_date: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', userId)
+      .select();
+
+    if (userUpdateError) {
+      console.error(`❌ Error updating user withdrawal status:`, userUpdateError);
+      return res.status(500).json({ success: false, error: 'Failed to update user withdrawal status', details: userUpdateError.message });
+    }
+
+    if (!updatedUser || updatedUser.length === 0) {
+      console.error(`❌ User not found with id: ${userId}`);
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const user = updatedUser[0];
+    console.log(`✅ User marked as withdrawal deactivated`);
+
+    // Step 2: Record deactivation in transaction history
+    console.log(`\n📋 Step 2: Recording deactivation transaction...`);
+    try {
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .insert({
+          user_id: userId,
+          type: 'deactivation',
+          amount: 0,
+          status: 'completed',
+          method: 'Admin Deactivation',
+          external_reference: `DEACT-ADMIN-${Date.now()}-${userId}`,
+          description: `Withdrawal account deactivated by admin`,
+          created_at: new Date().toISOString(),
+          date: new Date().toISOString()
+        })
+        .select();
+
+      if (txError) {
+        console.warn('⚠️ Failed to record deactivation transaction:', txError.message);
+      } else {
+        console.log(`✅ Deactivation transaction recorded:`, txData?.[0]?.id);
+      }
+    } catch (txError) {
+      console.warn('⚠️ Error recording deactivation transaction:', txError.message);
+    }
+
+    // Step 3: Log admin action
+    console.log(`\n📋 Step 3: Logging admin action...`);
+    try {
+      if (req.user.id && req.user.id !== 'unknown') {
+        const { data: logData, error: logError } = await supabase
+          .from('admin_logs')
+          .insert([{
+            admin_id: req.user.id,
+            admin_phone: req.user.phone,
+            action: 'deactivate_withdrawal',
+            target_type: 'user',
+            target_id: userId,
+            changes: { 
+              withdrawal_activated: false
+            },
+            description: `Withdrawal account deactivated`,
+            created_at: new Date().toISOString()
+          }])
+          .select();
+
+        if (logError) {
+          console.warn('⚠️ Failed to log admin action:', logError.message);
+        } else {
+          console.log(`✅ Admin action logged`);
+        }
+      }
+    } catch (logError) {
+      console.warn('⚠️ Error logging admin action:', logError.message);
+    }
+
+    console.log(`\n✅ Withdrawal deactivation completed successfully for user ${userId}`);
+    res.json({ 
+      success: true, 
+      user,
+      message: 'User withdrawal account deactivated successfully'
+    });
+  } catch (error) {
+    console.error('Deactivate withdrawal error:', error.message);
+    res.status(500).json({ success: false, error: 'Failed to deactivate withdrawal', details: error.message });
+  }
+});
+
 // GET: Fetch all users (admin)
 router.get('/users', checkAdmin, async (req, res) => {
   try {

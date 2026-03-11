@@ -203,6 +203,49 @@ const AdminPortal = () => {
     }
   };
 
+  const handleAdminDeactivateWithdrawal = async (userId: string, userName: string) => {
+    setActivatingUserId(userId);
+    
+    try {
+      console.log(`🔒 Admin deactivating withdrawal for user: ${userId} (${userName})`);
+      
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/users/${userId}/deactivate-withdrawal`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        console.log(`✅ Withdrawal deactivated successfully for ${userName}`);
+        
+        // Update local state immediately
+        updateUser(userId, {
+          withdrawalActivated: false,
+          withdrawalActivationDate: null
+        });
+        
+        // Show success message
+        alert(`✅ Withdrawal deactivated for ${userName}`);
+        
+        // Refresh user list to reflect changes
+        await getAllUsers();
+      } else {
+        console.error(`❌ Deactivation failed:`, data.error);
+        alert(`Error: ${data.error || 'Failed to deactivate withdrawal'}`);
+      }
+    } catch (error) {
+      console.error('❌ Error deactivating withdrawal:', error);
+      alert(`Failed to deactivate withdrawal: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setActivatingUserId(null);
+    }
+  };
+
   const handleDeleteUser = async (userId: string, userName: string) => {
     try {
       console.log('🗑️ Deleting user:', userId, userName);
@@ -1749,7 +1792,7 @@ const AdminPortal = () => {
                             >
                               <Edit2 className="mr-1 h-3 w-3" /> Edit User
                             </Button>
-                            {!user.withdrawalActivated && (
+                            {!user.withdrawalActivated ? (
                               <Button
                                 size="sm"
                                 variant="hero"
@@ -1763,6 +1806,27 @@ const AdminPortal = () => {
                                 ) : (
                                   <>
                                     <Unlock className="mr-1 h-3 w-3" /> Activate Withdrawal
+                                  </>
+                                )}
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={activatingUserId === user.id}
+                                onClick={() => {
+                                  if (window.confirm(`Are you sure you want to deactivate withdrawal for ${user.name}?`)) {
+                                    handleAdminDeactivateWithdrawal(user.id, user.name);
+                                  }
+                                }}
+                              >
+                                {activatingUserId === user.id ? (
+                                  <>
+                                    <Clock className="mr-1 h-3 w-3 animate-spin" /> Deactivating...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Lock className="mr-1 h-3 w-3" /> Deactivate Withdrawal
                                   </>
                                 )}
                               </Button>
