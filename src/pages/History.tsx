@@ -117,7 +117,7 @@ export default function History() {
             >
               {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
             </Badge>
-            {entry.originalType?.toLowerCase() === "withdrawal" && entry.status.toLowerCase() === "pending" && (
+            {entry.originalType === "withdrawal" && entry.status === "pending" && (
               <Button
                 variant="outline"
                 size="sm"
