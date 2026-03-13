@@ -365,16 +365,17 @@ const AdminPortal = () => {
     }
   };
 
-  // Parse OCR text into game objects — collects all odds individually, groups into triplets
+  // Parse OCR text — sequential collection + zip (handles column-layout OCR reading)
   const parseGamesFromText = useCallback((text: string) => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     const results: typeof parsedImportGames = [];
 
-    const dateRx = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?,?\s*(\d{1,2}:\d{2})/;
+    // Date regex: supports / - . separators (OCR may produce "13.03" instead of "13/03")
+    const dateRx = /(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.]?\d{2,4})?,?\s*(\d{1,2}:\d{2})/;
     const leagueKw = ['liga','league','serie','bundesliga','ligue','championship','cup','premier','champions','eredivisie','primeira','superliga'];
     const countriesKw = ['spain','italy','germany','france','england','portugal','netherlands','belgium','scotland','turkey','brazil','argentina','mexico','sweden','norway','denmark','austria','switzerland','kenya','usa','nigeria','south africa'];
 
-    const isNoise = (l: string) => /markets?/i.test(l) || /^teams?\s/i.test(l) || /^[12X\s]+$/i.test(l) || /^\W+$/.test(l) || l.length < 2;
+    const isNoise = (l: string) => /markets?/i.test(l) || /^teams?\b/i.test(l) || /^[12X\s]+$/i.test(l) || /^\W+$/.test(l) || l.length < 2;
     const isLeagueLn = (l: string) => {
       const low = l.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
       return leagueKw.some(k => low.includes(k)) || countriesKw.some(c => low.includes(c));
@@ -389,145 +390,112 @@ const AdminPortal = () => {
     console.log('[OCR Parser] Total lines:', lines.length);
     lines.forEach((l, i) => console.log(`  [${i}] "${l}"`));
 
-    // ─── STEP 1: Collect ALL individual decimal numbers that look like odds ───
-    const allOdds: { val: number; lineIdx: number; charIdx: number }[] = [];
-    for (let i = 0; i < lines.length; i++) {
-      // Skip lines that are purely noise, date headers, or league headers (avoid date "13.03" being treated as odds)
-      if (isNoise(lines[i])) continue;
-      const lineHasDate = dateRx.test(lines[i]);
-      const lineIsLeague = isLeagueLn(lines[i]);
+    // ─── Collect ALL items into separate ordered lists ───
+    const allOddsValues: number[] = [];
+    const allTeams: string[] = [];
+    const allLeagues: string[] = [];
+    const allKickoffs: string[] = [];
 
-      // Match decimals: "3.20", "3,20"
-      const rx = /(\d+[.,]\d{1,2})/g;
-      let m;
-      const lineOdds: { val: number; charIdx: number }[] = [];
-      while ((m = rx.exec(lines[i])) !== null) {
-        const raw = m[1].replace(',', '.');
-        const v = parseFloat(raw);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (isNoise(line)) continue;
+
+      const isLeague = isLeagueLn(line);
+      const dateMatch = line.match(dateRx);
+
+      // Extract date/time if present
+      if (dateMatch) {
+        allKickoffs.push(buildKickoff(parseInt(dateMatch[1]), parseInt(dateMatch[2]), dateMatch[3]));
+      }
+
+      // League line → extract name, SKIP for team/odds processing
+      if (isLeague) {
+        const leagueName = line
+          .replace(dateRx, '')
+          .replace(/[^a-zA-Z0-9\s.•·\-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (leagueName.length >= 2) allLeagues.push(leagueName);
+        continue;
+      }
+
+      // Date-only line (no meaningful text besides the date) → skip
+      if (dateMatch) {
+        const rest = line.replace(dateRx, '').replace(/[^a-zA-Z]/g, '').trim();
+        if (rest.length < 2) continue;
+      }
+
+      // --- Extract decimal odds from this line ---
+      const decRx = /\d+[.,]\d{1,2}/g;
+      let dm;
+      let foundDecimalOdds = false;
+      while ((dm = decRx.exec(line)) !== null) {
+        const v = parseFloat(dm[0].replace(',', '.'));
         if (validOdds(v)) {
-          lineOdds.push({ val: v, charIdx: m.index });
+          allOddsValues.push(v);
+          foundDecimalOdds = true;
         }
       }
-      // On date/league lines, only keep odds if there are 3+ on the line (unlikely to be date fragments)
-      if ((lineHasDate || lineIsLeague) && lineOdds.length < 3) continue;
-      for (const o of lineOdds) {
-        allOdds.push({ val: o.val, lineIdx: i, charIdx: o.charIdx });
-      }
-    }
-    console.log(`[OCR Parser] Found ${allOdds.length} individual odds values:`, allOdds.map(o => `${o.val}@L${o.lineIdx}`));
 
-    // If fewer than 12 odds found (need 12 for 4 games), try recovering garbled 3-digit numbers
-    // e.g. "234" → 2.34, "320" → 3.20, "500" → 5.00
-    if (allOdds.length < 12) {
-      console.log('[OCR Parser] Not enough decimal odds, scanning for garbled 3-digit numbers...');
-      for (let i = 0; i < lines.length; i++) {
-        if (isNoise(lines[i])) continue;
-        if (dateRx.test(lines[i]) || isLeagueLn(lines[i])) continue;
+      // If no decimal odds, check for garbled 3-digit numbers (e.g. "234" → 2.34)
+      if (!foundDecimalOdds) {
         const rx3 = /\b(\d{3})\b/g;
         let m3;
-        while ((m3 = rx3.exec(lines[i])) !== null) {
-          const digits = m3[1];
-          const candidate = parseFloat(digits[0] + '.' + digits.slice(1));
+        while ((m3 = rx3.exec(line)) !== null) {
+          const candidate = parseFloat(m3[1][0] + '.' + m3[1].slice(1));
           if (validOdds(candidate)) {
-            // Only add if no decimal odds already found at this exact position
-            if (!allOdds.some(o => o.lineIdx === i && Math.abs(o.charIdx - m3!.index) < 3)) {
-              allOdds.push({ val: candidate, lineIdx: i, charIdx: m3.index });
-            }
+            allOddsValues.push(candidate);
           }
         }
       }
-      // Re-sort by line then position
-      allOdds.sort((a, b) => a.lineIdx - b.lineIdx || a.charIdx - b.charIdx);
-      console.log(`[OCR Parser] After 3-digit recovery: ${allOdds.length} odds values`);
-    }
 
-    // ─── STEP 2: Group odds into triplets (every 3 consecutive = one game) ───
-    // Each game in the image has exactly 3 odds (1X2)
-    const triplets: { h: number; d: number; a: number; lastLineIdx: number }[] = [];
-    for (let i = 0; i + 2 < allOdds.length; i += 3) {
-      triplets.push({
-        h: allOdds[i].val,
-        d: allOdds[i + 1].val,
-        a: allOdds[i + 2].val,
-        lastLineIdx: Math.max(allOdds[i].lineIdx, allOdds[i + 1].lineIdx, allOdds[i + 2].lineIdx),
-      });
-    }
-    console.log(`[OCR Parser] Formed ${triplets.length} triplets:`, triplets.map(t => `${t.h}/${t.d}/${t.a} @L${t.lastLineIdx}`));
+      // --- Extract team name: strip ALL numbers/symbols, keep only letters ---
+      const teamText = line
+        .replace(/\d+[.,]\d{1,2}/g, '')   // remove decimal numbers
+        .replace(/\b\d{1,4}\b/g, '')       // remove bare numbers
+        .replace(/[^a-zA-Z\s.'\-()]/g, '') // keep only text chars
+        .replace(/\s+/g, ' ')
+        .trim();
 
-    if (triplets.length === 0) return results;
-
-    // ─── STEP 3: For each triplet, define its zone and extract game data ───
-    for (let t = 0; t < triplets.length; t++) {
-      const trip = triplets[t];
-      const prevEnd = t > 0 ? triplets[t - 1].lastLineIdx : -1;
-
-      // Zone = lines from (previous triplet's last line + 1) to (this triplet's last line), inclusive
-      const zoneStart = prevEnd + 1;
-      const zoneEnd = trip.lastLineIdx + 1; // +1 for slice exclusive end
-      const zoneLines = lines.slice(zoneStart, zoneEnd);
-      console.log(`[OCR Parser] Game ${t + 1} zone: lines ${zoneStart}-${trip.lastLineIdx}`, zoneLines);
-
-      let league = '', kickoff = '';
-      const teamCandidates: string[] = [];
-
-      for (const line of zoneLines) {
-        if (isNoise(line)) continue;
-
-        // Date/time
-        const dtm = line.match(dateRx);
-        if (dtm && !kickoff) {
-          kickoff = buildKickoff(parseInt(dtm[1]), parseInt(dtm[2]), dtm[3]);
-        }
-
-        // League
-        if (isLeagueLn(line) && !league) {
-          league = line.replace(dateRx, '').replace(/[^a-zA-Z0-9\s.'\-]/g, ' ').replace(/\s+/g, ' ').trim();
-          if (league.length < 2) league = '';
-          continue; // Don't count league line as team name
-        }
-
-        // Skip date-only lines
-        if (dtm) {
-          const rest = line.replace(dateRx, '').replace(/[^a-zA-Z]/g, '').trim();
-          if (rest.length < 2) continue;
-        }
-
-        // Strip ALL numbers/decimals from the line to get pure text (team name)
-        const stripped = line
-          .replace(/\d+[.,]\d{1,2}/g, '')   // remove decimals like 3.20
-          .replace(/\b\d{2,4}\b/g, '')       // remove bare numbers like 234, 13, 2026
-          .replace(/[^a-zA-Z\s.'\-()]/g, '') // remove symbols
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        if (stripped.length >= 2) {
-          teamCandidates.push(stripped);
-        }
+      if (teamText.length >= 2) {
+        allTeams.push(teamText);
       }
+    }
 
-      console.log(`[OCR Parser] Game ${t + 1} teams:`, teamCandidates, '| league:', league, '| kickoff:', kickoff);
+    console.log('[OCR Parser] Teams:', allTeams);
+    console.log('[OCR Parser] Odds:', allOddsValues);
+    console.log('[OCR Parser] Leagues:', allLeagues);
+    console.log('[OCR Parser] Kickoffs:', allKickoffs);
 
-      let homeTeam = '', awayTeam = '';
-      if (teamCandidates.length >= 2) {
-        homeTeam = teamCandidates[0];
-        awayTeam = teamCandidates[1];
-      } else if (teamCandidates.length === 1) {
-        const sp = teamCandidates[0].split(/\s+vs\.?\s+|\s+-\s+/i);
-        if (sp.length >= 2) { homeTeam = sp[0].trim(); awayTeam = sp[1].trim(); }
-        else { homeTeam = teamCandidates[0]; awayTeam = 'Team 2'; }
-      } else continue;
+    // ─── Group odds into triplets (every 3 consecutive = one game's 1X2) ───
+    const triplets: { h: number; d: number; a: number }[] = [];
+    for (let i = 0; i + 2 < allOddsValues.length; i += 3) {
+      triplets.push({ h: allOddsValues[i], d: allOddsValues[i + 1], a: allOddsValues[i + 2] });
+    }
+    console.log('[OCR Parser] Triplets:', triplets.map(t => `${t.h}/${t.d}/${t.a}`));
+
+    // ─── Zip: pair teams (every 2 = home+away) with odds triplets, leagues, kickoffs ───
+    const numGames = Math.min(Math.floor(allTeams.length / 2), triplets.length);
+    for (let i = 0; i < numGames; i++) {
+      const homeTeam = allTeams[i * 2];
+      const awayTeam = allTeams[i * 2 + 1];
+      const trip = triplets[i];
+      const league = allLeagues[i] || 'General';
+      const kickoff = allKickoffs[i] || '';
 
       if (homeTeam.length < 2 || awayTeam.length < 2) continue;
-      if (results.some(g => g.homeTeam === homeTeam && g.awayTeam === awayTeam)) continue;
 
-      console.log(`[OCR Parser] ✅ Game ${t + 1}: ${homeTeam} vs ${awayTeam} | ${league} | ${kickoff} | ${trip.h}/${trip.d}/${trip.a}`);
+      console.log(`[OCR Parser] ✅ Game ${i + 1}: ${homeTeam} vs ${awayTeam} | ${league} | ${kickoff} | ${trip.h}/${trip.d}/${trip.a}`);
 
       results.push({
-        id: `imp_${Date.now()}_${t}`,
-        league: league || 'General',
-        homeTeam, awayTeam,
-        homeOdds: trip.h.toFixed(2), drawOdds: trip.d.toFixed(2), awayOdds: trip.a.toFixed(2),
-        kickoffDateTime: kickoff || '',
+        id: `imp_${Date.now()}_${i}`,
+        league,
+        homeTeam,
+        awayTeam,
+        homeOdds: trip.h.toFixed(2),
+        drawOdds: trip.d.toFixed(2),
+        awayOdds: trip.a.toFixed(2),
+        kickoffDateTime: kickoff,
       });
     }
 
