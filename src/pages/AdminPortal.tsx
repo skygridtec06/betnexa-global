@@ -538,6 +538,25 @@ const AdminPortal = () => {
     });
   };
 
+  // Global paste listener — works anywhere on the page when image import is open
+  useEffect(() => {
+    if (!showImageImport || importingImage) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          e.preventDefault();
+          const file = items[i].getAsFile();
+          if (file) handleImageImport(file);
+          return;
+        }
+      }
+    };
+    document.addEventListener('paste', onPaste);
+    return () => document.removeEventListener('paste', onPaste);
+  }, [showImageImport, importingImage]);
+
   const handleImageImport = async (file: File) => {
     setImportingImage(true);
     setImportResult(null);
@@ -1457,19 +1476,7 @@ const AdminPortal = () => {
                 {parsedImportGames.length === 0 && (
                   <div
                     className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/50 p-8 transition hover:border-primary/70 hover:bg-background/80"
-                    tabIndex={0}
                     onClick={() => !importingImage && imageInputRef.current?.click()}
-                    onPaste={(e) => {
-                      if (importingImage) return;
-                      const items = e.clipboardData?.items;
-                      if (!items) return;
-                      for (let i = 0; i < items.length; i++) {
-                        if (items[i].type.startsWith('image/')) {
-                          const file = items[i].getAsFile();
-                          if (file) { handleImageImport(file); break; }
-                        }
-                      }
-                    }}
                   >
                     {importingImage ? (
                       <>
