@@ -6,10 +6,10 @@
 const https = require('https');
 
 const PAYHERO_CONFIG = {
-  API_KEY: process.env.PAYHERO_API_KEY || '9zQWl1mY1lHDC2O3syNl',
-  API_SECRET: process.env.PAYHERO_API_SECRET || 'g8EV3BUNoeT3fqgBJjQNrTM412YsxEBLjEYbWcbb',
-  CHANNEL_ID: process.env.PAYHERO_CHANNEL_ID || 6026,
-  ACCOUNT_ID: process.env.PAYHERO_ACCOUNT_ID || 3953,
+  API_KEY: process.env.PAYHERO_API_KEY || '6CUxNcfi9jRpr4eWicAn',
+  API_SECRET: process.env.PAYHERO_API_SECRET || 'j6zP2XpAlXn9UhtHOj9PbYQVAdlQnkeyrEWuFOAH',
+  CHANNEL_ID: process.env.PAYHERO_CHANNEL_ID || 3398,
+  ACCOUNT_ID: process.env.PAYHERO_ACCOUNT_ID || 3398,
   ENDPOINT: 'https://backend.payhero.co.ke/api/v2/payments'
 };
 
