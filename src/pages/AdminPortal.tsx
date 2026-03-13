@@ -722,7 +722,9 @@ const AdminPortal = () => {
 
   const startEditMarkets = (game: GameOdds) => {
     setEditingGame(game.id);
-    setEditMarkets({ ...game.markets });
+    // Use generateMarketOdds to fill in any missing/zero markets with proper values
+    const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+    setEditMarkets({ ...fullMarkets });
   };
 
   const saveMarkets = async (id: string) => {
@@ -2040,7 +2042,7 @@ const AdminPortal = () => {
                               type="number"
                               step="0.01"
                               className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary"
-                              value={editMarkets[key] || 0}
+                              value={editMarkets[key] || 1.50}
                               onChange={(e) => setEditMarkets({ ...editMarkets, [key]: parseFloat(e.target.value) || 0 })}
                             />
                           </div>
@@ -2058,11 +2060,14 @@ const AdminPortal = () => {
                   {/* Show current markets summary when not editing */}
                   {editingGame !== game.id && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => (
-                        <span key={key} className="rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                          {marketLabels[key as keyof typeof marketLabels]}: <span className="font-mono font-bold text-foreground">{(game.markets[key] || 0).toFixed(2)}</span>
-                        </span>
-                      ))}
+                      {["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => {
+                        const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+                        return (
+                          <span key={key} className="rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
+                            {marketLabels[key as keyof typeof marketLabels]}: <span className="font-mono font-bold text-foreground">{(fullMarkets[key] || 1.50).toFixed(2)}</span>
+                          </span>
+                        );
+                      })}
                       <span className="text-[10px] text-primary">+{Object.keys(marketLabels).length - 5} more</span>
                     </div>
                   )}
