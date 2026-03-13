@@ -4052,45 +4052,32 @@ router.get('/fund-transfers/type/:type', checkAdmin, async (req, res) => {
   }
 });
 
-// 🔄 POST: Regenerate all markets with 0 odds for all existing games
+// 🔄 POST: Regenerate ALL markets for ALL existing games (fresh odds, no zeros)
 router.post('/games/fix-zero-odds', checkAdmin, async (req, res) => {
   try {
     // Get all games
     const { data: games, error: gErr } = await supabase.from('games').select('id, home_odds, draw_odds, away_odds');
     if (gErr) throw gErr;
 
-    let totalFixed = 0;
+    let totalRegenerated = 0;
     for (const game of (games || [])) {
       const h = parseFloat(game.home_odds) || 2.00;
       const d = parseFloat(game.draw_odds) || 3.00;
       const a = parseFloat(game.away_odds) || 3.00;
 
-      // Delete all existing markets with 0 odds for this game
-      const { data: zeroMarkets } = await supabase
-        .from('markets')
-        .select('id')
-        .eq('game_id', game.id)
-        .lte('odds', 0);
-
-      if (zeroMarkets && zeroMarkets.length > 0) {
-        await supabase.from('markets').delete().eq('game_id', game.id);
-        const newMarkets = generateDefaultMarkets(game.id, h, d, a);
-        await supabase.from('markets').insert(newMarkets);
-        totalFixed += zeroMarkets.length;
-        console.log(`Fixed ${zeroMarkets.length} zero-odds markets for game ${game.id}`);
+      // Delete ALL existing markets for this game and regenerate fresh
+      await supabase.from('markets').delete().eq('game_id', game.id);
+      const newMarkets = generateDefaultMarkets(game.id, h, d, a);
+      const { error: insErr } = await supabase.from('markets').insert(newMarkets);
+      if (insErr) {
+        console.error(`Failed to insert markets for game ${game.id}:`, insErr.message);
       } else {
-        // Even if no zero odds, check if markets exist at all
-        const { data: existing } = await supabase.from('markets').select('id').eq('game_id', game.id).limit(1);
-        if (!existing || existing.length === 0) {
-          const newMarkets = generateDefaultMarkets(game.id, h, d, a);
-          await supabase.from('markets').insert(newMarkets);
-          totalFixed += newMarkets.length;
-          console.log(`Created ${newMarkets.length} markets for game ${game.id} (had none)`);
-        }
+        totalRegenerated++;
+        console.log(`Regenerated ${newMarkets.length} markets for game ${game.id} (odds: ${h}/${d}/${a})`);
       }
     }
 
-    res.json({ success: true, message: `Fixed ${totalFixed} zero-odds markets across ${games?.length || 0} games` });
+    res.json({ success: true, message: `Regenerated markets for ${totalRegenerated} of ${games?.length || 0} games` });
   } catch (err) {
     console.error('Fix zero odds error:', err);
     res.status(500).json({ success: false, error: err.message });
