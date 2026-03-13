@@ -47,35 +47,41 @@ interface MatchCardProps {
 }
 
 export function generateMarketOdds(homeOdds: number, drawOdds: number, awayOdds: number, existingMarkets?: Record<string, number>): MatchMarkets {
-  const h = homeOdds;
-  const d = drawOdds;
-  const a = awayOdds;
+  // Ensure minimum odds of 1.10 to avoid 0 or NaN in any market
+  const h = Math.max(1.10, homeOdds || 2.00);
+  const d = Math.max(1.10, drawOdds || 3.00);
+  const a = Math.max(1.10, awayOdds || 3.00);
+
+  // Helper: clamp any odds value to minimum 1.01
+  const safe = (v: number) => {
+    const n = +v;
+    return +(isNaN(n) || n < 1.01 ? 1.50 : n).toFixed(2);
+  };
   
   // Use deterministic fallbacks based on odds instead of Math.random()
-  // This prevents DOM thrashing from changing values on every re-render
   const seed = h + d + a;
   const markets: MatchMarkets = {
-    bttsYes: existingMarkets?.['bttsYes'] ?? existingMarkets?.['btts:yes'] ?? +((1.6 + (seed % 0.5)).toFixed(2)),
-    bttsNo: existingMarkets?.['bttsNo'] ?? existingMarkets?.['btts:no'] ?? +((2.0 + ((seed * 1.3) % 0.5)).toFixed(2)),
-    over25: existingMarkets?.['over25'] ?? existingMarkets?.['over_under:over_2.5'] ?? +((1.7 + ((seed * 0.7) % 0.6)).toFixed(2)),
-    under25: existingMarkets?.['under25'] ?? existingMarkets?.['over_under:under_2.5'] ?? +((1.9 + ((seed * 1.1) % 0.5)).toFixed(2)),
-    over15: existingMarkets?.['over15'] ?? existingMarkets?.['over_under:over_1.5'] ?? +((1.2 + ((seed * 0.9) % 0.3)).toFixed(2)),
-    under15: existingMarkets?.['under15'] ?? existingMarkets?.['over_under:under_1.5'] ?? +((3.5 + ((seed * 0.4) % 1.0)).toFixed(2)),
-    doubleChanceHomeOrDraw: existingMarkets?.['doubleChanceHomeOrDraw'] ?? existingMarkets?.['double_chance:1X'] ?? +(1 / (1/h + 1/d) * 0.9).toFixed(2),
-    doubleChanceAwayOrDraw: existingMarkets?.['doubleChanceAwayOrDraw'] ?? existingMarkets?.['double_chance:X2'] ?? +(1 / (1/a + 1/d) * 0.9).toFixed(2),
-    doubleChanceHomeOrAway: existingMarkets?.['doubleChanceHomeOrAway'] ?? existingMarkets?.['double_chance:12'] ?? +(1 / (1/h + 1/a) * 0.9).toFixed(2),
-    htftHomeHome: existingMarkets?.['htftHomeHome'] ?? existingMarkets?.['half_time_result:1'] ?? +(h * 1.8).toFixed(2),
-    htftDrawDraw: existingMarkets?.['htftDrawDraw'] ?? existingMarkets?.['half_time_result:X'] ?? +(d * 2.0).toFixed(2),
-    htftAwayAway: existingMarkets?.['htftAwayAway'] ?? existingMarkets?.['half_time_result:2'] ?? +(a * 1.8).toFixed(2),
-    htftDrawHome: existingMarkets?.['htftDrawHome'] ?? +(d * h * 0.7).toFixed(2),
-    htftDrawAway: existingMarkets?.['htftDrawAway'] ?? +(d * a * 0.7).toFixed(2),
+    bttsYes: safe(existingMarkets?.['bttsYes'] ?? existingMarkets?.['btts:yes'] ?? (1.6 + (seed % 0.5))),
+    bttsNo: safe(existingMarkets?.['bttsNo'] ?? existingMarkets?.['btts:no'] ?? (2.0 + ((seed * 1.3) % 0.5))),
+    over25: safe(existingMarkets?.['over25'] ?? existingMarkets?.['over_under:over_2.5'] ?? (1.7 + ((seed * 0.7) % 0.6))),
+    under25: safe(existingMarkets?.['under25'] ?? existingMarkets?.['over_under:under_2.5'] ?? (1.9 + ((seed * 1.1) % 0.5))),
+    over15: safe(existingMarkets?.['over15'] ?? existingMarkets?.['over_under:over_1.5'] ?? (1.2 + ((seed * 0.9) % 0.3))),
+    under15: safe(existingMarkets?.['under15'] ?? existingMarkets?.['over_under:under_1.5'] ?? (3.5 + ((seed * 0.4) % 1.0))),
+    doubleChanceHomeOrDraw: safe(existingMarkets?.['doubleChanceHomeOrDraw'] ?? existingMarkets?.['double_chance:1X'] ?? (1 / (1/h + 1/d) * 0.9)),
+    doubleChanceAwayOrDraw: safe(existingMarkets?.['doubleChanceAwayOrDraw'] ?? existingMarkets?.['double_chance:X2'] ?? (1 / (1/a + 1/d) * 0.9)),
+    doubleChanceHomeOrAway: safe(existingMarkets?.['doubleChanceHomeOrAway'] ?? existingMarkets?.['double_chance:12'] ?? (1 / (1/h + 1/a) * 0.9)),
+    htftHomeHome: safe(existingMarkets?.['htftHomeHome'] ?? existingMarkets?.['half_time_result:1'] ?? (h * 1.8)),
+    htftDrawDraw: safe(existingMarkets?.['htftDrawDraw'] ?? existingMarkets?.['half_time_result:X'] ?? (d * 2.0)),
+    htftAwayAway: safe(existingMarkets?.['htftAwayAway'] ?? existingMarkets?.['half_time_result:2'] ?? (a * 1.8)),
+    htftDrawHome: safe(existingMarkets?.['htftDrawHome'] ?? (d * h * 0.7)),
+    htftDrawAway: safe(existingMarkets?.['htftDrawAway'] ?? (d * a * 0.7)),
   };
 
   // Generate correct scores from 0:0 to 4:4 with deterministic fallbacks
   for (let hScore = 0; hScore <= 4; hScore++) {
     for (let aScore = 0; aScore <= 4; aScore++) {
       const key = `cs${hScore}${aScore}`;
-      markets[key] = existingMarkets?.[key] ?? existingMarkets?.[`correct_score:${hScore}:${aScore}`] ?? +((3.0 + ((seed * (hScore + 1) * (aScore + 2)) % 20)).toFixed(2));
+      markets[key] = safe(existingMarkets?.[key] ?? existingMarkets?.[`correct_score:${hScore}:${aScore}`] ?? (3.0 + ((seed * (hScore + 1) * (aScore + 2)) % 20)));
     }
   }
 

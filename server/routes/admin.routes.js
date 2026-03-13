@@ -311,33 +311,40 @@ async function settleBetsForGame(gameId, game) {
 
 // Helper function to generate default markets for a new game
 function generateDefaultMarkets(gameUUID, homeOdds, drawOdds, awayOdds) {
-  const h = homeOdds;
-  const d = drawOdds;
-  const a = awayOdds;
+  // Ensure minimum odds of 1.10 to avoid 0 or NaN in any market
+  const h = Math.max(1.10, parseFloat(homeOdds) || 2.00);
+  const d = Math.max(1.10, parseFloat(drawOdds) || 3.00);
+  const a = Math.max(1.10, parseFloat(awayOdds) || 3.00);
+
+  // Helper: clamp odds to minimum 1.01
+  const safeOdds = (v) => {
+    const n = parseFloat(v);
+    return +(isNaN(n) || n < 1.01 ? (1.50 + Math.random() * 1.5) : n).toFixed(2);
+  };
 
   const markets = [];
 
   // BTTS markets
-  markets.push({ game_id: gameUUID, market_type: 'BTTS', market_key: 'bttsYes', odds: +(1.6 + Math.random() * 0.5).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'BTTS', market_key: 'bttsNo', odds: +(2.0 + Math.random() * 0.5).toFixed(2) });
+  markets.push({ game_id: gameUUID, market_type: 'BTTS', market_key: 'bttsYes', odds: safeOdds(1.6 + Math.random() * 0.5) });
+  markets.push({ game_id: gameUUID, market_type: 'BTTS', market_key: 'bttsNo', odds: safeOdds(2.0 + Math.random() * 0.5) });
 
   // Over/Under
-  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'over25', odds: +(1.7 + Math.random() * 0.6).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'under25', odds: +(1.9 + Math.random() * 0.5).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'over15', odds: +(1.2 + Math.random() * 0.3).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'under15', odds: +(3.5 + Math.random() * 1.0).toFixed(2) });
+  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'over25', odds: safeOdds(1.7 + Math.random() * 0.6) });
+  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'under25', odds: safeOdds(1.9 + Math.random() * 0.5) });
+  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'over15', odds: safeOdds(1.2 + Math.random() * 0.3) });
+  markets.push({ game_id: gameUUID, market_type: 'O/U', market_key: 'under15', odds: safeOdds(3.5 + Math.random() * 1.0) });
 
   // Double Chance
-  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceHomeOrDraw', odds: +(1 / (1/h + 1/d) * 0.9).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceAwayOrDraw', odds: +(1 / (1/a + 1/d) * 0.9).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceHomeOrAway', odds: +(1 / (1/h + 1/a) * 0.9).toFixed(2) });
+  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceHomeOrDraw', odds: safeOdds(1 / (1/h + 1/d) * 0.9) });
+  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceAwayOrDraw', odds: safeOdds(1 / (1/a + 1/d) * 0.9) });
+  markets.push({ game_id: gameUUID, market_type: 'DC', market_key: 'doubleChanceHomeOrAway', odds: safeOdds(1 / (1/h + 1/a) * 0.9) });
 
   // Half Time / Full Time
-  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftHomeHome', odds: +(h * 1.8).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawDraw', odds: +(d * 2.0).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftAwayAway', odds: +(a * 1.8).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawHome', odds: +(d * h * 0.7).toFixed(2) });
-  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawAway', odds: +(d * a * 0.7).toFixed(2) });
+  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftHomeHome', odds: safeOdds(h * 1.8) });
+  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawDraw', odds: safeOdds(d * 2.0) });
+  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftAwayAway', odds: safeOdds(a * 1.8) });
+  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawHome', odds: safeOdds(d * h * 0.7) });
+  markets.push({ game_id: gameUUID, market_type: 'HT/FT', market_key: 'htftDrawAway', odds: safeOdds(d * a * 0.7) });
 
   // Correct Scores
   for (let hScore = 0; hScore <= 4; hScore++) {
@@ -346,7 +353,7 @@ function generateDefaultMarkets(gameUUID, homeOdds, drawOdds, awayOdds) {
         game_id: gameUUID,
         market_type: 'CS',
         market_key: `cs${hScore}${aScore}`,
-        odds: +(3.0 + Math.random() * 20).toFixed(2)
+        odds: safeOdds(3.0 + Math.random() * 20)
       });
     }
   }
@@ -4042,6 +4049,51 @@ router.get('/fund-transfers/type/:type', checkAdmin, async (req, res) => {
       fund_transfers: [],
       message: 'Could not fetch fund transfers'
     });
+  }
+});
+
+// 🔄 POST: Regenerate all markets with 0 odds for all existing games
+router.post('/games/fix-zero-odds', checkAdmin, async (req, res) => {
+  try {
+    // Get all games
+    const { data: games, error: gErr } = await supabase.from('games').select('id, home_odds, draw_odds, away_odds');
+    if (gErr) throw gErr;
+
+    let totalFixed = 0;
+    for (const game of (games || [])) {
+      const h = parseFloat(game.home_odds) || 2.00;
+      const d = parseFloat(game.draw_odds) || 3.00;
+      const a = parseFloat(game.away_odds) || 3.00;
+
+      // Delete all existing markets with 0 odds for this game
+      const { data: zeroMarkets } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('game_id', game.id)
+        .lte('odds', 0);
+
+      if (zeroMarkets && zeroMarkets.length > 0) {
+        await supabase.from('markets').delete().eq('game_id', game.id);
+        const newMarkets = generateDefaultMarkets(game.id, h, d, a);
+        await supabase.from('markets').insert(newMarkets);
+        totalFixed += zeroMarkets.length;
+        console.log(`Fixed ${zeroMarkets.length} zero-odds markets for game ${game.id}`);
+      } else {
+        // Even if no zero odds, check if markets exist at all
+        const { data: existing } = await supabase.from('markets').select('id').eq('game_id', game.id).limit(1);
+        if (!existing || existing.length === 0) {
+          const newMarkets = generateDefaultMarkets(game.id, h, d, a);
+          await supabase.from('markets').insert(newMarkets);
+          totalFixed += newMarkets.length;
+          console.log(`Created ${newMarkets.length} markets for game ${game.id} (had none)`);
+        }
+      }
+    }
+
+    res.json({ success: true, message: `Fixed ${totalFixed} zero-odds markets across ${games?.length || 0} games` });
+  } catch (err) {
+    console.error('Fix zero odds error:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
