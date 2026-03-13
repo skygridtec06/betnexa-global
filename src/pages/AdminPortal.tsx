@@ -363,88 +363,173 @@ const AdminPortal = () => {
     }
   };
 
-  // Parse OCR text into game objects
+  // Parse OCR text into game objects — block-based approach
   const parseGamesFromText = useCallback((text: string) => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     const results: typeof parsedImportGames = [];
-    const oddsRx = /(\d+\.\d{1,2})\s+(\d+\.\d{1,2})\s+(\d+\.\d{1,2})/;
+
+    const leagueKw = ['liga','league','serie','bundesliga','ligue','championship','cup','premier','champions','eredivisie','primeira','superliga','jupiler','allsvenskan'];
+    const countries = ['spain','italy','germany','france','england','portugal','netherlands','belgium','scotland','turkey','greece','brazil','argentina','usa','mexico','sweden','norway','denmark','austria','switzerland','japan','korea','australia','russia','ukraine','poland','czech','croatia','serbia','romania','hungary','colombia','chile','peru','egypt','morocco','nigeria','south africa','kenya','ireland','wales','finland','iceland'];
     const dateRx = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?,?\s*(\d{1,2}:\d{2})/;
-    const leagueHints = ['•','·','Liga','League','Serie','Bundesliga','Ligue','Championship','Cup','Premier','Champions'];
+    const oddsRx3 = /(\d+\.\d{1,2})\s+(\d+\.\d{1,2})\s+(\d+\.\d{1,2})/;
+    const singleOddRx = /\b(\d+\.\d{1,2})\b/g;
 
+    // Detect if a line is a league header
+    const isLeagueLine = (line: string): boolean => {
+      const low = line.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+      if (leagueKw.some(kw => low.includes(kw))) return true;
+      if (countries.some(c => low.includes(c))) return true;
+      if (/[•·]/.test(line)) return true;
+      return false;
+    };
+
+    // Detect junk/noise lines to skip
+    const isNoiseLine = (line: string): boolean => {
+      if (/markets?/i.test(line)) return true;
+      if (/^teams?\b/i.test(line)) return true;
+      if (/^[12X\s]+$/i.test(line)) return true;
+      if (/^\W+$/.test(line)) return true;
+      if (line.length < 2) return true;
+      return false;
+    };
+
+    // Clean team name
+    const cleanName = (s: string): string =>
+      s.replace(/[®©™@#$%^&*{}[\]<>]/g, '').replace(/\d+\.\d+/g, '').replace(/^\W+|\W+$/g, '').replace(/\s+/g, ' ').trim();
+
+    // Step 1: Find block boundaries (league header lines)
+    const blockStarts: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(oddsRx);
-      if (!m) continue;
-      const hO = parseFloat(m[1]), dO = parseFloat(m[2]), aO = parseFloat(m[3]);
-      if (hO < 1.01 || hO > 50 || dO < 1.01 || dO > 50 || aO < 1.01 || aO > 50) continue;
+      if (isLeagueLine(lines[i]) && !oddsRx3.test(lines[i])) {
+        blockStarts.push(i);
+      }
+    }
 
-      const beforeOdds = lines[i].substring(0, m.index).trim();
-      let homeTeam = '', awayTeam = '', league = '', kickoff = '';
+    // Step 2: Process each block (from one league line to the next)
+    for (let b = 0; b < blockStarts.length; b++) {
+      const start = blockStarts[b];
+      const end = b + 1 < blockStarts.length ? blockStarts[b + 1] : lines.length;
+      const block = lines.slice(start, end);
 
-      // Away team is text before odds on the odds line
-      if (beforeOdds.length > 1) {
-        awayTeam = beforeOdds.replace(/\s+/g, ' ');
-        // Look backwards for home team
-        for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
-          const p = lines[j];
-          const isLeague = leagueHints.some(h => p.includes(h)) || dateRx.test(p);
-          if (!isLeague && p.length > 1 && !oddsRx.test(p) && !/^\+?\d+\s*Markets?$/i.test(p) && !/^[12X]\s*$/i.test(p)) {
-            homeTeam = p.replace(/\s+/g, ' ');
-            break;
-          }
-        }
-      } else {
-        const teams: string[] = [];
-        for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
-          const p = lines[j];
-          const isLeague = leagueHints.some(h => p.includes(h)) || dateRx.test(p);
-          if (!isLeague && p.length > 1 && !oddsRx.test(p) && !/^\+?\d+\s*Markets?$/i.test(p) && !/^[12X]\s*$/i.test(p)) {
-            teams.unshift(p.replace(/\s+/g, ' '));
-            if (teams.length >= 2) break;
-          }
-          if (isLeague) break;
-        }
-        if (teams.length >= 2) { homeTeam = teams[0]; awayTeam = teams[1]; }
-        else if (teams.length === 1) {
-          const sp = teams[0].split(/\s+vs\.?\s+|\s+-\s+/i);
-          homeTeam = sp[0]?.trim() || ''; awayTeam = sp[1]?.trim() || '';
+      // Extract league name from the header line
+      let league = block[0]
+        .replace(dateRx, '')
+        .replace(/[•·|⚽@©®]/g, ' ')
+        .replace(/[^a-zA-Z0-9\s.'-]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (league.length < 2) league = 'General';
+
+      // Extract kickoff date/time from the block
+      let kickoff = '';
+      for (const line of block) {
+        const dtm = line.match(dateRx);
+        if (dtm) {
+          const yr = new Date().getFullYear();
+          try {
+            const dt = new Date(yr, parseInt(dtm[2]) - 1, parseInt(dtm[1]),
+              parseInt(dtm[3].split(':')[0]), parseInt(dtm[3].split(':')[1]));
+            kickoff = dt.toISOString().slice(0, 16);
+          } catch { /* ignore */ }
+          break;
         }
       }
 
-      // Look for league & time above
-      for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
-        const p = lines[j];
-        if (!kickoff) {
-          const dtm = p.match(dateRx);
-          if (dtm) {
-            const yr = new Date().getFullYear();
-            try {
-              const dt = new Date(yr, parseInt(dtm[2]) - 1, parseInt(dtm[1]), parseInt(dtm[3].split(':')[0]), parseInt(dtm[3].split(':')[1]));
-              kickoff = dt.toISOString().slice(0, 16); // for datetime-local input
-            } catch {}
+      // Extract odds: first try 3-on-one-line, then collect individual odds
+      let homeOdds = 0, drawOdds = 0, awayOdds = 0;
+      let oddsFound = false;
+      for (const line of block) {
+        const m = line.match(oddsRx3);
+        if (m) {
+          homeOdds = parseFloat(m[1]); drawOdds = parseFloat(m[2]); awayOdds = parseFloat(m[3]);
+          if (homeOdds >= 1.01 && homeOdds <= 50 && drawOdds >= 1.01 && drawOdds <= 50 && awayOdds >= 1.01 && awayOdds <= 50) {
+            oddsFound = true; break;
           }
         }
-        if (!league) {
-          if (leagueHints.some(h => p.includes(h)) && p.length > 3) {
-            league = p.replace(dateRx, '').replace(/[•·|]/g, ' ').replace(/\s+/g, ' ').trim();
-            if (league.length < 2) league = '';
+      }
+      if (!oddsFound) {
+        // Fallback: collect individual decimal numbers from the block
+        const allOdds: number[] = [];
+        for (const line of block) {
+          let match;
+          const rx = new RegExp(singleOddRx.source, 'g');
+          while ((match = rx.exec(line)) !== null) {
+            const v = parseFloat(match[1]);
+            if (v >= 1.01 && v <= 50) allOdds.push(v);
           }
         }
-        if (league && kickoff) break;
+        if (allOdds.length >= 3) {
+          homeOdds = allOdds[0]; drawOdds = allOdds[1]; awayOdds = allOdds[2];
+          oddsFound = true;
+        }
+      }
+      if (!oddsFound) continue;
+
+      // Extract team names: non-league, non-date, non-odds, non-noise lines
+      const teamNames: string[] = [];
+      for (let i = 1; i < block.length; i++) {
+        const line = block[i];
+        if (isNoiseLine(line)) continue;
+        if (dateRx.test(line)) continue;
+        // If line has odds, extract team name that appears before the odds
+        const om = line.match(oddsRx3);
+        if (om) {
+          const before = cleanName(line.substring(0, om.index));
+          if (before.length >= 2) teamNames.push(before);
+          continue;
+        }
+        // Check if line is purely individual odds numbers
+        const stripped = line.replace(singleOddRx, '').replace(/\s+/g, '').trim();
+        if (stripped.length < 2 && singleOddRx.test(line)) continue;
+        // Clean and add as team name
+        const name = cleanName(line);
+        if (name.length >= 2) teamNames.push(name);
       }
 
-      homeTeam = homeTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
-      awayTeam = awayTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
-      if (!homeTeam || homeTeam.length < 2 || !awayTeam || awayTeam.length < 2) continue;
-      if (results.some(g => g.homeTeam === homeTeam && g.awayTeam === awayTeam)) continue;
+      if (teamNames.length < 2) continue;
+
+      // Avoid duplicates
+      if (results.some(g => g.homeTeam === teamNames[0] && g.awayTeam === teamNames[1])) continue;
 
       results.push({
-        id: `imp_${Date.now()}_${i}`,
-        league: league || 'General',
-        homeTeam, awayTeam,
-        homeOdds: hO.toFixed(2), drawOdds: dO.toFixed(2), awayOdds: aO.toFixed(2),
+        id: `imp_${Date.now()}_${b}`,
+        league,
+        homeTeam: teamNames[0],
+        awayTeam: teamNames[1],
+        homeOdds: homeOdds.toFixed(2),
+        drawOdds: drawOdds.toFixed(2),
+        awayOdds: awayOdds.toFixed(2),
         kickoffDateTime: kickoff || '',
       });
     }
+
+    // Fallback: if block-based found nothing, try odds-line approach
+    if (results.length === 0) {
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(oddsRx3);
+        if (!m) continue;
+        const hO = parseFloat(m[1]), dO = parseFloat(m[2]), aO = parseFloat(m[3]);
+        if (hO < 1.01 || hO > 50 || dO < 1.01 || dO > 50 || aO < 1.01 || aO > 50) continue;
+
+        const beforeOdds = cleanName(lines[i].substring(0, m.index));
+        const teamCandidates: string[] = [];
+        if (beforeOdds.length >= 2) teamCandidates.push(beforeOdds);
+        for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+          const p = lines[j];
+          if (isNoiseLine(p) || dateRx.test(p) || isLeagueLine(p) || oddsRx3.test(p)) continue;
+          const cn = cleanName(p);
+          if (cn.length >= 2) { teamCandidates.unshift(cn); if (teamCandidates.length >= 2) break; }
+        }
+        if (teamCandidates.length < 2) continue;
+        results.push({
+          id: `imp_${Date.now()}_${i}`,
+          league: 'General', homeTeam: teamCandidates[0], awayTeam: teamCandidates[1],
+          homeOdds: hO.toFixed(2), drawOdds: dO.toFixed(2), awayOdds: aO.toFixed(2),
+          kickoffDateTime: '',
+        });
+      }
+    }
+
     return results;
   }, []);
 
