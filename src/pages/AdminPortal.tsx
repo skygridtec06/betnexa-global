@@ -477,6 +477,41 @@ const AdminPortal = () => {
     return results;
   }, []);
 
+  // Preprocess dark-background betting screenshots for better OCR
+  const preprocessImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) { reject(new Error('Canvas not supported')); return; }
+
+        // Draw original
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Convert to grayscale, invert, and boost contrast
+        for (let i = 0; i < data.length; i += 4) {
+          // Grayscale
+          let gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+          // Invert (dark bg becomes white)
+          gray = 255 - gray;
+          // Boost contrast
+          gray = gray < 100 ? 0 : gray > 160 ? 255 : ((gray - 100) / 60) * 255;
+          data[i] = data[i + 1] = data[i + 2] = gray;
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        resolve(canvas.toDataURL('image/png'));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+  };
+
   const handleImageImport = async (file: File) => {
     setImportingImage(true);
     setImportResult(null);
@@ -485,28 +520,60 @@ const AdminPortal = () => {
     setOcrRawText('');
     setShowRawText(false);
     try {
-      // Dynamically import tesseract.js — runs in browser, no server needed
       const Tesseract = await import('tesseract.js');
-      const imageUrl = URL.createObjectURL(file);
 
-      const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng', {
+      // Preprocess: invert dark background for much better OCR accuracy
+      setOcrProgress(5);
+      const processedDataUrl = await preprocessImage(file);
+
+      const { data: { text } } = await Tesseract.recognize(processedDataUrl, 'eng', {
         logger: (m: any) => {
           if (m.status === 'recognizing text') {
-            setOcrProgress(Math.round(m.progress * 100));
+            setOcrProgress(10 + Math.round(m.progress * 85));
           }
         },
       });
 
-      URL.revokeObjectURL(imageUrl);
-      console.log('OCR text:', text);
+      console.log('OCR text (preprocessed):', text);
       setOcrRawText(text);
 
-      const games = parseGamesFromText(text);
+      let games = parseGamesFromText(text);
+
+      // If we got fewer than 4, try again with the original (unprocessed) image
+      if (games.length < 4) {
+        console.log(`[OCR] Only found ${games.length} games with preprocessed image, trying original...`);
+        const origUrl = URL.createObjectURL(file);
+        const { data: { text: origText } } = await Tesseract.recognize(origUrl, 'eng', {
+          logger: (m: any) => {
+            if (m.status === 'recognizing text') {
+              setOcrProgress(95 + Math.round(m.progress * 5));
+            }
+          },
+        });
+        URL.revokeObjectURL(origUrl);
+        console.log('OCR text (original):', origText);
+
+        const origGames = parseGamesFromText(origText);
+        // Merge: add any games from original that aren't already found
+        for (const og of origGames) {
+          if (!games.some(g => g.homeTeam === og.homeTeam && g.awayTeam === og.awayTeam)) {
+            games.push({ ...og, id: `imp_${Date.now()}_merge_${games.length}` });
+          }
+        }
+        // Update raw text to show both passes
+        if (origGames.length > 0) {
+          setOcrRawText(prev => prev + '\n\n--- Original image OCR ---\n' + origText);
+        }
+      }
+
       if (games.length > 0) {
         setParsedImportGames(games);
-        setImportResult({ message: `Found ${games.length} game${games.length > 1 ? 's' : ''}. Review and edit below, then click Execute to add.`, success: true });
+        const msg = games.length >= 4
+          ? `Found all 4 games! Review and edit below, then click Execute to add.`
+          : `Found ${games.length} of 4 games. You can add missing ones manually. Review below.`;
+        setImportResult({ message: msg, success: true });
       } else {
-        setImportResult({ message: 'No games detected. Try a clearer image with visible team names and odds.', success: false });
+        setImportResult({ message: 'No games detected. Try a clearer or higher-resolution screenshot.', success: false });
       }
     } catch (error: any) {
       console.error('OCR error:', error);
@@ -565,6 +632,15 @@ const AdminPortal = () => {
 
   const updateImportGame = (idx: number, field: string, value: string) => {
     setParsedImportGames(prev => prev.map((g, i) => i === idx ? { ...g, [field]: value } : g));
+  };
+
+  const addEmptyImportGame = () => {
+    setParsedImportGames(prev => [...prev, {
+      id: `imp_manual_${Date.now()}`,
+      league: '', homeTeam: '', awayTeam: '',
+      homeOdds: '', drawOdds: '', awayOdds: '',
+      kickoffDateTime: '',
+    }]);
   };
 
   const regenerateOdds = async (id: string) => {
@@ -1403,6 +1479,9 @@ const AdminPortal = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-muted-foreground">{parsedImportGames.filter(g => !g.saved).length} game(s) ready</span>
                       <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={addEmptyImportGame}>
+                          <Plus className="mr-1 h-3 w-3" /> Add Missing Game
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => imageInputRef.current?.click()}>
                           <Upload className="mr-1 h-3 w-3" /> New Image
                         </Button>
