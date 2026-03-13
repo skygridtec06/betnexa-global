@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,7 +91,13 @@ const AdminPortal = () => {
   // Image OCR import state
   const [showImageImport, setShowImageImport] = useState(false);
   const [importingImage, setImportingImage] = useState(false);
+  const [ocrProgress, setOcrProgress] = useState(0);
   const [importResult, setImportResult] = useState<{ message: string; success: boolean } | null>(null);
+  const [parsedImportGames, setParsedImportGames] = useState<Array<{
+    id: string; league: string; homeTeam: string; awayTeam: string;
+    homeOdds: string; drawOdds: string; awayOdds: string;
+    kickoffDateTime: string; saving?: boolean; saved?: boolean;
+  }>>([]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   
   // Admin withdrawal activation state
@@ -357,47 +363,174 @@ const AdminPortal = () => {
     }
   };
 
+  // Parse OCR text into game objects
+  const parseGamesFromText = useCallback((text: string) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const results: typeof parsedImportGames = [];
+    const oddsRx = /(\d+\.\d{1,2})\s+(\d+\.\d{1,2})\s+(\d+\.\d{1,2})/;
+    const dateRx = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?,?\s*(\d{1,2}:\d{2})/;
+    const leagueHints = ['•','·','Liga','League','Serie','Bundesliga','Ligue','Championship','Cup','Premier','Champions'];
+
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(oddsRx);
+      if (!m) continue;
+      const hO = parseFloat(m[1]), dO = parseFloat(m[2]), aO = parseFloat(m[3]);
+      if (hO < 1.01 || hO > 50 || dO < 1.01 || dO > 50 || aO < 1.01 || aO > 50) continue;
+
+      const beforeOdds = lines[i].substring(0, m.index).trim();
+      let homeTeam = '', awayTeam = '', league = '', kickoff = '';
+
+      // Away team is text before odds on the odds line
+      if (beforeOdds.length > 1) {
+        awayTeam = beforeOdds.replace(/\s+/g, ' ');
+        // Look backwards for home team
+        for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+          const p = lines[j];
+          const isLeague = leagueHints.some(h => p.includes(h)) || dateRx.test(p);
+          if (!isLeague && p.length > 1 && !oddsRx.test(p) && !/^\+?\d+\s*Markets?$/i.test(p) && !/^[12X]\s*$/i.test(p)) {
+            homeTeam = p.replace(/\s+/g, ' ');
+            break;
+          }
+        }
+      } else {
+        const teams: string[] = [];
+        for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+          const p = lines[j];
+          const isLeague = leagueHints.some(h => p.includes(h)) || dateRx.test(p);
+          if (!isLeague && p.length > 1 && !oddsRx.test(p) && !/^\+?\d+\s*Markets?$/i.test(p) && !/^[12X]\s*$/i.test(p)) {
+            teams.unshift(p.replace(/\s+/g, ' '));
+            if (teams.length >= 2) break;
+          }
+          if (isLeague) break;
+        }
+        if (teams.length >= 2) { homeTeam = teams[0]; awayTeam = teams[1]; }
+        else if (teams.length === 1) {
+          const sp = teams[0].split(/\s+vs\.?\s+|\s+-\s+/i);
+          homeTeam = sp[0]?.trim() || ''; awayTeam = sp[1]?.trim() || '';
+        }
+      }
+
+      // Look for league & time above
+      for (let j = i - 1; j >= Math.max(0, i - 6); j--) {
+        const p = lines[j];
+        if (!kickoff) {
+          const dtm = p.match(dateRx);
+          if (dtm) {
+            const yr = new Date().getFullYear();
+            try {
+              const dt = new Date(yr, parseInt(dtm[2]) - 1, parseInt(dtm[1]), parseInt(dtm[3].split(':')[0]), parseInt(dtm[3].split(':')[1]));
+              kickoff = dt.toISOString().slice(0, 16); // for datetime-local input
+            } catch {}
+          }
+        }
+        if (!league) {
+          if (leagueHints.some(h => p.includes(h)) && p.length > 3) {
+            league = p.replace(dateRx, '').replace(/[•·|]/g, ' ').replace(/\s+/g, ' ').trim();
+            if (league.length < 2) league = '';
+          }
+        }
+        if (league && kickoff) break;
+      }
+
+      homeTeam = homeTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
+      awayTeam = awayTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
+      if (!homeTeam || homeTeam.length < 2 || !awayTeam || awayTeam.length < 2) continue;
+      if (results.some(g => g.homeTeam === homeTeam && g.awayTeam === awayTeam)) continue;
+
+      results.push({
+        id: `imp_${Date.now()}_${i}`,
+        league: league || 'General',
+        homeTeam, awayTeam,
+        homeOdds: hO.toFixed(2), drawOdds: dO.toFixed(2), awayOdds: aO.toFixed(2),
+        kickoffDateTime: kickoff || '',
+      });
+    }
+    return results;
+  }, []);
+
   const handleImageImport = async (file: File) => {
     setImportingImage(true);
     setImportResult(null);
+    setParsedImportGames([]);
+    setOcrProgress(0);
     try {
-      // Convert file to base64
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+      // Dynamically import tesseract.js — runs in browser, no server needed
+      const Tesseract = await import('tesseract.js');
+      const imageUrl = URL.createObjectURL(file);
+
+      const { data: { text } } = await Tesseract.recognize(imageUrl, 'eng', {
+        logger: (m: any) => {
+          if (m.status === 'recognizing text') {
+            setOcrProgress(Math.round(m.progress * 100));
+          }
+        },
       });
 
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/admin/games/parse-image`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: loggedInUser.phone,
-          image: base64,
-        }),
-      });
+      URL.revokeObjectURL(imageUrl);
+      console.log('OCR text:', text);
 
-      const data = await response.json();
-
-      if (data.success && data.games && data.games.length > 0) {
-        setImportResult({ message: `✅ ${data.message}`, success: true });
-        // Refresh games to show newly imported ones
-        setTimeout(() => refreshGames(), 500);
+      const games = parseGamesFromText(text);
+      if (games.length > 0) {
+        setParsedImportGames(games);
+        setImportResult({ message: `Found ${games.length} game${games.length > 1 ? 's' : ''}. Review and edit below, then click Execute to add.`, success: true });
       } else {
-        setImportResult({
-          message: data.error || 'No games could be detected from the image. Try a clearer image.',
-          success: false,
-        });
+        setImportResult({ message: 'No games detected. Try a clearer image with visible team names and odds.', success: false });
       }
     } catch (error: any) {
-      console.error('Image import error:', error);
-      setImportResult({ message: 'Failed to import games from image.', success: false });
+      console.error('OCR error:', error);
+      setImportResult({ message: 'Failed to read image. Try again with a different image.', success: false });
     } finally {
       setImportingImage(false);
+      setOcrProgress(0);
       if (imageInputRef.current) imageInputRef.current.value = '';
     }
+  };
+
+  // Save a single parsed game to DB
+  const executeImportGame = async (gameIdx: number) => {
+    const pg = parsedImportGames[gameIdx];
+    if (!pg || pg.saving || pg.saved) return;
+    setParsedImportGames(prev => prev.map((g, i) => i === gameIdx ? { ...g, saving: true } : g));
+    try {
+      const h = parseFloat(pg.homeOdds) || 2.0;
+      const d = parseFloat(pg.drawOdds) || 3.0;
+      const a = parseFloat(pg.awayOdds) || 3.0;
+      const kickoffTime = pg.kickoffDateTime ? new Date(pg.kickoffDateTime).toISOString() : new Date().toISOString();
+      const markets = generateMarketOdds(h, d, a);
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/games`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: loggedInUser.phone, league: pg.league, homeTeam: pg.homeTeam, awayTeam: pg.awayTeam, homeOdds: h, drawOdds: d, awayOdds: a, time: kickoffTime, status: 'upcoming', markets }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setParsedImportGames(prev => prev.map((g, i) => i === gameIdx ? { ...g, saving: false, saved: true } : g));
+        refreshGames();
+      } else {
+        throw new Error(data.error || 'Failed');
+      }
+    } catch (err: any) {
+      setParsedImportGames(prev => prev.map((g, i) => i === gameIdx ? { ...g, saving: false } : g));
+      alert(`Failed to add ${pg.homeTeam} vs ${pg.awayTeam}: ${err.message}`);
+    }
+  };
+
+  // Execute all unsaved parsed games
+  const executeAllImportGames = async () => {
+    for (let i = 0; i < parsedImportGames.length; i++) {
+      if (!parsedImportGames[i].saved) {
+        await executeImportGame(i);
+      }
+    }
+  };
+
+  const removeImportGame = (idx: number) => {
+    setParsedImportGames(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateImportGame = (idx: number, field: string, value: string) => {
+    setParsedImportGames(prev => prev.map((g, i) => i === idx ? { ...g, [field]: value } : g));
   };
 
   const regenerateOdds = async (id: string) => {
@@ -1172,7 +1305,7 @@ const AdminPortal = () => {
             {showImageImport && (
               <div className="mb-6 animate-fade-up rounded-xl border border-primary/30 bg-card p-6 neon-border">
                 <h4 className="mb-2 font-display text-sm font-bold uppercase text-foreground">Import Games from Image</h4>
-                <p className="mb-4 text-xs text-muted-foreground">Upload a screenshot of betting odds. The system will read team names, odds, kickoff times, and leagues using OCR then add all detected games.</p>
+                <p className="mb-4 text-xs text-muted-foreground">Upload a screenshot of betting odds. The system reads team names, odds, kickoff times, and leagues — then you can review, edit, and add them.</p>
                 <input
                   ref={imageInputRef}
                   type="file"
@@ -1183,30 +1316,113 @@ const AdminPortal = () => {
                     if (file) handleImageImport(file);
                   }}
                 />
-                <div
-                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/50 p-8 transition hover:border-primary/70 hover:bg-background/80"
-                  onClick={() => !importingImage && imageInputRef.current?.click()}
-                >
-                  {importingImage ? (
-                    <>
-                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                      <p className="mt-3 text-sm font-medium text-primary">Reading image... This may take a moment</p>
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-10 w-10 text-muted-foreground" />
-                      <p className="mt-3 text-sm font-medium text-foreground">Click to upload an image</p>
-                      <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, or screenshot of betting odds</p>
-                    </>
-                  )}
-                </div>
+
+                {/* Upload area — show only if no parsed games yet */}
+                {parsedImportGames.length === 0 && (
+                  <div
+                    className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/50 p-8 transition hover:border-primary/70 hover:bg-background/80"
+                    onClick={() => !importingImage && imageInputRef.current?.click()}
+                  >
+                    {importingImage ? (
+                      <>
+                        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                        <p className="mt-3 text-sm font-medium text-primary">Reading image... {ocrProgress}%</p>
+                        <div className="mt-2 h-2 w-48 overflow-hidden rounded-full bg-background">
+                          <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${ocrProgress}%` }} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-10 w-10 text-muted-foreground" />
+                        <p className="mt-3 text-sm font-medium text-foreground">Click to upload an image</p>
+                        <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, or screenshot of betting odds</p>
+                      </>
+                    )}
+                  </div>
+                )}
+
                 {importResult && (
                   <div className={`mt-4 rounded-lg p-3 text-sm ${importResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
                     {importResult.message}
                   </div>
                 )}
+
+                {/* Parsed games preview cards */}
+                {parsedImportGames.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">{parsedImportGames.filter(g => !g.saved).length} game(s) ready</span>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => imageInputRef.current?.click()}>
+                          <Upload className="mr-1 h-3 w-3" /> New Image
+                        </Button>
+                        {parsedImportGames.some(g => !g.saved) && (
+                          <Button variant="hero" size="sm" onClick={executeAllImportGames}>
+                            <Zap className="mr-1 h-3 w-3" /> Execute All
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+
+                    {parsedImportGames.map((pg, idx) => (
+                      <div key={pg.id} className={`rounded-lg border p-4 ${pg.saved ? 'border-green-500/40 bg-green-500/5' : 'border-border/50 bg-background/50'}`}>
+                        {pg.saved ? (
+                          <div className="flex items-center gap-2 text-green-400">
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="text-sm font-medium">{pg.homeTeam} vs {pg.awayTeam} — Added!</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid gap-3 md:grid-cols-2">
+                              <div>
+                                <label className="text-[10px] uppercase text-muted-foreground">League</label>
+                                <input className={inputClass} value={pg.league} onChange={(e) => updateImportGame(idx, 'league', e.target.value)} />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase text-muted-foreground">Kickoff</label>
+                                <input type="datetime-local" className={inputClass} value={pg.kickoffDateTime} onChange={(e) => updateImportGame(idx, 'kickoffDateTime', e.target.value)} />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase text-muted-foreground">Home Team</label>
+                                <input className={inputClass} value={pg.homeTeam} onChange={(e) => updateImportGame(idx, 'homeTeam', e.target.value)} />
+                              </div>
+                              <div>
+                                <label className="text-[10px] uppercase text-muted-foreground">Away Team</label>
+                                <input className={inputClass} value={pg.awayTeam} onChange={(e) => updateImportGame(idx, 'awayTeam', e.target.value)} />
+                              </div>
+                              <div className="flex gap-2">
+                                <div className="flex-1">
+                                  <label className="text-[10px] uppercase text-muted-foreground">1</label>
+                                  <input className={inputClass} value={pg.homeOdds} onChange={(e) => updateImportGame(idx, 'homeOdds', e.target.value)} />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[10px] uppercase text-muted-foreground">X</label>
+                                  <input className={inputClass} value={pg.drawOdds} onChange={(e) => updateImportGame(idx, 'drawOdds', e.target.value)} />
+                                </div>
+                                <div className="flex-1">
+                                  <label className="text-[10px] uppercase text-muted-foreground">2</label>
+                                  <input className={inputClass} value={pg.awayOdds} onChange={(e) => updateImportGame(idx, 'awayOdds', e.target.value)} />
+                                </div>
+                              </div>
+                              <div className="flex items-end gap-2">
+                                <Button variant="hero" size="sm" className="flex-1" onClick={() => executeImportGame(idx)} disabled={pg.saving}>
+                                  {pg.saving ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Plus className="mr-1 h-3 w-3" />}
+                                  {pg.saving ? 'Adding...' : 'Add Game'}
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={() => removeImportGame(idx)}>
+                                  <Trash2 className="h-4 w-4 text-red-400" />
+                                </Button>
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <div className="mt-4 flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => { setShowImageImport(false); setImportResult(null); }}>Close</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowImageImport(false); setImportResult(null); setParsedImportGames([]); }}>Close</Button>
                 </div>
               </div>
             )}
