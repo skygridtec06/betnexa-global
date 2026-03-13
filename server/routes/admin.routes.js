@@ -816,6 +816,288 @@ router.post('/games', checkAdmin, async (req, res) => {
   }
 });
 
+// POST: Parse image and create games from OCR data
+router.post('/games/parse-image', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n📸 [POST /api/admin/games/parse-image] Parsing image for games');
+    const { image } = req.body; // base64 image data
+
+    if (!image) {
+      return res.status(400).json({ success: false, error: 'No image data provided' });
+    }
+
+    // Import Tesseract.js for OCR
+    const Tesseract = require('tesseract.js');
+
+    // Convert base64 to buffer
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    const imageBuffer = Buffer.from(base64Data, 'base64');
+
+    console.log('🔍 Running OCR on image...');
+    const { data: { text } } = await Tesseract.recognize(imageBuffer, 'eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          console.log(`   OCR progress: ${Math.round(m.progress * 100)}%`);
+        }
+      }
+    });
+
+    console.log('📝 OCR Raw Text:\n', text);
+
+    // Parse the OCR text into game objects
+    const parsedGames = parseGamesFromOCR(text);
+    console.log(`✅ Parsed ${parsedGames.length} games from image`);
+
+    if (parsedGames.length === 0) {
+      return res.json({
+        success: false,
+        error: 'Could not detect any games in the image. Make sure the image contains team names, odds, and league information.',
+        rawText: text
+      });
+    }
+
+    // Create each game in the database
+    const createdGames = [];
+    const errors = [];
+
+    for (const pg of parsedGames) {
+      try {
+        const gameData = {
+          game_id: `g${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          league: pg.league || 'General',
+          home_team: pg.homeTeam,
+          away_team: pg.awayTeam,
+          home_odds: pg.homeOdds,
+          draw_odds: pg.drawOdds,
+          away_odds: pg.awayOdds,
+          time: pg.kickoffTime || new Date().toISOString(),
+          status: 'upcoming',
+        };
+
+        const { data: game, error: insertError } = await supabase
+          .from('games')
+          .insert([gameData])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error(`❌ Failed to insert game ${pg.homeTeam} vs ${pg.awayTeam}:`, insertError.message);
+          errors.push({ game: `${pg.homeTeam} vs ${pg.awayTeam}`, error: insertError.message });
+          continue;
+        }
+
+        // Generate and insert markets
+        try {
+          const marketsToInsert = generateDefaultMarkets(game.id, pg.homeOdds, pg.drawOdds, pg.awayOdds);
+          if (marketsToInsert.length > 0) {
+            await supabase.from('markets').insert(marketsToInsert);
+          }
+        } catch (mErr) {
+          console.warn(`⚠️ Markets insert failed for ${pg.homeTeam} vs ${pg.awayTeam}:`, mErr.message);
+        }
+
+        createdGames.push({
+          id: game.id,
+          game_id: game.game_id,
+          league: game.league,
+          home_team: game.home_team,
+          away_team: game.away_team,
+          home_odds: game.home_odds,
+          draw_odds: game.draw_odds,
+          away_odds: game.away_odds,
+          status: game.status,
+          time: game.time,
+        });
+
+        console.log(`✅ Created: ${pg.homeTeam} vs ${pg.awayTeam} (${pg.league})`);
+      } catch (gameErr) {
+        console.error(`❌ Error creating game:`, gameErr.message);
+        errors.push({ game: `${pg.homeTeam} vs ${pg.awayTeam}`, error: gameErr.message });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Created ${createdGames.length} of ${parsedGames.length} games`,
+      games: createdGames,
+      parsed: parsedGames,
+      errors: errors.length > 0 ? errors : undefined,
+      rawText: text
+    });
+  } catch (error) {
+    console.error('❌ Image parse error:', error);
+    res.status(500).json({ success: false, error: 'Failed to parse image', message: error.message });
+  }
+});
+
+/**
+ * Parse OCR text output into structured game objects.
+ * Handles formats like:
+ *   "Spain • LaLiga          13/03, 23:00"
+ *   "Alaves"
+ *   "Villarreal       3.20  3.45  2.34"
+ * Also handles single-line formats and various separators.
+ */
+function parseGamesFromOCR(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  const games = [];
+
+  // Strategy: Look for lines with 3 decimal odds numbers — those identify a game row
+  // Then look backwards for team names and league/time info
+
+  // First pass: find all lines containing 3 odds-like numbers
+  const oddsPattern = /(\d+\.\d{1,2})\s+(\d+\.\d{1,2})\s+(\d+\.\d{1,2})/;
+  const dateTimePattern = /(\d{1,2})[\/\-](\d{1,2})(?:[\/\-]\d{2,4})?,?\s*(\d{1,2}:\d{2})/;
+  const leagueIndicators = ['•', '·', '-', '|', 'Liga', 'League', 'Serie', 'Bundesliga', 'Ligue', 'Championship', 'Cup', 'Premier', 'Champions'];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Check if this line or nearby lines have 3 odds
+    let oddsMatch = null;
+    let oddsLineIdx = -1;
+
+    // Check current line for odds
+    if (oddsPattern.test(line)) {
+      oddsMatch = line.match(oddsPattern);
+      oddsLineIdx = i;
+    }
+
+    if (!oddsMatch) continue;
+
+    const homeOdds = parseFloat(oddsMatch[1]);
+    const drawOdds = parseFloat(oddsMatch[2]);
+    const awayOdds = parseFloat(oddsMatch[3]);
+
+    // Validate odds are reasonable (between 1.01 and 50)
+    if (homeOdds < 1.01 || homeOdds > 50 || drawOdds < 1.01 || drawOdds > 50 || awayOdds < 1.01 || awayOdds > 50) {
+      continue;
+    }
+
+    // Extract team names from the odds line (text before the odds)
+    const textBeforeOdds = line.substring(0, oddsMatch.index).trim();
+    let homeTeam = '';
+    let awayTeam = '';
+    let league = '';
+    let kickoffTime = '';
+
+    // Look backwards from the odds line for team names and league
+    // Pattern 1: Teams on the same line as odds (e.g., "Team1 vs Team2  1.50  3.00  5.00")
+    if (textBeforeOdds.length > 3) {
+      // Extract teams from text before odds
+      // Could be "Alaves\nVillarreal" on separate lines with odds on Villarreal's line
+      awayTeam = textBeforeOdds.replace(/\s+/g, ' ').trim();
+      
+      // Look backwards for home team
+      for (let j = oddsLineIdx - 1; j >= Math.max(0, oddsLineIdx - 4); j--) {
+        const prevLine = lines[j];
+        
+        // Skip lines that look like league/time headers
+        const isLeagueLine = leagueIndicators.some(ind => prevLine.includes(ind)) || dateTimePattern.test(prevLine);
+        
+        if (!isLeagueLine && prevLine.length > 1 && !oddsPattern.test(prevLine) && !/^\+?\d+\s*Markets?$/i.test(prevLine) && !/^Teams?\b/i.test(prevLine) && !/^[12X]\s*$/i.test(prevLine)) {
+          // This looks like a team name
+          if (!homeTeam) {
+            homeTeam = prevLine.replace(/\s+/g, ' ').trim();
+          }
+          break;
+        }
+      }
+    } else {
+      // Odds are on their own line, look back for both team names
+      let teamNames = [];
+      for (let j = oddsLineIdx - 1; j >= Math.max(0, oddsLineIdx - 6); j--) {
+        const prevLine = lines[j];
+        const isLeagueLine = leagueIndicators.some(ind => prevLine.includes(ind)) || dateTimePattern.test(prevLine);
+        
+        if (!isLeagueLine && prevLine.length > 1 && !oddsPattern.test(prevLine) && !/^\+?\d+\s*Markets?$/i.test(prevLine) && !/^Teams?\b/i.test(prevLine) && !/^[12X]\s*$/i.test(prevLine)) {
+          teamNames.unshift(prevLine.replace(/\s+/g, ' ').trim());
+          if (teamNames.length >= 2) break;
+        }
+        if (isLeagueLine) break; // Stop at league boundary
+      }
+      if (teamNames.length >= 2) {
+        homeTeam = teamNames[0];
+        awayTeam = teamNames[1];
+      } else if (teamNames.length === 1) {
+        // Try splitting by common separators
+        const parts = teamNames[0].split(/\s+vs\.?\s+|\s+-\s+/i);
+        if (parts.length >= 2) {
+          homeTeam = parts[0].trim();
+          awayTeam = parts[1].trim();
+        } else {
+          homeTeam = teamNames[0];
+          awayTeam = 'Unknown';
+        }
+      }
+    }
+
+    // Look for league and kickoff time in lines above the teams
+    for (let j = oddsLineIdx - 1; j >= Math.max(0, oddsLineIdx - 6); j--) {
+      const prevLine = lines[j];
+      
+      // Check for date/time
+      if (!kickoffTime) {
+        const dtMatch = prevLine.match(dateTimePattern);
+        if (dtMatch) {
+          const day = parseInt(dtMatch[1]);
+          const month = parseInt(dtMatch[2]);
+          const time = dtMatch[3];
+          // Build ISO datetime — assume current year
+          const year = new Date().getFullYear();
+          try {
+            const dt = new Date(year, month - 1, day, parseInt(time.split(':')[0]), parseInt(time.split(':')[1]));
+            kickoffTime = dt.toISOString();
+          } catch (e) {
+            // fallback
+          }
+        }
+      }
+
+      // Check for league
+      if (!league) {
+        const hasIndicator = leagueIndicators.some(ind => prevLine.includes(ind));
+        if (hasIndicator && prevLine.length > 3) {
+          // Clean up the league string
+          league = prevLine
+            .replace(dateTimePattern, '')
+            .replace(/[•·|]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (league.length < 2) league = '';
+        }
+      }
+
+      if (league && kickoffTime) break;
+    }
+
+    // Clean up team names — remove trailing symbols, numbers-only fragments
+    homeTeam = homeTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
+    awayTeam = awayTeam.replace(/[®©™@#$%^&*(){}[\]<>]/g, '').replace(/^\W+|\W+$/g, '').trim();
+
+    // Skip if we don't have valid team names
+    if (!homeTeam || homeTeam.length < 2 || !awayTeam || awayTeam.length < 2) {
+      continue;
+    }
+
+    // Avoid duplicates (same teams in this batch)
+    const isDuplicate = games.some(g => g.homeTeam === homeTeam && g.awayTeam === awayTeam);
+    if (isDuplicate) continue;
+
+    games.push({
+      homeTeam,
+      awayTeam,
+      homeOdds,
+      drawOdds,
+      awayOdds,
+      league: league || 'General',
+      kickoffTime: kickoffTime || new Date().toISOString(),
+    });
+  }
+
+  return games;
+}
+
 // PUT: Update a game
 router.put('/games/:gameId', checkAdmin, async (req, res) => {
   try {

@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -87,6 +87,12 @@ const AdminPortal = () => {
   const [editingBalance, setEditingBalance] = useState<string | null>(null);
   const [balanceEditValue, setBalanceEditValue] = useState<string>("");
   const [balanceEditReason, setBalanceEditReason] = useState<string>("");
+
+  // Image OCR import state
+  const [showImageImport, setShowImageImport] = useState(false);
+  const [importingImage, setImportingImage] = useState(false);
+  const [importResult, setImportResult] = useState<{ message: string; success: boolean } | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   
   // Admin withdrawal activation state
   const [activatingUserId, setActivatingUserId] = useState<string | null>(null);
@@ -348,6 +354,49 @@ const AdminPortal = () => {
     } catch (error) {
       console.error('Error adding game:', error);
       alert('Failed to add game. Check console for details.');
+    }
+  };
+
+  const handleImageImport = async (file: File) => {
+    setImportingImage(true);
+    setImportResult(null);
+    try {
+      // Convert file to base64
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/games/parse-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone,
+          image: base64,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success && data.games && data.games.length > 0) {
+        setImportResult({ message: `✅ ${data.message}`, success: true });
+        // Refresh games to show newly imported ones
+        setTimeout(() => refreshGames(), 500);
+      } else {
+        setImportResult({
+          message: data.error || 'No games could be detected from the image. Try a clearer image.',
+          success: false,
+        });
+      }
+    } catch (error: any) {
+      console.error('Image import error:', error);
+      setImportResult({ message: 'Failed to import games from image.', success: false });
+    } finally {
+      setImportingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = '';
     }
   };
 
@@ -1110,10 +1159,57 @@ const AdminPortal = () => {
           <TabsContent value="games">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Manage Games</h3>
-              <Button variant="hero" size="sm" onClick={() => setShowAddGame(!showAddGame)}>
-                <Plus className="mr-1 h-4 w-4" /> Add Fixture
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="hero" size="sm" onClick={() => { setShowImageImport(!showImageImport); setShowAddGame(false); setImportResult(null); }}>
+                  <ImageIcon className="mr-1 h-4 w-4" /> Import from Image
+                </Button>
+                <Button variant="hero" size="sm" onClick={() => { setShowAddGame(!showAddGame); setShowImageImport(false); }}>
+                  <Plus className="mr-1 h-4 w-4" /> Add Fixture
+                </Button>
+              </div>
             </div>
+
+            {showImageImport && (
+              <div className="mb-6 animate-fade-up rounded-xl border border-primary/30 bg-card p-6 neon-border">
+                <h4 className="mb-2 font-display text-sm font-bold uppercase text-foreground">Import Games from Image</h4>
+                <p className="mb-4 text-xs text-muted-foreground">Upload a screenshot of betting odds. The system will read team names, odds, kickoff times, and leagues using OCR then add all detected games.</p>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageImport(file);
+                  }}
+                />
+                <div
+                  className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-primary/40 bg-background/50 p-8 transition hover:border-primary/70 hover:bg-background/80"
+                  onClick={() => !importingImage && imageInputRef.current?.click()}
+                >
+                  {importingImage ? (
+                    <>
+                      <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                      <p className="mt-3 text-sm font-medium text-primary">Reading image... This may take a moment</p>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-10 w-10 text-muted-foreground" />
+                      <p className="mt-3 text-sm font-medium text-foreground">Click to upload an image</p>
+                      <p className="mt-1 text-xs text-muted-foreground">PNG, JPG, or screenshot of betting odds</p>
+                    </>
+                  )}
+                </div>
+                {importResult && (
+                  <div className={`mt-4 rounded-lg p-3 text-sm ${importResult.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                    {importResult.message}
+                  </div>
+                )}
+                <div className="mt-4 flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => { setShowImageImport(false); setImportResult(null); }}>Close</Button>
+                </div>
+              </div>
+            )}
 
             {showAddGame && (
               <div className="mb-6 animate-fade-up rounded-xl border border-primary/30 bg-card p-6 neon-border">
