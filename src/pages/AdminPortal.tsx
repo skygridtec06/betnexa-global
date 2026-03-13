@@ -92,6 +92,8 @@ const AdminPortal = () => {
   const [showImageImport, setShowImageImport] = useState(false);
   const [importingImage, setImportingImage] = useState(false);
   const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrRawText, setOcrRawText] = useState('');
+  const [showRawText, setShowRawText] = useState(false);
   const [importResult, setImportResult] = useState<{ message: string; success: boolean } | null>(null);
   const [parsedImportGames, setParsedImportGames] = useState<Array<{
     id: string; league: string; homeTeam: string; awayTeam: string;
@@ -538,6 +540,8 @@ const AdminPortal = () => {
     setImportResult(null);
     setParsedImportGames([]);
     setOcrProgress(0);
+    setOcrRawText('');
+    setShowRawText(false);
     try {
       // Dynamically import tesseract.js — runs in browser, no server needed
       const Tesseract = await import('tesseract.js');
@@ -553,6 +557,7 @@ const AdminPortal = () => {
 
       URL.revokeObjectURL(imageUrl);
       console.log('OCR text:', text);
+      setOcrRawText(text);
 
       const games = parseGamesFromText(text);
       if (games.length > 0) {
@@ -580,7 +585,9 @@ const AdminPortal = () => {
       const h = parseFloat(pg.homeOdds) || 2.0;
       const d = parseFloat(pg.drawOdds) || 3.0;
       const a = parseFloat(pg.awayOdds) || 3.0;
-      const kickoffTime = pg.kickoffDateTime ? new Date(pg.kickoffDateTime).toISOString() : new Date().toISOString();
+      const kickoffTime = pg.kickoffDateTime
+        ? new Date(pg.kickoffDateTime + ':00+03:00').toISOString() // EAT = UTC+3
+        : new Date().toISOString();
       const markets = generateMarketOdds(h, d, a);
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/games`, {
@@ -1432,6 +1439,22 @@ const AdminPortal = () => {
                   </div>
                 )}
 
+                {ocrRawText && (
+                  <div className="mt-3">
+                    <button
+                      className="text-xs text-muted-foreground underline hover:text-foreground"
+                      onClick={() => setShowRawText(!showRawText)}
+                    >
+                      {showRawText ? 'Hide' : 'Show'} raw OCR text (debug)
+                    </button>
+                    {showRawText && (
+                      <pre className="mt-2 max-h-48 overflow-auto rounded-lg bg-background/80 p-3 text-[10px] text-muted-foreground border border-border/30">
+                        {ocrRawText}
+                      </pre>
+                    )}
+                  </div>
+                )}
+
                 {/* Parsed games preview cards */}
                 {parsedImportGames.length > 0 && (
                   <div className="mt-4 space-y-3">
@@ -1507,7 +1530,7 @@ const AdminPortal = () => {
                 )}
 
                 <div className="mt-4 flex gap-2">
-                  <Button variant="ghost" size="sm" onClick={() => { setShowImageImport(false); setImportResult(null); setParsedImportGames([]); }}>Close</Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setShowImageImport(false); setImportResult(null); setParsedImportGames([]); setOcrRawText(''); }}>Close</Button>
                 </div>
               </div>
             )}
