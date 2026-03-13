@@ -73,7 +73,9 @@ const AdminPortal = () => {
   const [newGame, setNewGame] = useState({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" as const });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
-  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
+  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('creditedBets') || '{}'); } catch { return {}; }
+  });
   const [creditingBet, setCreditingBet] = useState<string | null>(null);
   
   // Payment management state
@@ -1290,7 +1292,11 @@ const AdminPortal = () => {
       });
       const data = await resp.json();
       if (data.success) {
-        setCreditedBets(prev => ({ ...prev, [bet.id]: true }));
+        setCreditedBets(prev => {
+          const updated = { ...prev, [bet.id]: true };
+          localStorage.setItem('creditedBets', JSON.stringify(updated));
+          return updated;
+        });
       } else {
         alert(`Failed to credit: ${data.error}`);
       }
