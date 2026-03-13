@@ -73,6 +73,8 @@ const AdminPortal = () => {
   const [newGame, setNewGame] = useState({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" as const });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
+  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
+  const [creditingBet, setCreditingBet] = useState<string | null>(null);
   
   // Payment management state
   const [failedPayments, setFailedPayments] = useState<any[]>([]);
@@ -1272,6 +1274,31 @@ const AdminPortal = () => {
     const newOutcomes = { ...selectionOutcomes };
     delete newOutcomes[betId];
     setSelectionOutcomes(newOutcomes);
+  };
+
+  // Credit win amount to user balance
+  const creditWinToUser = async (bet: any) => {
+    if (creditedBets[bet.id] || creditingBet === bet.id) return;
+    setCreditingBet(bet.id);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
+      const resp = await fetch(`${apiUrl}/api/admin/bets/credit-win`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: adminPhone, user_id: bet.user_id, amount: bet.potentialWin, bet_id: bet.betId }),
+      });
+      const data = await resp.json();
+      if (data.success) {
+        setCreditedBets(prev => ({ ...prev, [bet.id]: true }));
+      } else {
+        alert(`Failed to credit: ${data.error}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.message}`);
+    } finally {
+      setCreditingBet(null);
+    }
   };
 
   // Fetch failed payments
@@ -2684,6 +2711,7 @@ const AdminPortal = () => {
                                 <tr className="text-muted-foreground">
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-center p-2 font-semibold"></th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -2699,6 +2727,21 @@ const AdminPortal = () => {
                                     <tr key={bet.id} className="hover:bg-secondary/30 transition-colors">
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
+                                      <td className="p-2 text-center">
+                                        <button
+                                          onClick={() => creditWinToUser(bet)}
+                                          disabled={!!creditedBets[bet.id] || creditingBet === bet.id}
+                                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                            creditedBets[bet.id]
+                                              ? 'bg-red-600 text-white cursor-not-allowed'
+                                              : creditingBet === bet.id
+                                                ? 'bg-yellow-500/50 text-yellow-200 cursor-wait'
+                                                : 'bg-primary/80 text-white hover:bg-primary'
+                                          }`}
+                                        >
+                                          {creditingBet === bet.id ? '...' : creditedBets[bet.id] ? 'Updated' : 'Update'}
+                                        </button>
+                                      </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.potentialWin.toLocaleString()}</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>

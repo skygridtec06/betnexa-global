@@ -4084,4 +4084,61 @@ router.post('/games/fix-zero-odds', checkAdmin, async (req, res) => {
   }
 });
 
+// 💰 POST: Credit win amount directly to user balance (admin "Update" button)
+router.post('/bets/credit-win', checkAdmin, async (req, res) => {
+  try {
+    const { user_id, amount, bet_id } = req.body;
+    if (!user_id || !amount) {
+      return res.status(400).json({ success: false, error: 'user_id and amount are required' });
+    }
+
+    const creditAmount = parseFloat(amount);
+    if (isNaN(creditAmount) || creditAmount <= 0) {
+      return res.status(400).json({ success: false, error: 'Invalid amount' });
+    }
+
+    // Get current balance
+    const { data: user, error: userErr } = await supabase
+      .from('users')
+      .select('account_balance, username')
+      .eq('id', user_id)
+      .single();
+
+    if (userErr || !user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const prevBalance = parseFloat(user.account_balance) || 0;
+    const newBalance = prevBalance + creditAmount;
+
+    // Update balance
+    const { error: updateErr } = await supabase
+      .from('users')
+      .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+      .eq('id', user_id);
+
+    if (updateErr) {
+      return res.status(500).json({ success: false, error: 'Failed to update balance', details: updateErr.message });
+    }
+
+    // Record in balance_history
+    await supabase.from('balance_history').insert([{
+      user_id,
+      balance_before: prevBalance,
+      balance_after: newBalance,
+      change: creditAmount,
+      reason: `Admin credit: Win from bet ${bet_id || 'unknown'}`,
+      created_by: req.user?.phone || 'admin',
+      created_at: new Date().toISOString(),
+    }]).catch(() => {});
+
+    console.log(`💰 Credited KSH ${creditAmount} to ${user.username} (${user_id}). Balance: ${prevBalance} → ${newBalance}`);
+
+    res.json({ success: true, newBalance, previousBalance: prevBalance, credited: creditAmount });
+  } catch (err) {
+    console.error('Credit win error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
