@@ -4122,15 +4122,17 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
     }
 
     // Record in balance_history
-    await supabase.from('balance_history').insert([{
-      user_id,
-      balance_before: prevBalance,
-      balance_after: newBalance,
-      change: creditAmount,
-      reason: `Admin credit: Win from bet ${bet_id || 'unknown'}`,
-      created_by: req.user?.phone || 'admin',
-      created_at: new Date().toISOString(),
-    }]).catch(() => {});
+    try {
+      await supabase.from('balance_history').insert([{
+        user_id,
+        balance_before: prevBalance,
+        balance_after: newBalance,
+        change: creditAmount,
+        reason: `Admin credit: Win from bet ${bet_id || 'unknown'}`,
+        created_by: req.user?.phone || 'admin',
+        created_at: new Date().toISOString(),
+      }]);
+    } catch (_) {}
 
     console.log(`💰 Credited KSH ${creditAmount} to ${user.username} (${user_id}). Balance: ${prevBalance} → ${newBalance}`);
 
