@@ -73,10 +73,30 @@ const AdminPortal = () => {
   const [newGame, setNewGame] = useState({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" as const });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
-  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>(() => {
-    try { return JSON.parse(localStorage.getItem('creditedBets') || '{}'); } catch { return {}; }
-  });
+  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
   const [creditingBet, setCreditingBet] = useState<string | null>(null);
+
+  // Fetch credited bet IDs from server on load
+  useEffect(() => {
+    const fetchCredited = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
+        const resp = await fetch(`${apiUrl}/api/admin/bets/credited?phone=${adminPhone}`);
+        const data = await resp.json();
+        if (data.success && data.creditedBetIds) {
+          const map: Record<string, boolean> = {};
+          data.creditedBetIds.forEach((betId: string) => {
+            // Match by betId - find the bet with this betId
+            const bet = bets.find((b: any) => b.betId === betId);
+            if (bet) map[bet.id] = true;
+          });
+          setCreditedBets(prev => ({ ...prev, ...map }));
+        }
+      } catch (_) {}
+    };
+    if (bets.length > 0) fetchCredited();
+  }, [bets]);
   
   // Payment management state
   const [failedPayments, setFailedPayments] = useState<any[]>([]);
@@ -1292,11 +1312,7 @@ const AdminPortal = () => {
       });
       const data = await resp.json();
       if (data.success) {
-        setCreditedBets(prev => {
-          const updated = { ...prev, [bet.id]: true };
-          localStorage.setItem('creditedBets', JSON.stringify(updated));
-          return updated;
-        });
+        setCreditedBets(prev => ({ ...prev, [bet.id]: true }));
       } else {
         alert(`Failed to credit: ${data.error}`);
       }

@@ -4143,4 +4143,27 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
   }
 });
 
+// GET credited bet IDs (from balance_history)
+router.get('/bets/credited', checkAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('balance_history')
+      .select('reason')
+      .like('reason', 'Admin credit: Win from bet %');
+
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    const creditedBetIds = (data || []).map(row => {
+      const match = row.reason.match(/Admin credit: Win from bet (.+)/);
+      return match ? match[1] : null;
+    }).filter(Boolean);
+
+    res.json({ success: true, creditedBetIds });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
