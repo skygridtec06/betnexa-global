@@ -377,7 +377,7 @@ router.get('/games/:gameId/time', async (req, res) => {
     // Query the database - search by game_id field (the text ID)
     const query = supabase
       .from('games')
-      .select('id, game_id, kickoff_start_time, is_kickoff_started, status, is_halftime, game_paused, minute')
+      .select('id, game_id, kickoff_start_time, is_kickoff_started, status, is_halftime, game_paused, minute, updated_at')
       .eq('game_id', gameId);
 
     const { data, error } = await query.maybeSingle();
@@ -419,22 +419,37 @@ router.get('/games/:gameId/time', async (req, res) => {
     const serverNow = Date.now();
     const kickoffStartTime = data.kickoff_start_time;
     const kickoffMs = kickoffStartTime ? new Date(kickoffStartTime).getTime() : null;
+    const updatedAtMs = data.updated_at ? new Date(data.updated_at).getTime() : null;
 
     let minute = 0;
     let seconds = 0;
+    const storedMinute = parseInt(data.minute, 10) || 0;
 
     // Freeze timer during halftime/pause so UI clearly shows HALFTIME and doesn't keep counting.
     if (data.is_halftime || data.game_paused) {
-      minute = Number.isFinite(data.minute) ? data.minute : 0;
+      minute = storedMinute;
       seconds = 0;
       console.log(`⏸️  [TIMER] ${data.game_id}: Paused at ${String(minute).padStart(2, '0')}:00`);
+    } else if (data.is_kickoff_started && updatedAtMs && !isNaN(updatedAtMs)) {
+      // Use API-reported minute as anchor and only interpolate seconds from last sync.
+      // This prevents long-halftime drift (e.g. 108' while real minute is ~90').
+      const sinceUpdateSeconds = Math.max(0, Math.floor((serverNow - updatedAtMs) / 1000));
+      minute = storedMinute + Math.floor(sinceUpdateSeconds / 60);
+      seconds = sinceUpdateSeconds % 60;
+
+      // Safety cap while still allowing stoppage time.
+      if (minute > 130) {
+        minute = storedMinute;
+        seconds = 0;
+      }
+
+      console.log(`🎯 [TIMER] ${data.game_id}: ${String(minute).padStart(2, '0')}:${String(seconds).padStart(2, '0')} (anchor: ${storedMinute}', +${sinceUpdateSeconds}s)`);
     } else if (data.is_kickoff_started && kickoffMs && !isNaN(kickoffMs)) {
+      // Fallback for legacy rows missing updated_at
       const elapsedMs = serverNow - kickoffMs;
       const elapsedSeconds = Math.floor(elapsedMs / 1000);
       minute = Math.floor(elapsedSeconds / 60);
       seconds = elapsedSeconds % 60;
-
-      console.log(`🎯 [TIMER] ${data.game_id}: ${String(minute).padStart(2, '0')}:${String(seconds).padStart(2, '0')} (elapsed: ${elapsedSeconds}s)`);
     } else {
       console.log(`⏹️  [TIMER] ${data.game_id}: Game not started yet (is_kickoff_started: ${data.is_kickoff_started})`);
     }

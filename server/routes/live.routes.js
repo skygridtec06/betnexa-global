@@ -152,6 +152,10 @@ function isFinishedStatus(short) {
   return ['FT', 'AET', 'PEN', 'CANC', 'PST', 'ABD', 'AWD', 'WO'].includes(String(short || '').toUpperCase());
 }
 
+function isBreakStatus(short) {
+  return ['HT', 'BT', 'INT'].includes(String(short || '').toUpperCase());
+}
+
 // ── GET /api/live/sync ─────────────────────────────────────────────────────────
 // Fetches live-fixture data from API-Football and updates scores + live odds in DB.
 router.get('/sync', async (req, res) => {
@@ -196,7 +200,7 @@ router.get('/sync', async (req, res) => {
       if (!liveFixture) continue; // Not live right now — skip
 
       const statusShort = liveFixture?.fixture?.status?.short || '';
-      const isHalftime = statusShort === 'HT';
+      const isHalftime = isBreakStatus(statusShort);
       const elapsed = parseInt(liveFixture?.fixture?.status?.elapsed || 0, 10) || 0;
       const homeScore = liveFixture?.goals?.home ?? 0;
       const awayScore = liveFixture?.goals?.away ?? 0;
@@ -300,7 +304,7 @@ router.get('/sync', async (req, res) => {
 
       // Game exists in DB as upcoming — flip status to live
       const statusShort = liveFixture?.fixture?.status?.short || '';
-      const isHalftime = statusShort === 'HT';
+      const isHalftime = isBreakStatus(statusShort);
       const elapsed = parseInt(liveFixture?.fixture?.status?.elapsed || 0, 10) || 0;
 
       await supabase
