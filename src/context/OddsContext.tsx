@@ -214,6 +214,66 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timerInterval);
   }, []); // No dependencies - interval runs once and uses ref for current games
 
+  // Live data polling — every 30 s, pull fresh scores + live odds from API-Football via the server.
+  useEffect(() => {
+    const liveDataInterval = setInterval(async () => {
+      // Only run if there are live games
+      const hasLive = gamesRef.current.some((g) => g.status === 'live');
+      if (!hasLive) return;
+
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+
+      try {
+        // 1. Trigger a server-side sync of scores + odds from API-Football
+        await fetch(`${apiUrl}/api/live/sync`, { signal: AbortSignal.timeout(15000) });
+
+        // 2. Fetch updated live game data from DB
+        const resp = await fetch(`${apiUrl}/api/live/games`, { signal: AbortSignal.timeout(8000) });
+        if (!resp.ok) return;
+
+        const data = await resp.json();
+        if (!data.success || !Array.isArray(data.games)) return;
+
+        // 3. Patch scores, odds and markets for live games without touching timer state
+        setGames((prev) => {
+          let hasChanges = false;
+          const updated = prev.map((g) => {
+            const fresh = data.games.find((lg: any) => lg.game_id === g.id);
+            if (!fresh) return g;
+
+            const scoreChanged = fresh.home_score !== g.homeScore || fresh.away_score !== g.awayScore;
+            const oddsChanged =
+              fresh.home_odds !== g.homeOdds ||
+              fresh.draw_odds !== g.drawOdds ||
+              fresh.away_odds !== g.awayOdds;
+            const marketsChanged = JSON.stringify(fresh.markets) !== JSON.stringify(g.markets);
+
+            if (!scoreChanged && !oddsChanged && !marketsChanged) return g;
+
+            hasChanges = true;
+            return {
+              ...g,
+              homeScore: fresh.home_score,
+              awayScore: fresh.away_score,
+              homeOdds: fresh.home_odds,
+              drawOdds: fresh.draw_odds,
+              awayOdds: fresh.away_odds,
+              markets: fresh.markets,
+            };
+          });
+
+          if (!hasChanges) return prev;
+          gamesRef.current = updated;
+          return updated;
+        });
+      } catch {
+        // Silently ignore — live data will try again next cycle
+      }
+    }, 30000); // Poll every 30 seconds
+
+    return () => clearInterval(liveDataInterval);
+  }, []); // No dependencies - uses ref for current games
+
   const refreshGames = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
