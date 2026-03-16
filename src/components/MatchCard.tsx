@@ -100,66 +100,170 @@ function poissonPMF(k: number, lambda: number): number {
   return Math.exp(logP);
 }
 
-function computeLiveOdds(
-  preHome: number, preDraw: number, preAway: number,
-  homeScore: number, awayScore: number, minute: number
-): { home: number; draw: number; away: number } {
-  const clamp = (v: number) => Math.min(Math.max(+v.toFixed(2), 1.01), 60);
-  const minuteCapped = Math.min(Math.max(minute, 0), 90);
-  const timeRemaining = Math.max((90 - minuteCapped) / 90, 0.005);
-
-  // Normalize pre-match probs (remove bookmaker margin)
+function fitExpectedGoals(preHome: number, preDraw: number, preAway: number) {
   const rH = 1 / Math.max(preHome, 1.01);
   const rD = 1 / Math.max(preDraw, 1.01);
   const rA = 1 / Math.max(preAway, 1.01);
   const tot = rH + rD + rA;
-  const pH = rH / tot, pD = rD / tot, pA = rA / tot;
+  const pH = rH / tot;
+  const pD = rD / tot;
+  const pA = rA / tot;
 
-  // Estimate lambda_h / lambda_a ratio from win probabilities
   const ratio = Math.sqrt(Math.max(pH / Math.max(pA, 0.01), 0.01));
 
-  // Bisect for total expected goals T such that Poisson P(draw) = pD
-  let lo = 0.3, hi = 9.0;
+  let lo = 0.3;
+  let hi = 9.0;
   for (let iter = 0; iter < 35; iter++) {
-    const T = (lo + hi) / 2;
-    const lh = T * ratio / (1 + ratio);
-    const la = T / (1 + ratio);
-    let dProb = 0;
-    for (let k = 0; k <= 9; k++) dProb += poissonPMF(k, lh) * poissonPMF(k, la);
-    if (dProb > pD) lo = T; else hi = T;
+    const totalGoals = (lo + hi) / 2;
+    const lambdaH = totalGoals * ratio / (1 + ratio);
+    const lambdaA = totalGoals / (1 + ratio);
+    let drawProb = 0;
+    for (let k = 0; k <= 9; k++) {
+      drawProb += poissonPMF(k, lambdaH) * poissonPMF(k, lambdaA);
+    }
+    if (drawProb > pD) lo = totalGoals;
+    else hi = totalGoals;
   }
-  const T = (lo + hi) / 2;
-  const lambdaH = T * ratio / (1 + ratio);
-  const lambdaA = T / (1 + ratio);
 
-  // Remaining expected goals scaled by time left
-  const remH = lambdaH * timeRemaining;
-  const remA = lambdaA * timeRemaining;
+  const totalGoals = (lo + hi) / 2;
+  return {
+    lambdaH: totalGoals * ratio / (1 + ratio),
+    lambdaA: totalGoals / (1 + ratio),
+  };
+}
 
-  // Compute result probability given current score
-  let pWin = 0, pDrawNew = 0, pLose = 0;
-  for (let addH = 0; addH <= 8; addH++) {
-    const pmfH = poissonPMF(addH, remH);
+function buildScoreMatrix(lambdaH: number, lambdaA: number, maxGoals = 8) {
+  const matrix: Array<{ addHome: number; addAway: number; probability: number }> = [];
+  for (let addHome = 0; addHome <= maxGoals; addHome++) {
+    const pmfH = poissonPMF(addHome, lambdaH);
     if (pmfH < 1e-9) continue;
-    for (let addA = 0; addA <= 8; addA++) {
-      const pmfA = poissonPMF(addA, remA);
+    for (let addAway = 0; addAway <= maxGoals; addAway++) {
+      const pmfA = poissonPMF(addAway, lambdaA);
       if (pmfA < 1e-9) continue;
-      const prob = pmfH * pmfA;
-      const fH = homeScore + addH, fA = awayScore + addA;
-      if (fH > fA) pWin += prob;
-      else if (fH === fA) pDrawNew += prob;
-      else pLose += prob;
+      matrix.push({ addHome, addAway, probability: pmfH * pmfA });
+    }
+  }
+  return matrix;
+}
+
+function oddsFromProbability(probability: number, margin = 1.05, maxOdds = 150) {
+  if (!Number.isFinite(probability) || probability <= 0) return undefined;
+  return Math.min(Math.max(+((margin / probability).toFixed(2)), 1.01), maxOdds);
+}
+
+function computeLiveMarketOdds(
+  preHome: number,
+  preDraw: number,
+  preAway: number,
+  homeScore: number,
+  awayScore: number,
+  minute: number
+): MatchMarkets & { home?: number; draw?: number; away?: number } {
+  const minuteCapped = Math.min(Math.max(minute, 0), 90);
+  const { lambdaH, lambdaA } = fitExpectedGoals(preHome, preDraw, preAway);
+  const fullTimeRemainingFactor = Math.max((90 - minuteCapped) / 90, 0.005);
+  const remainingMatrix = buildScoreMatrix(lambdaH * fullTimeRemainingFactor, lambdaA * fullTimeRemainingFactor);
+
+  let homeWin = 0;
+  let draw = 0;
+  let awayWin = 0;
+  let bttsYes = 0;
+  let over15 = 0;
+  let over25 = 0;
+
+  const exactScores: Record<string, number> = {};
+
+  for (const { addHome, addAway, probability } of remainingMatrix) {
+    const finalHome = homeScore + addHome;
+    const finalAway = awayScore + addAway;
+    const totalGoals = finalHome + finalAway;
+
+    if (finalHome > finalAway) homeWin += probability;
+    else if (finalHome === finalAway) draw += probability;
+    else awayWin += probability;
+
+    if (finalHome > 0 && finalAway > 0) bttsYes += probability;
+    if (totalGoals > 1.5) over15 += probability;
+    if (totalGoals > 2.5) over25 += probability;
+
+    if (finalHome <= 4 && finalAway <= 4) {
+      exactScores[`cs${finalHome}${finalAway}`] = (exactScores[`cs${finalHome}${finalAway}`] || 0) + probability;
     }
   }
 
-  const totalP = pWin + pDrawNew + pLose;
-  if (totalP < 0.001) return { home: preHome, draw: preDraw, away: preAway };
+  const result: MatchMarkets & { home?: number; draw?: number; away?: number } = {
+    home: oddsFromProbability(homeWin, 1.05, 60),
+    draw: oddsFromProbability(draw, 1.05, 60),
+    away: oddsFromProbability(awayWin, 1.05, 60),
+    bttsYes: oddsFromProbability(bttsYes, 1.06),
+    bttsNo: oddsFromProbability(1 - bttsYes, 1.06),
+    over15: oddsFromProbability(over15, 1.06),
+    under15: oddsFromProbability(1 - over15, 1.06),
+    over25: oddsFromProbability(over25, 1.06),
+    under25: oddsFromProbability(1 - over25, 1.06),
+    doubleChanceHomeOrDraw: oddsFromProbability(homeWin + draw, 1.05, 25),
+    doubleChanceAwayOrDraw: oddsFromProbability(awayWin + draw, 1.05, 25),
+    doubleChanceHomeOrAway: oddsFromProbability(homeWin + awayWin, 1.05, 25),
+  };
 
-  const margin = 1.05; // 5% bookmaker overround
+  for (let h = 0; h <= 4; h++) {
+    for (let a = 0; a <= 4; a++) {
+      const key = `cs${h}${a}`;
+      result[key] = oddsFromProbability(exactScores[key] || 0, 1.08);
+    }
+  }
+
+  if (minuteCapped < 45) {
+    const firstHalfFactor = Math.max((45 - minuteCapped) / 90, 0.001);
+    const secondHalfFactor = 45 / 90;
+    const firstHalfMatrix = buildScoreMatrix(lambdaH * firstHalfFactor, lambdaA * firstHalfFactor, 6);
+    const secondHalfMatrix = buildScoreMatrix(lambdaH * secondHalfFactor, lambdaA * secondHalfFactor, 6);
+
+    let hh = 0;
+    let dd = 0;
+    let aa = 0;
+    let dh = 0;
+    let da = 0;
+
+    for (const firstHalf of firstHalfMatrix) {
+      const halftimeHome = homeScore + firstHalf.addHome;
+      const halftimeAway = awayScore + firstHalf.addAway;
+      const halftimeProb = firstHalf.probability;
+      const halftimeResult = halftimeHome > halftimeAway ? 'H' : halftimeHome === halftimeAway ? 'D' : 'A';
+
+      for (const secondHalf of secondHalfMatrix) {
+        const fullTimeHome = halftimeHome + secondHalf.addHome;
+        const fullTimeAway = halftimeAway + secondHalf.addAway;
+        const probability = halftimeProb * secondHalf.probability;
+        const fullTimeResult = fullTimeHome > fullTimeAway ? 'H' : fullTimeHome === fullTimeAway ? 'D' : 'A';
+
+        if (halftimeResult === 'H' && fullTimeResult === 'H') hh += probability;
+        if (halftimeResult === 'D' && fullTimeResult === 'D') dd += probability;
+        if (halftimeResult === 'A' && fullTimeResult === 'A') aa += probability;
+        if (halftimeResult === 'D' && fullTimeResult === 'H') dh += probability;
+        if (halftimeResult === 'D' && fullTimeResult === 'A') da += probability;
+      }
+    }
+
+    result.htftHomeHome = oddsFromProbability(hh, 1.08);
+    result.htftDrawDraw = oddsFromProbability(dd, 1.08);
+    result.htftAwayAway = oddsFromProbability(aa, 1.08);
+    result.htftDrawHome = oddsFromProbability(dh, 1.08);
+    result.htftDrawAway = oddsFromProbability(da, 1.08);
+  }
+
+  return result;
+}
+
+function computeLiveOdds(
+  preHome: number, preDraw: number, preAway: number,
+  homeScore: number, awayScore: number, minute: number
+): { home: number; draw: number; away: number } {
+  const markets = computeLiveMarketOdds(preHome, preDraw, preAway, homeScore, awayScore, minute);
   return {
-    home: clamp(margin / (pWin / totalP)),
-    draw: clamp(margin / (pDrawNew / totalP)),
-    away: clamp(margin / (pLose / totalP)),
+    home: markets.home ?? preHome,
+    draw: markets.draw ?? preDraw,
+    away: markets.away ?? preAway,
   };
 }
 
@@ -206,13 +310,38 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
     [displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds, displayGame.markets]
   );
 
+  const liveMinuteValue = (displayGame.minute ?? 0) + ((displayGame.seconds ?? liveStatus.seconds ?? 0) / 60);
+
+  const computedLiveMarkets = useMemo(() => {
+    if (displayGame.status !== 'live') return undefined;
+    return computeLiveMarketOdds(
+      displayGame.homeOdds,
+      displayGame.drawOdds,
+      displayGame.awayOdds,
+      displayGame.homeScore ?? 0,
+      displayGame.awayScore ?? 0,
+      liveMinuteValue
+    );
+  }, [
+    displayGame.status,
+    displayGame.homeOdds,
+    displayGame.drawOdds,
+    displayGame.awayOdds,
+    displayGame.homeScore,
+    displayGame.awayScore,
+    liveMinuteValue,
+  ]);
+
   const getMarketOdd = (key: string, aliases: string[] = [], fallback?: number): number | undefined => {
     const keys = [key, ...aliases];
 
     if (displayGame.status === "live") {
-      // Accuracy first: for live matches only display values present from API-synced markets.
       for (const k of keys) {
         const v = displayGame.markets?.[k];
+        if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
+      }
+      for (const k of keys) {
+        const v = computedLiveMarkets?.[k];
         if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
       }
       return undefined;
@@ -240,16 +369,17 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
         away: (mk.liveAway as number) ?? displayGame.awayOdds,
       };
     }
-    return computeLiveOdds(
-      displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds,
-      displayGame.homeScore ?? 0, displayGame.awayScore ?? 0,
-      displayGame.minute ?? 0
-    );
+    return {
+      home: computedLiveMarkets?.home ?? displayGame.homeOdds,
+      draw: computedLiveMarkets?.draw ?? displayGame.drawOdds,
+      away: computedLiveMarkets?.away ?? displayGame.awayOdds,
+    };
   }, [
     displayGame.status,
     displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds,
-    displayGame.homeScore, displayGame.awayScore, displayGame.minute,
+    displayGame.homeScore, displayGame.awayScore,
     displayGame.markets,
+    computedLiveMarkets,
   ]);
 
   const handleSelect = (type: string, odds: number) => {
@@ -381,9 +511,6 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
                   if (homeHasScored && awayHasScored) {
                     // Both have scored - BTTS Yes is settled
                     return <div className="col-span-2 text-center text-xs text-muted-foreground py-2">Both teams have scored</div>;
-                  } else if ((homeScore > 0 && awayScore === 0) || (homeScore === 0 && awayScore > 0)) {
-                    // One has scored, other hasn't - only one team can score now
-                    return <div className="col-span-2 text-center text-xs text-muted-foreground py-2">Only one more team can score</div>;
                   } else {
                     // Neither has scored yet
                     return (
