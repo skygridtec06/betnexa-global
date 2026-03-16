@@ -24,10 +24,6 @@ export function Header() {
   const navigate = useNavigate();
   const { balance } = useBets();
   const { isLoggedIn, logout, user } = useUser();
-  const compactBalance = new Intl.NumberFormat("en", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(balance);
 
   const handleLogout = () => {
     logout();
@@ -143,9 +139,9 @@ export function Header() {
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[120px] min-w-0">
+              <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[145px] min-w-0">
                 <Wallet className="h-3 w-3 text-primary shrink-0" />
-                <span className="text-[11px] font-bold text-foreground whitespace-nowrap truncate">KSH {compactBalance}</span>
+                <span className="text-[10px] font-bold text-foreground whitespace-nowrap truncate">KSH {balance.toLocaleString()}</span>
               </div>
             )}
             <button
