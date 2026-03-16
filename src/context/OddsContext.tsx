@@ -227,45 +227,9 @@ export function OddsProvider({ children }: { children: ReactNode }) {
         // 1. Trigger a server-side sync of scores + odds from API-Football
         await fetch(`${apiUrl}/api/live/sync`, { signal: AbortSignal.timeout(15000) });
 
-        // 2. Fetch updated live game data from DB
-        const resp = await fetch(`${apiUrl}/api/live/games`, { signal: AbortSignal.timeout(8000) });
-        if (!resp.ok) return;
-
-        const data = await resp.json();
-        if (!data.success || !Array.isArray(data.games)) return;
-
-        // 3. Patch scores, odds and markets for live games without touching timer state
-        setGames((prev) => {
-          let hasChanges = false;
-          const updated = prev.map((g) => {
-            const fresh = data.games.find((lg: any) => lg.game_id === g.id);
-            if (!fresh) return g;
-
-            const scoreChanged = fresh.home_score !== g.homeScore || fresh.away_score !== g.awayScore;
-            const oddsChanged =
-              fresh.home_odds !== g.homeOdds ||
-              fresh.draw_odds !== g.drawOdds ||
-              fresh.away_odds !== g.awayOdds;
-            const marketsChanged = JSON.stringify(fresh.markets) !== JSON.stringify(g.markets);
-
-            if (!scoreChanged && !oddsChanged && !marketsChanged) return g;
-
-            hasChanges = true;
-            return {
-              ...g,
-              homeScore: fresh.home_score,
-              awayScore: fresh.away_score,
-              homeOdds: fresh.home_odds,
-              drawOdds: fresh.draw_odds,
-              awayOdds: fresh.away_odds,
-              markets: fresh.markets,
-            };
-          });
-
-          if (!hasChanges) return prev;
-          gamesRef.current = updated;
-          return updated;
-        });
+        // 2. Refresh full game list so status transitions (live -> finished)
+        // are reflected immediately in the UI sections.
+        await refreshGames();
       } catch {
         // Silently ignore — live data will try again next cycle
       }

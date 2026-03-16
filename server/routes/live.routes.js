@@ -148,6 +148,10 @@ async function apiGet(path, params, apiKey) {
   return json.response || [];
 }
 
+function isFinishedStatus(short) {
+  return ['FT', 'AET', 'PEN', 'CANC', 'PST', 'ABD', 'AWD', 'WO'].includes(String(short || '').toUpperCase());
+}
+
 // ── GET /api/live/sync ─────────────────────────────────────────────────────────
 // Fetches live-fixture data from API-Football and updates scores + live odds in DB.
 router.get('/sync', async (req, res) => {
@@ -159,6 +163,7 @@ router.get('/sync', async (req, res) => {
   const supabase = getSupabase();
   const updated = [];
   const errors = [];
+  let finished = 0;
 
   try {
     // Step 1: get all currently live fixtures from API-Football
@@ -315,9 +320,50 @@ router.get('/sync', async (req, res) => {
         .eq('game_id', gameId);
     }
 
+    // Step 5: live in DB but no longer in API live feed => check if ended, then mark finished.
+    const dbLiveGames = (dbGames || []).filter((g) => g.status === 'live');
+    for (const dbGame of dbLiveGames) {
+      const fixtureId = parseInt(dbGame.game_id.replace('af-', ''), 10);
+      if (!fixtureId || liveMap[fixtureId]) continue;
+
+      try {
+        const fixtureRows = await apiGet('/fixtures', { id: String(fixtureId) }, apiKey);
+        const fixture = fixtureRows?.[0];
+        const short = fixture?.fixture?.status?.short || '';
+        if (!isFinishedStatus(short)) continue;
+
+        const elapsed = parseInt(fixture?.fixture?.status?.elapsed || 0, 10) || 0;
+        const homeScore = fixture?.goals?.home ?? null;
+        const awayScore = fixture?.goals?.away ?? null;
+
+        const { error: finishErr } = await supabase
+          .from('games')
+          .update({
+            status: 'finished',
+            minute: elapsed,
+            home_score: homeScore,
+            away_score: awayScore,
+            is_halftime: false,
+            game_paused: false,
+            kickoff_paused_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', dbGame.id);
+
+        if (finishErr) {
+          errors.push({ gameId: dbGame.game_id, finishError: finishErr.message });
+        } else {
+          finished += 1;
+        }
+      } catch (e) {
+        errors.push({ gameId: dbGame.game_id, finishCheckError: String(e?.message || e) });
+      }
+    }
+
     return res.json({
       success: true,
       updated: updated.length,
+      finished,
       errors: errors.length,
       games: updated,
       ...(errors.length && { errorDetails: errors }),
