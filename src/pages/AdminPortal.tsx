@@ -793,9 +793,7 @@ const AdminPortal = () => {
   };
 
   const removeGameHandler = async (id: string) => {
-    if (!ensureManualGame(id)) return;
     if (!confirm('Are you sure you want to delete this game?')) return;
-    
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/games/${id}`, {
@@ -2110,7 +2108,7 @@ const AdminPortal = () => {
                       <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => editingGame === game.id ? saveMarkets(game.id) : startEditMarkets(game)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Edit market odds"}>
                         {editingGame === game.id ? <Save className="h-4 w-4 text-primary" /> : <Edit2 className="h-4 w-4 text-muted-foreground" />}
                       </Button>
-                      <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => removeGameHandler(game.id)} className="text-destructive hover:text-destructive">
+                      <Button variant="ghost" size="icon" onClick={() => removeGameHandler(game.id)} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
