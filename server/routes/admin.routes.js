@@ -1258,9 +1258,7 @@ router.delete('/games/:gameId', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
 
-    if (isApiManagedGameId(gameId)) {
-      return res.status(403).json({ error: 'API-managed matches cannot be deleted by admin' });
-    }
+    // Allow admin to delete API-managed matches, but still block editing elsewhere
 
     console.log(`🗑️  Deleting game: ${gameId}`);
 
