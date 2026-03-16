@@ -46,6 +46,11 @@ const sortEndedGames = (games: any[]) => {
   });
 };
 
+const isFutureKickoff = (time: string) => {
+  const kickoffMs = new Date(time).getTime();
+  return !Number.isNaN(kickoffMs) && kickoffMs > Date.now();
+};
+
 const Index = () => {
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>(() => {
     try {
@@ -98,7 +103,9 @@ const Index = () => {
       })
     : games;
 
-  const upcomingGames = sortGamesByKickoffTime(filteredGames.filter((g) => g.status === "upcoming"));
+  const upcomingGames = sortGamesByKickoffTime(
+    filteredGames.filter((g) => g.status === "upcoming" && isFutureKickoff(g.time))
+  );
   const liveGames = filteredGames.filter((g) => g.status === "live");
   const endedGames = sortEndedGames(filteredGames.filter((g) => g.status === "finished"));
 

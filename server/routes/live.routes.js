@@ -156,6 +156,15 @@ function isBreakStatus(short) {
   return ['HT', 'BT', 'INT'].includes(String(short || '').toUpperCase());
 }
 
+function isUpcomingStatus(short) {
+  return ['NS', 'TBD', 'PST'].includes(String(short || '').toUpperCase());
+}
+
+function isLiveStatus(short) {
+  const normalized = String(short || '').toUpperCase();
+  return !!normalized && !isUpcomingStatus(normalized) && !isFinishedStatus(normalized);
+}
+
 const TZ = 'Africa/Nairobi';
 const TARGET_MATCHES_PER_DAY = 100;
 
@@ -215,7 +224,7 @@ function classifyGameDateInTZ(isoString) {
 
 function isUpcomingFixtureForSchedule(fixture, targetDate) {
   const short = String(fixture?.fixture?.status?.short || '').toUpperCase();
-  if (!['NS', 'TBD', 'PST'].includes(short)) return false;
+  if (!isUpcomingStatus(short)) return false;
 
   const kickoffMs = new Date(fixture?.fixture?.date || 0).getTime();
   if (isNaN(kickoffMs)) return false;
@@ -327,14 +336,18 @@ router.get('/bootstrap-schedule', async (req, res) => {
     }
 
     const counts = { [today]: 0, [tomorrow]: 0 };
+    let staleUpcomingToday = 0;
     for (const g of afGames || []) {
       if (g.status !== 'upcoming') continue;
       const d = classifyGameDateInTZ(g.time);
-      if (d === today) counts[today] += 1;
+      const kickoffMs = new Date(g.time || 0).getTime();
+      const isFutureTodayKickoff = !isNaN(kickoffMs) && kickoffMs > Date.now();
+      if (d === today && isFutureTodayKickoff) counts[today] += 1;
+      if (d === today && !isFutureTodayKickoff) staleUpcomingToday += 1;
       if (d === tomorrow) counts[tomorrow] += 1;
     }
 
-    if (counts[today] >= TARGET_MATCHES_PER_DAY && counts[tomorrow] >= TARGET_MATCHES_PER_DAY) {
+    if (staleUpcomingToday === 0 && counts[today] >= TARGET_MATCHES_PER_DAY && counts[tomorrow] >= TARGET_MATCHES_PER_DAY) {
       return res.json({
         success: true,
         refreshed: false,
@@ -343,14 +356,16 @@ router.get('/bootstrap-schedule', async (req, res) => {
       });
     }
 
-    // Remove only API-managed non-live games. Admin-created games are untouched.
-    const { data: staleApiGames } = await supabase
-      .from('games')
-      .select('id')
-      .like('game_id', 'af-%')
-      .neq('status', 'live');
+    // Rebuild API-managed upcoming rows, but keep today's finished matches visible.
+    const staleIds = (afGames || [])
+      .filter((g) => {
+        const gameDate = classifyGameDateInTZ(g.time);
+        if (g.status === 'live') return false;
+        if (g.status === 'finished') return gameDate !== today;
+        return true;
+      })
+      .map((g) => g.id);
 
-    const staleIds = (staleApiGames || []).map((g) => g.id);
     if (staleIds.length > 0) {
       await supabase.from('markets').delete().in('game_id', staleIds);
       await supabase.from('games').delete().in('id', staleIds);
@@ -462,12 +477,36 @@ router.get('/sync', async (req, res) => {
     // Step 2: load af-* games from DB that are live or upcoming
     const { data: dbGames, error: dbError } = await supabase
       .from('games')
-      .select('id, game_id, status, kickoff_start_time, game_paused, kickoff_paused_at')
+      .select('id, game_id, status, time, kickoff_start_time, game_paused, kickoff_paused_at')
       .like('game_id', 'af-%')
       .in('status', ['live', 'upcoming']);
 
     if (dbError) {
       return res.status(500).json({ success: false, message: dbError.message });
+    }
+
+    const overdueDates = Array.from(new Set(
+      (dbGames || [])
+        .filter((g) => g.status === 'upcoming')
+        .filter((g) => {
+          const kickoffMs = new Date(g.time || 0).getTime();
+          return !isNaN(kickoffMs) && kickoffMs <= Date.now();
+        })
+        .map((g) => classifyGameDateInTZ(g.time))
+        .filter(Boolean)
+    ));
+
+    const scheduledFixtureMap = {};
+    for (const dateStr of overdueDates) {
+      try {
+        const fixtures = await apiGet('/fixtures', { date: dateStr, timezone: TZ }, apiKey);
+        for (const fixture of fixtures || []) {
+          const fixtureId = fixture?.fixture?.id;
+          if (fixtureId) scheduledFixtureMap[fixtureId] = fixture;
+        }
+      } catch (e) {
+        errors.push({ scheduleDate: dateStr, scheduleSyncError: String(e?.message || e) });
+      }
     }
 
     // Step 3: update each DB game that is currently live in the API
@@ -651,6 +690,75 @@ router.get('/sync', async (req, res) => {
         }
       } catch (e) {
         errors.push({ gameId: dbGame.game_id, finishCheckError: String(e?.message || e) });
+      }
+    }
+
+    // Step 6: upcoming in DB but kickoff has passed => reconcile against fixture status.
+    const overdueUpcomingGames = (dbGames || []).filter((g) => {
+      if (g.status !== 'upcoming') return false;
+      const kickoffMs = new Date(g.time || 0).getTime();
+      return !isNaN(kickoffMs) && kickoffMs <= Date.now();
+    });
+
+    for (const dbGame of overdueUpcomingGames) {
+      const fixtureId = parseInt(dbGame.game_id.replace('af-', ''), 10);
+      if (!fixtureId || liveMap[fixtureId]) continue;
+
+      const fixture = scheduledFixtureMap[fixtureId];
+      if (!fixture) continue;
+
+      const short = fixture?.fixture?.status?.short || '';
+      const elapsed = parseInt(fixture?.fixture?.status?.elapsed || 0, 10) || 0;
+      const homeScore = fixture?.goals?.home ?? 0;
+      const awayScore = fixture?.goals?.away ?? 0;
+      const isHalftime = isBreakStatus(short);
+      const nowIso = new Date().toISOString();
+
+      if (isFinishedStatus(short)) {
+        const { error: finishErr } = await supabase
+          .from('games')
+          .update({
+            status: 'finished',
+            minute: elapsed,
+            home_score: homeScore,
+            away_score: awayScore,
+            is_kickoff_started: true,
+            is_halftime: false,
+            game_paused: false,
+            kickoff_paused_at: null,
+            updated_at: nowIso,
+          })
+          .eq('id', dbGame.id);
+
+        if (finishErr) {
+          errors.push({ gameId: dbGame.game_id, overdueFinishError: finishErr.message });
+        } else {
+          finished += 1;
+        }
+        continue;
+      }
+
+      if (!isLiveStatus(short)) continue;
+
+      const kickoffStartTime = new Date(Date.now() - elapsed * 60000).toISOString();
+      const { error: liveErr } = await supabase
+        .from('games')
+        .update({
+          status: 'live',
+          is_kickoff_started: true,
+          kickoff_start_time: kickoffStartTime,
+          home_score: homeScore,
+          away_score: awayScore,
+          minute: elapsed,
+          is_halftime: isHalftime,
+          game_paused: isHalftime,
+          kickoff_paused_at: isHalftime ? nowIso : null,
+          updated_at: nowIso,
+        })
+        .eq('id', dbGame.id);
+
+      if (liveErr) {
+        errors.push({ gameId: dbGame.game_id, overdueLiveError: liveErr.message });
       }
     }
 

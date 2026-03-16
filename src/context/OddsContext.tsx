@@ -48,8 +48,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       if (game.status === 'live') return true;
       const kickoffMs = new Date(game.time).getTime();
       if (isNaN(kickoffMs)) return false;
-      const delta = kickoffMs - now;
-      return delta <= 2 * 60 * 1000 && delta >= -2 * 60 * 1000;
+      return kickoffMs <= now + 2 * 60 * 1000;
     });
   };
 
