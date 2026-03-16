@@ -1258,7 +1258,7 @@ router.delete('/games/:gameId', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
 
-    // Explicitly allow admin to delete any match, including API and live matches
+    // Absolutely allow admin to delete any match, including API and live matches
     console.log(`🗑️  Deleting game: ${gameId}`);
 
     // Find the game first - check if gameId is UUID or text game_id
@@ -1284,7 +1284,7 @@ router.delete('/games/:gameId', checkAdmin, async (req, res) => {
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    // No status check: allow delete regardless of match status (upcoming, live, finished, etc.)
+    // No status or API check: allow delete regardless of match status or source
     const { error } = await supabase
       .from('games')
       .delete()
