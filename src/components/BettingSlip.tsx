@@ -189,11 +189,10 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
         description: `BetID: ${data.bet.betId} | KSH ${stakeNum.toFixed(2)} on ${items.length} selection${items.length > 1 ? "s" : ""} - Potential win: KSH ${potentialWin.toFixed(2)}`,
       });
 
-      // Reset the slip
+      // Keep selections on slip; user can remove or clear manually.
       setStake("");
-      onClear();
       setIsPlacing(false);
-      setIsOpen(false);
+      setIsOpen(true);
     } catch (error) {
       console.error('Error placing bet:', error);
       toast({
