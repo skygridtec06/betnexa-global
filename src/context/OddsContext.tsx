@@ -48,7 +48,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       if (game.status === 'live') return true;
       const kickoffMs = new Date(game.time).getTime();
       if (isNaN(kickoffMs)) return false;
-      return kickoffMs <= now + 60000;
+      const delta = kickoffMs - now;
+      return delta <= 2 * 60 * 1000 && delta >= -2 * 60 * 1000;
     });
   };
 
@@ -57,6 +58,15 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     const fetchGames = async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        
+        // Maintain API-managed schedule as today+tomorrow before loading list.
+        try {
+          await fetch(`${apiUrl}/api/live/bootstrap-schedule`, {
+            signal: AbortSignal.timeout(30000),
+          });
+        } catch {
+          // Non-blocking: still load existing DB games if bootstrap is unavailable
+        }
         
         console.log('🔄 Fetching games from:', apiUrl);
 
@@ -249,6 +259,29 @@ export function OddsProvider({ children }: { children: ReactNode }) {
 
     return () => clearInterval(liveDataInterval);
   }, []); // No dependencies - uses ref for current games
+
+  // Daily schedule maintenance: DB-only check most of the time, API fetch only when stale
+  // (e.g., after midnight) to keep exactly today + tomorrow available.
+  useEffect(() => {
+    const ensureSchedule = async () => {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      try {
+        const resp = await fetch(`${apiUrl}/api/live/bootstrap-schedule`, {
+          signal: AbortSignal.timeout(45000),
+        });
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (data?.success && data?.refreshed) {
+          await refreshGames();
+        }
+      } catch {
+        // Silent retry on next interval
+      }
+    };
+
+    const scheduleInterval = setInterval(ensureSchedule, 10 * 60 * 1000);
+    return () => clearInterval(scheduleInterval);
+  }, []);
 
   const refreshGames = async () => {
     try {

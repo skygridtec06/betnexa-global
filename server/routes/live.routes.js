@@ -156,6 +156,242 @@ function isBreakStatus(short) {
   return ['HT', 'BT', 'INT'].includes(String(short || '').toUpperCase());
 }
 
+const TZ = 'Africa/Nairobi';
+const TARGET_MATCHES_PER_DAY = 100;
+
+const PREFERRED_LEAGUE_IDS = new Set([
+  2, 3, 848,
+  39, 61, 78, 88, 94, 135, 140, 144, 203,
+  253, 307, 262, 71, 73, 106, 113, 128,
+  129, 130, 131, 134, 136, 137, 138, 139,
+  218, 172, 188
+]);
+
+const MAJOR_COUNTRIES = new Set([
+  'World', 'England', 'Spain', 'Italy', 'Germany', 'France', 'Netherlands', 'Portugal', 'Belgium',
+  'Turkey', 'Scotland', 'Austria', 'Switzerland', 'Denmark', 'Sweden', 'Norway',
+  'Brazil', 'Argentina', 'Mexico', 'USA', 'Japan', 'South-Korea', 'Saudi-Arabia',
+  'Colombia', 'Ecuador', 'Chile', 'Uruguay', 'Paraguay', 'Peru', 'Venezuela'
+]);
+
+function formatDateInTZ(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+}
+
+function isYouthCompetition(leagueName) {
+  if (!leagueName) return false;
+  return /(u[-\s]?(18|19|20|21|22)|under[-\s]?(18|19|20|21|22))/i.test(leagueName);
+}
+
+function isLowTierCompetition(leagueName) {
+  const name = String(leagueName || '').toLowerCase();
+  return /(reserve|reserves|women|feminin|femenil|amateur|regional|3\. division|third league|iv |ii liga|iii liga|liga 2|2\. division|second league|1 lyga|birinci|challenger|u23|u21|u20|u19|u18|\bii\b|\bb\b)/i.test(name);
+}
+
+function isMajorCompetition(fixture) {
+  const leagueId = fixture?.league?.id;
+  const leagueName = fixture?.league?.name || '';
+  const country = fixture?.league?.country || '';
+  const lname = leagueName.toLowerCase();
+
+  if (isYouthCompetition(leagueName) || isLowTierCompetition(leagueName)) return false;
+  if (PREFERRED_LEAGUE_IDS.has(leagueId)) return true;
+  if (!MAJOR_COUNTRIES.has(country)) return false;
+
+  return /(premier league|serie a|la liga|bundesliga|ligue 1|eredivisie|primeira liga|super lig|major league soccer|mls|j1 league|k league 1|pro league|uefa|champions league|europa|conference|copa|cup|super cup|primera división|liga pro|liga mx|premiership|süper lig)/i.test(lname);
+}
+
+function classifyGameDateInTZ(isoString) {
+  if (!isoString) return null;
+  const dt = new Date(isoString);
+  if (isNaN(dt.getTime())) return null;
+  return formatDateInTZ(dt);
+}
+
+const REQUIRED_MARKET_KEYS = [
+  'bttsYes', 'bttsNo',
+  'over15', 'under15', 'over25', 'under25',
+  'doubleChanceHomeOrDraw', 'doubleChanceAwayOrDraw', 'doubleChanceHomeOrAway',
+  'htftHomeHome', 'htftDrawDraw', 'htftAwayAway', 'htftDrawHome', 'htftDrawAway',
+  ...Array.from({ length: 25 }, (_, i) => `cs${Math.floor(i / 5)}${i % 5}`)
+];
+
+function hasAllRequiredMarkets(m) {
+  if (!m?.home || !m?.draw || !m?.away) return false;
+  return REQUIRED_MARKET_KEYS.every((k) => !!m[k]);
+}
+
+async function upsertScheduleGameWithMarkets(supabase, fixture, marketOdds) {
+  const fixtureId = fixture?.fixture?.id;
+  const leagueName = fixture?.league?.name || 'Football';
+  const homeTeam = fixture?.teams?.home?.name;
+  const awayTeam = fixture?.teams?.away?.name;
+  const kickoff = fixture?.fixture?.date || new Date().toISOString();
+
+  if (!fixtureId || !homeTeam || !awayTeam) return { ok: false };
+
+  const gamePayload = {
+    game_id: `af-${fixtureId}`,
+    league: leagueName,
+    home_team: homeTeam,
+    away_team: awayTeam,
+    home_odds: marketOdds.home,
+    draw_odds: marketOdds.draw,
+    away_odds: marketOdds.away,
+    status: 'upcoming',
+    time: kickoff,
+    home_score: null,
+    away_score: null,
+    minute: 0,
+    is_kickoff_started: false,
+    kickoff_start_time: null,
+    game_paused: false,
+    kickoff_paused_at: null,
+    is_halftime: false,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data: game, error: gameErr } = await supabase
+    .from('games')
+    .upsert([gamePayload], { onConflict: 'game_id' })
+    .select('id, game_id')
+    .single();
+
+  if (gameErr || !game) return { ok: false };
+
+  const marketRows = Object.entries(marketOdds)
+    .filter(([k, v]) => k !== 'home' && k !== 'draw' && k !== 'away' && v)
+    .map(([k, v]) => ({
+      game_id: game.id,
+      market_type: marketTypeFromKey(k),
+      market_key: k,
+      odds: v,
+      updated_at: new Date().toISOString()
+    }));
+
+  if (marketRows.length > 0) {
+    await supabase
+      .from('markets')
+      .upsert(marketRows, { onConflict: 'game_id,market_key' });
+  }
+
+  return { ok: true, gameId: game.game_id };
+}
+
+// ── GET /api/live/bootstrap-schedule ──────────────────────────────────────────
+// Maintains API-managed schedule as exactly today+tomorrow (Nairobi), up to 100 each day.
+router.get('/bootstrap-schedule', async (req, res) => {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return res.status(500).json({ success: false, message: 'API_FOOTBALL_KEY not configured' });
+  }
+
+  const supabase = getSupabase();
+
+  try {
+    const today = formatDateInTZ(new Date());
+    const tomorrow = formatDateInTZ(new Date(Date.now() + 24 * 60 * 60 * 1000));
+    const targetDates = [today, tomorrow];
+
+    const { data: afGames, error: afErr } = await supabase
+      .from('games')
+      .select('id, game_id, time, status')
+      .like('game_id', 'af-%');
+
+    if (afErr) {
+      return res.status(500).json({ success: false, message: afErr.message });
+    }
+
+    const counts = { [today]: 0, [tomorrow]: 0 };
+    for (const g of afGames || []) {
+      if (g.status !== 'upcoming') continue;
+      const d = classifyGameDateInTZ(g.time);
+      if (d === today) counts[today] += 1;
+      if (d === tomorrow) counts[tomorrow] += 1;
+    }
+
+    if (counts[today] >= TARGET_MATCHES_PER_DAY && counts[tomorrow] >= TARGET_MATCHES_PER_DAY) {
+      return res.json({
+        success: true,
+        refreshed: false,
+        message: 'Schedule already ready for today and tomorrow',
+        counts
+      });
+    }
+
+    // Remove only API-managed non-live games. Admin-created games are untouched.
+    const { data: staleApiGames } = await supabase
+      .from('games')
+      .select('id')
+      .like('game_id', 'af-%')
+      .neq('status', 'live');
+
+    const staleIds = (staleApiGames || []).map((g) => g.id);
+    if (staleIds.length > 0) {
+      await supabase.from('markets').delete().in('game_id', staleIds);
+      await supabase.from('games').delete().in('id', staleIds);
+    }
+
+    const imported = { [today]: 0, [tomorrow]: 0 };
+
+    for (const dateStr of targetDates) {
+      const fixtures = await apiGet('/fixtures', { date: dateStr, timezone: TZ }, apiKey);
+
+      const seen = new Set();
+      const filtered = (fixtures || [])
+        .filter((f) => {
+          const id = f?.fixture?.id;
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return isMajorCompetition(f);
+        })
+        .sort((a, b) => new Date(a?.fixture?.date || 0) - new Date(b?.fixture?.date || 0));
+
+      for (const f of filtered) {
+        if (imported[dateStr] >= TARGET_MATCHES_PER_DAY) break;
+
+        const fixtureId = f?.fixture?.id;
+        if (!fixtureId) continue;
+
+        let marketOdds = null;
+        try {
+          const oddsRows = await apiGet('/odds', { fixture: String(fixtureId) }, apiKey);
+          marketOdds = chooseBestOddsSet(oddsRows);
+        } catch {
+          continue;
+        }
+
+        if (!marketOdds || !hasAllRequiredMarkets(marketOdds)) continue;
+
+        const saved = await upsertScheduleGameWithMarkets(supabase, f, marketOdds);
+        if (!saved.ok) continue;
+
+        imported[dateStr] += 1;
+      }
+    }
+
+    return res.json({
+      success: true,
+      refreshed: true,
+      counts: imported,
+      targetPerDay: TARGET_MATCHES_PER_DAY,
+      dates: targetDates
+    });
+  } catch (err) {
+    console.error('❌ Schedule bootstrap error:', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ── GET /api/live/sync ─────────────────────────────────────────────────────────
 // Fetches live-fixture data from API-Football and updates scores + live odds in DB.
 router.get('/sync', async (req, res) => {
