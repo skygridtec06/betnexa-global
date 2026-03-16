@@ -7,21 +7,21 @@ import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
 import { formatKickoffTimeEAT } from "@/lib/timeFormatter";
 
 export interface MatchMarkets {
-  bttsYes: number;
-  bttsNo: number;
-  over25: number;
-  under25: number;
-  over15: number;
-  under15: number;
-  doubleChanceHomeOrDraw: number;
-  doubleChanceAwayOrDraw: number;
-  doubleChanceHomeOrAway: number;
-  htftHomeHome: number;
-  htftDrawDraw: number;
-  htftAwayAway: number;
-  htftDrawHome: number;
-  htftDrawAway: number;
-  [key: string]: number; // For correct scores (cs00, cs01, cs02, etc.)
+  bttsYes?: number;
+  bttsNo?: number;
+  over25?: number;
+  under25?: number;
+  over15?: number;
+  under15?: number;
+  doubleChanceHomeOrDraw?: number;
+  doubleChanceAwayOrDraw?: number;
+  doubleChanceHomeOrAway?: number;
+  htftHomeHome?: number;
+  htftDrawDraw?: number;
+  htftAwayAway?: number;
+  htftDrawHome?: number;
+  htftDrawAway?: number;
+  [key: string]: number | undefined; // For correct scores (cs00, cs01, cs02, etc.)
 }
 
 export interface Match {
@@ -201,10 +201,29 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
     }
   }, [gameFromContext?.minute, gameFromContext?.seconds, gameFromContext?.status, match.id]);
 
-  const markets = useMemo(
+  const preMatchMarkets = useMemo(
     () => generateMarketOdds(displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds, displayGame.markets),
     [displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds, displayGame.markets]
   );
+
+  const getMarketOdd = (key: string, aliases: string[] = [], fallback?: number): number | undefined => {
+    const keys = [key, ...aliases];
+
+    if (displayGame.status === "live") {
+      // Accuracy first: for live matches only display values present from API-synced markets.
+      for (const k of keys) {
+        const v = displayGame.markets?.[k];
+        if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
+      }
+      return undefined;
+    }
+
+    for (const k of keys) {
+      const v = displayGame.markets?.[k];
+      if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
+    }
+    return fallback;
+  };
 
   // Real-time in-play 1X2 odds — recalculates every second as minute advances.
   // Prefers real API live odds (liveHome/liveDraw/liveAway from markets) when available,
@@ -237,18 +256,22 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
     onSelectOdd?.(match.id, type, odds);
   };
 
-  const OddBtn = ({ label, value, type }: { label: string; value: number; type: string }) => (
+  const OddBtn = ({ label, value, type }: { label: string; value?: number; type: string }) => {
+    const isUnavailable = typeof value !== "number" || !Number.isFinite(value) || value < 1.01;
+    const isDisabled = displayGame.status === "finished" || (displayGame.status === "live" && isUnavailable);
+    return (
     <button
-      onClick={() => displayGame.status !== "finished" && handleSelect(type, value)}
-      disabled={displayGame.status === "finished"}
+      onClick={() => !isDisabled && typeof value === "number" && handleSelect(type, value)}
+      disabled={isDisabled}
       className={`odds-btn text-center ${selectedOdd === `${match.id}-${type}` ? "selected" : ""} ${
-        displayGame.status === "finished" ? "opacity-50 cursor-not-allowed" : ""
+        isDisabled ? "opacity-50 cursor-not-allowed" : ""
       }`}
     >
       <span className="block text-[10px] text-muted-foreground">{label}</span>
-      <span className="block font-mono text-sm font-bold">{value.toFixed(2)}</span>
+      <span className="block font-mono text-sm font-bold">{typeof value === "number" ? value.toFixed(2) : "--"}</span>
     </button>
   );
+  };
 
   const tabs: MarketTab[] = ["1X2", "BTTS", "O/U", "DC", "HT/FT", "CS"];
 
@@ -365,16 +388,16 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
                     // Neither has scored yet
                     return (
                       <>
-                        <OddBtn label="Yes" value={markets.bttsYes} type="btts-yes" />
-                        <OddBtn label="No" value={markets.bttsNo} type="btts-no" />
+                        <OddBtn label="Yes" value={getMarketOdd("bttsYes", ["btts:yes"], preMatchMarkets.bttsYes)} type="btts-yes" />
+                        <OddBtn label="No" value={getMarketOdd("bttsNo", ["btts:no"], preMatchMarkets.bttsNo)} type="btts-no" />
                       </>
                     );
                   }
                 })()
               ) : (
                 <>
-                  <OddBtn label="Yes" value={markets.bttsYes} type="btts-yes" />
-                  <OddBtn label="No" value={markets.bttsNo} type="btts-no" />
+                  <OddBtn label="Yes" value={getMarketOdd("bttsYes", ["btts:yes"], preMatchMarkets.bttsYes)} type="btts-yes" />
+                  <OddBtn label="No" value={getMarketOdd("bttsNo", ["btts:no"], preMatchMarkets.bttsNo)} type="btts-no" />
                 </>
               )}
             </div>
@@ -386,8 +409,8 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {displayGame.status !== "live" || (displayGame.homeScore || 0) + (displayGame.awayScore || 0) <= 1 ? (
                   <>
-                    <OddBtn label="Over 1.5" value={markets.over15} type="over15" />
-                    <OddBtn label="Under 1.5" value={markets.under15} type="under15" />
+                    <OddBtn label="Over 1.5" value={getMarketOdd("over15", ["over_under:over_1.5"], preMatchMarkets.over15)} type="over15" />
+                    <OddBtn label="Under 1.5" value={getMarketOdd("under15", ["over_under:under_1.5"], preMatchMarkets.under15)} type="under15" />
                   </>
                 ) : (displayGame.homeScore || 0) + (displayGame.awayScore || 0) > 1 ? (
                   <div className="col-span-2 text-center text-xs text-muted-foreground py-2">
@@ -395,8 +418,8 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
                   </div>
                 ) : (
                   <>
-                    <OddBtn label="Over 1.5" value={markets.over15} type="over15" />
-                    <OddBtn label="Under 1.5" value={markets.under15} type="under15" />
+                    <OddBtn label="Over 1.5" value={getMarketOdd("over15", ["over_under:over_1.5"], preMatchMarkets.over15)} type="over15" />
+                    <OddBtn label="Under 1.5" value={getMarketOdd("under15", ["over_under:under_1.5"], preMatchMarkets.under15)} type="under15" />
                   </>
                 )}
               </div>
@@ -404,8 +427,8 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {displayGame.status !== "live" || (displayGame.homeScore || 0) + (displayGame.awayScore || 0) <= 2 ? (
                   <>
-                    <OddBtn label="Over 2.5" value={markets.over25} type="over25" />
-                    <OddBtn label="Under 2.5" value={markets.under25} type="under25" />
+                    <OddBtn label="Over 2.5" value={getMarketOdd("over25", ["over_under:over_2.5"], preMatchMarkets.over25)} type="over25" />
+                    <OddBtn label="Under 2.5" value={getMarketOdd("under25", ["over_under:under_2.5"], preMatchMarkets.under25)} type="under25" />
                   </>
                 ) : (displayGame.homeScore || 0) + (displayGame.awayScore || 0) > 2 ? (
                   <div className="col-span-2 text-center text-xs text-muted-foreground py-2">
@@ -413,8 +436,8 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
                   </div>
                 ) : (
                   <>
-                    <OddBtn label="Over 2.5" value={markets.over25} type="over25" />
-                    <OddBtn label="Under 2.5" value={markets.under25} type="under25" />
+                    <OddBtn label="Over 2.5" value={getMarketOdd("over25", ["over_under:over_2.5"], preMatchMarkets.over25)} type="over25" />
+                    <OddBtn label="Under 2.5" value={getMarketOdd("under25", ["over_under:under_2.5"], preMatchMarkets.under25)} type="under25" />
                   </>
                 )}
               </div>
@@ -423,19 +446,19 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
 
           {activeTab === "DC" && (
             <div className="grid grid-cols-3 gap-2">
-              <OddBtn label="1X" value={markets.doubleChanceHomeOrDraw} type="dc-1x" />
-              <OddBtn label="X2" value={markets.doubleChanceAwayOrDraw} type="dc-x2" />
-              <OddBtn label="12" value={markets.doubleChanceHomeOrAway} type="dc-12" />
+              <OddBtn label="1X" value={getMarketOdd("doubleChanceHomeOrDraw", ["double_chance:1X"], preMatchMarkets.doubleChanceHomeOrDraw)} type="dc-1x" />
+              <OddBtn label="X2" value={getMarketOdd("doubleChanceAwayOrDraw", ["double_chance:X2"], preMatchMarkets.doubleChanceAwayOrDraw)} type="dc-x2" />
+              <OddBtn label="12" value={getMarketOdd("doubleChanceHomeOrAway", ["double_chance:12"], preMatchMarkets.doubleChanceHomeOrAway)} type="dc-12" />
             </div>
           )}
 
           {activeTab === "HT/FT" && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <OddBtn label="H/H" value={markets.htftHomeHome} type="htft-hh" />
-              <OddBtn label="D/D" value={markets.htftDrawDraw} type="htft-dd" />
-              <OddBtn label="A/A" value={markets.htftAwayAway} type="htft-aa" />
-              <OddBtn label="D/H" value={markets.htftDrawHome} type="htft-dh" />
-              <OddBtn label="D/A" value={markets.htftDrawAway} type="htft-da" />
+              <OddBtn label="H/H" value={getMarketOdd("htftHomeHome", ["half_time_result:1"], preMatchMarkets.htftHomeHome)} type="htft-hh" />
+              <OddBtn label="D/D" value={getMarketOdd("htftDrawDraw", ["half_time_result:X"], preMatchMarkets.htftDrawDraw)} type="htft-dd" />
+              <OddBtn label="A/A" value={getMarketOdd("htftAwayAway", ["half_time_result:2"], preMatchMarkets.htftAwayAway)} type="htft-aa" />
+              <OddBtn label="D/H" value={getMarketOdd("htftDrawHome", [], preMatchMarkets.htftDrawHome)} type="htft-dh" />
+              <OddBtn label="D/A" value={getMarketOdd("htftDrawAway", [], preMatchMarkets.htftDrawAway)} type="htft-da" />
             </div>
           )}
 
@@ -455,11 +478,17 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
                   
                   const key = `cs${home}${away}`;
                   const isOther = home === 4 && away === 4;
+                  const scoreMarket = getMarketOdd(key, [`correct_score:${home}:${away}`], preMatchMarkets[key]);
+
+                  if (displayGame.status === "live" && scoreMarket === undefined) {
+                    return null;
+                  }
+
                   return (
                     <OddBtn 
                       key={key}
                       label={isOther ? "OTHER" : `${home}:${away}`} 
-                      value={markets[key] || 50} 
+                      value={scoreMarket} 
                       type={isOther ? "cs-other" : `cs-${home}${away}`} 
                     />
                   );

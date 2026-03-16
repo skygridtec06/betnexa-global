@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Wallet, Bell, Search, ChevronDown, LogOut, Download } from "lucide-react";
+import { Menu, X, User, Wallet, Bell, Search, ChevronDown, LogOut, Download, PlusCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Logo from "@/assets/betnexa official logo .jpeg";
@@ -102,6 +102,14 @@ export function Header() {
               <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-live" />
             </Button>
             {isLoggedIn && (
+              <Link to="/finance">
+                <Button size="sm" className="bg-yellow-400 text-black hover:bg-yellow-300 font-semibold">
+                  <PlusCircle className="mr-1 h-4 w-4" />
+                  Deposit
+                </Button>
+              </Link>
+            )}
+            {isLoggedIn && (
               <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
                 <Wallet className="h-4 w-4 text-primary" />
                 <span className="text-sm font-bold text-foreground">KSH {balance.toLocaleString()}</span>
@@ -122,6 +130,13 @@ export function Header() {
             )}
           </div>
           <div className="flex items-center gap-2 md:hidden">
+            {isLoggedIn && (
+              <Link to="/finance">
+                <Button size="sm" className="bg-yellow-400 text-black hover:bg-yellow-300 h-8 px-2">
+                  <PlusCircle className="h-4 w-4" />
+                </Button>
+              </Link>
+            )}
             {isLoggedIn && (
               <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1.5">
                 <Wallet className="h-4 w-4 text-primary" />

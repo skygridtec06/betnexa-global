@@ -263,6 +263,17 @@ router.get('/sync', async (req, res) => {
         const liveOddsRows = await apiGet('/odds/live', { fixture: String(fixtureId) }, apiKey);
         const marketOdds = chooseBestOddsSet(liveOddsRows);
 
+        // Replace previous markets for accuracy during live: keep only current API live set.
+        const { error: clearErr } = await supabase
+          .from('markets')
+          .delete()
+          .eq('game_id', dbGame.id)
+          .in('market_type', ['1X2', 'BTTS', 'O/U', 'DC', 'HT/FT', 'CS']);
+
+        if (clearErr) {
+          errors.push({ gameId: dbGame.game_id, clearMarketsError: clearErr.message });
+        }
+
         if (marketOdds) {
           // Store non-1X2 markets as usual
           const marketRows = Object.entries(marketOdds)
