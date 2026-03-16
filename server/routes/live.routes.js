@@ -194,17 +194,16 @@ function isYouthCompetition(leagueName) {
 
 function isLowTierCompetition(leagueName) {
   const name = String(leagueName || '').toLowerCase();
-  return /(reserve|reserves|women|feminin|femenil|amateur|regional|3\. division|third league|iv |ii liga|iii liga|liga 2|2\. division|second league|1 lyga|birinci|challenger|u23|u21|u20|u19|u18|\bii\b|\bb\b)/i.test(name);
+  return /(reserve|reserves|women|feminin|femenil|amateur|regional|3\. division|third league|iv |ii liga|iii liga|liga 2|2\. division|second league|1 lyga|birinci|challenger|u23|u21|u20|u19|u18)/i.test(name);
 }
 
 function isMajorCompetition(fixture) {
   const leagueId = fixture?.league?.id;
   const leagueName = fixture?.league?.name || '';
-  const country = fixture?.league?.country || '';
 
   if (isYouthCompetition(leagueName) || isLowTierCompetition(leagueName)) return false;
   if (PREFERRED_LEAGUE_IDS.has(leagueId)) return true;
-  return MAJOR_COUNTRIES.has(country);
+  return true;
 }
 
 function classifyGameDateInTZ(isoString) {
