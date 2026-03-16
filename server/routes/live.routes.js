@@ -201,13 +201,10 @@ function isMajorCompetition(fixture) {
   const leagueId = fixture?.league?.id;
   const leagueName = fixture?.league?.name || '';
   const country = fixture?.league?.country || '';
-  const lname = leagueName.toLowerCase();
 
   if (isYouthCompetition(leagueName) || isLowTierCompetition(leagueName)) return false;
   if (PREFERRED_LEAGUE_IDS.has(leagueId)) return true;
-  if (!MAJOR_COUNTRIES.has(country)) return false;
-
-  return /(premier league|serie a|la liga|bundesliga|ligue 1|eredivisie|primeira liga|super lig|major league soccer|mls|j1 league|k league 1|pro league|uefa|champions league|europa|conference|copa|cup|super cup|primera división|liga pro|liga mx|premiership|süper lig)/i.test(lname);
+  return MAJOR_COUNTRIES.has(country);
 }
 
 function classifyGameDateInTZ(isoString) {
@@ -228,6 +225,10 @@ const REQUIRED_MARKET_KEYS = [
 function hasAllRequiredMarkets(m) {
   if (!m?.home || !m?.draw || !m?.away) return false;
   return REQUIRED_MARKET_KEYS.every((k) => !!m[k]);
+}
+
+function hasBasic1X2Markets(m) {
+  return !!(m?.home && m?.draw && m?.away);
 }
 
 async function upsertScheduleGameWithMarkets(supabase, fixture, marketOdds) {
@@ -356,6 +357,9 @@ router.get('/bootstrap-schedule', async (req, res) => {
         })
         .sort((a, b) => new Date(a?.fixture?.date || 0) - new Date(b?.fixture?.date || 0));
 
+      const importedFixtureIds = new Set();
+
+      // Pass 1: prefer fully-covered market sets.
       for (const f of filtered) {
         if (imported[dateStr] >= TARGET_MATCHES_PER_DAY) break;
 
@@ -376,6 +380,31 @@ router.get('/bootstrap-schedule', async (req, res) => {
         if (!saved.ok) continue;
 
         imported[dateStr] += 1;
+        importedFixtureIds.add(fixtureId);
+      }
+
+      // Pass 2: if still below target, allow API-sourced partial markets with valid 1X2.
+      for (const f of filtered) {
+        if (imported[dateStr] >= TARGET_MATCHES_PER_DAY) break;
+
+        const fixtureId = f?.fixture?.id;
+        if (!fixtureId || importedFixtureIds.has(fixtureId)) continue;
+
+        let marketOdds = null;
+        try {
+          const oddsRows = await apiGet('/odds', { fixture: String(fixtureId) }, apiKey);
+          marketOdds = chooseBestOddsSet(oddsRows);
+        } catch {
+          continue;
+        }
+
+        if (!marketOdds || !hasBasic1X2Markets(marketOdds)) continue;
+
+        const saved = await upsertScheduleGameWithMarkets(supabase, f, marketOdds);
+        if (!saved.ok) continue;
+
+        imported[dateStr] += 1;
+        importedFixtureIds.add(fixtureId);
       }
     }
 
