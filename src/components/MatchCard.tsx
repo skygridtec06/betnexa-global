@@ -88,6 +88,81 @@ export function generateMarketOdds(homeOdds: number, drawOdds: number, awayOdds:
   return markets;
 }
 
+// ── In-play Poisson odds model ────────────────────────────────────────────────
+// Computes real-time 1X2 odds given pre-match odds + current score + minute.
+
+function poissonPMF(k: number, lambda: number): number {
+  if (k < 0 || lambda < 0) return 0;
+  if (lambda === 0) return k === 0 ? 1 : 0;
+  // Log-space for numerical stability
+  let logP = -lambda + k * Math.log(lambda);
+  for (let i = 2; i <= k; i++) logP -= Math.log(i);
+  return Math.exp(logP);
+}
+
+function computeLiveOdds(
+  preHome: number, preDraw: number, preAway: number,
+  homeScore: number, awayScore: number, minute: number
+): { home: number; draw: number; away: number } {
+  const clamp = (v: number) => Math.min(Math.max(+v.toFixed(2), 1.01), 60);
+  const minuteCapped = Math.min(Math.max(minute, 0), 90);
+  const timeRemaining = Math.max((90 - minuteCapped) / 90, 0.005);
+
+  // Normalize pre-match probs (remove bookmaker margin)
+  const rH = 1 / Math.max(preHome, 1.01);
+  const rD = 1 / Math.max(preDraw, 1.01);
+  const rA = 1 / Math.max(preAway, 1.01);
+  const tot = rH + rD + rA;
+  const pH = rH / tot, pD = rD / tot, pA = rA / tot;
+
+  // Estimate lambda_h / lambda_a ratio from win probabilities
+  const ratio = Math.sqrt(Math.max(pH / Math.max(pA, 0.01), 0.01));
+
+  // Bisect for total expected goals T such that Poisson P(draw) = pD
+  let lo = 0.3, hi = 9.0;
+  for (let iter = 0; iter < 35; iter++) {
+    const T = (lo + hi) / 2;
+    const lh = T * ratio / (1 + ratio);
+    const la = T / (1 + ratio);
+    let dProb = 0;
+    for (let k = 0; k <= 9; k++) dProb += poissonPMF(k, lh) * poissonPMF(k, la);
+    if (dProb > pD) lo = T; else hi = T;
+  }
+  const T = (lo + hi) / 2;
+  const lambdaH = T * ratio / (1 + ratio);
+  const lambdaA = T / (1 + ratio);
+
+  // Remaining expected goals scaled by time left
+  const remH = lambdaH * timeRemaining;
+  const remA = lambdaA * timeRemaining;
+
+  // Compute result probability given current score
+  let pWin = 0, pDrawNew = 0, pLose = 0;
+  for (let addH = 0; addH <= 8; addH++) {
+    const pmfH = poissonPMF(addH, remH);
+    if (pmfH < 1e-9) continue;
+    for (let addA = 0; addA <= 8; addA++) {
+      const pmfA = poissonPMF(addA, remA);
+      if (pmfA < 1e-9) continue;
+      const prob = pmfH * pmfA;
+      const fH = homeScore + addH, fA = awayScore + addA;
+      if (fH > fA) pWin += prob;
+      else if (fH === fA) pDrawNew += prob;
+      else pLose += prob;
+    }
+  }
+
+  const totalP = pWin + pDrawNew + pLose;
+  if (totalP < 0.001) return { home: preHome, draw: preDraw, away: preAway };
+
+  const margin = 1.05; // 5% bookmaker overround
+  return {
+    home: clamp(margin / (pWin / totalP)),
+    draw: clamp(margin / (pDrawNew / totalP)),
+    away: clamp(margin / (pLose / totalP)),
+  };
+}
+
 type MarketTab = "1X2" | "BTTS" | "O/U" | "DC" | "HT/FT" | "CS";
 
 export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
@@ -130,6 +205,33 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
     () => generateMarketOdds(displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds, displayGame.markets),
     [displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds, displayGame.markets]
   );
+
+  // Real-time in-play 1X2 odds — recalculates every second as minute advances.
+  // Prefers real API live odds (liveHome/liveDraw/liveAway from markets) when available,
+  // falls back to Poisson model using pre-match odds + current score + time remaining.
+  const effectiveOdds = useMemo(() => {
+    if (displayGame.status !== 'live') {
+      return { home: displayGame.homeOdds, draw: displayGame.drawOdds, away: displayGame.awayOdds };
+    }
+    const mk = displayGame.markets;
+    if (mk?.liveHome && (mk.liveHome as number) > 1.01) {
+      return {
+        home: mk.liveHome as number,
+        draw: (mk.liveDraw as number) ?? displayGame.drawOdds,
+        away: (mk.liveAway as number) ?? displayGame.awayOdds,
+      };
+    }
+    return computeLiveOdds(
+      displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds,
+      displayGame.homeScore ?? 0, displayGame.awayScore ?? 0,
+      displayGame.minute ?? 0
+    );
+  }, [
+    displayGame.status,
+    displayGame.homeOdds, displayGame.drawOdds, displayGame.awayOdds,
+    displayGame.homeScore, displayGame.awayScore, displayGame.minute,
+    displayGame.markets,
+  ]);
 
   const handleSelect = (type: string, odds: number) => {
     onSelectOdd?.(match.id, type, odds);
@@ -190,9 +292,9 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
 
       {/* 1X2 always visible */}
       <div className="grid grid-cols-3 gap-2">
-        <OddBtn label="1" value={displayGame.homeOdds} type="home" />
-        <OddBtn label="X" value={displayGame.drawOdds} type="draw" />
-        <OddBtn label="2" value={displayGame.awayOdds} type="away" />
+        <OddBtn label="1" value={effectiveOdds.home} type="home" />
+        <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
+        <OddBtn label="2" value={effectiveOdds.away} type="away" />
       </div>
 
       {displayGame.status === "live" && (
@@ -238,9 +340,9 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
           {/* Market content */}
           {activeTab === "1X2" && (
             <div className="grid grid-cols-3 gap-2">
-              <OddBtn label="1" value={match.homeOdds} type="home" />
-              <OddBtn label="X" value={match.drawOdds} type="draw" />
-              <OddBtn label="2" value={match.awayOdds} type="away" />
+              <OddBtn label="1" value={effectiveOdds.home} type="home" />
+              <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
+              <OddBtn label="2" value={effectiveOdds.away} type="away" />
             </div>
           )}
 

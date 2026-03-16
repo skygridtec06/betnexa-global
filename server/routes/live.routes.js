@@ -221,16 +221,7 @@ router.get('/sync', async (req, res) => {
         const marketOdds = chooseBestOddsSet(liveOddsRows);
 
         if (marketOdds) {
-          // Update 1X2 columns on the games row
-          const oddsUpdate = {};
-          if (marketOdds.home) oddsUpdate.home_odds = marketOdds.home;
-          if (marketOdds.draw) oddsUpdate.draw_odds = marketOdds.draw;
-          if (marketOdds.away) oddsUpdate.away_odds = marketOdds.away;
-          if (Object.keys(oddsUpdate).length) {
-            await supabase.from('games').update(oddsUpdate).eq('id', dbGame.id);
-          }
-
-          // Upsert market rows
+          // Store non-1X2 markets as usual
           const marketRows = Object.entries(marketOdds)
             .filter(([k, v]) => k !== 'home' && k !== 'draw' && k !== 'away' && v)
             .map(([k, v]) => ({
@@ -240,6 +231,13 @@ router.get('/sync', async (req, res) => {
               odds: v,
               updated_at: new Date().toISOString(),
             }));
+
+          // Store API live 1X2 as dedicated market keys so frontend can use them.
+          // We deliberately do NOT overwrite games.home_odds so that the pre-match
+          // odds remain available as the Poisson model baseline.
+          if (marketOdds.home) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveHome', odds: marketOdds.home, updated_at: new Date().toISOString() });
+          if (marketOdds.draw) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveDraw', odds: marketOdds.draw, updated_at: new Date().toISOString() });
+          if (marketOdds.away) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveAway', odds: marketOdds.away, updated_at: new Date().toISOString() });
 
           if (marketRows.length > 0) {
             await supabase
