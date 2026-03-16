@@ -41,6 +41,17 @@ export function OddsProvider({ children }: { children: ReactNode }) {
   const gamesRef = useRef<GameOdds[]>([]);
   const kickoffTimesRef = useRef<Record<string, number>>({}); // Track when each game kicked off
 
+  const hasApiGamesNeedingSync = () => {
+    const now = Date.now();
+    return gamesRef.current.some((game) => {
+      if (!game.id?.startsWith('af-') || game.status === 'finished') return false;
+      if (game.status === 'live') return true;
+      const kickoffMs = new Date(game.time).getTime();
+      if (isNaN(kickoffMs)) return false;
+      return kickoffMs <= now + 60000;
+    });
+  };
+
   // Fetch games from database on component mount
   useEffect(() => {
     const fetchGames = async () => {
@@ -216,10 +227,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
 
   // Live data polling — every 30 s, pull fresh scores + live odds from API-Football via the server.
   useEffect(() => {
-    const liveDataInterval = setInterval(async () => {
-      // Only run if there are live games
-      const hasLive = gamesRef.current.some((g) => g.status === 'live');
-      if (!hasLive) return;
+    const syncApiGames = async () => {
+      if (!hasApiGamesNeedingSync()) return;
 
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
 
@@ -233,7 +242,10 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       } catch {
         // Silently ignore — live data will try again next cycle
       }
-    }, 30000); // Poll every 30 seconds
+    };
+
+    syncApiGames();
+    const liveDataInterval = setInterval(syncApiGames, 30000); // Poll every 30 seconds
 
     return () => clearInterval(liveDataInterval);
   }, []); // No dependencies - uses ref for current games

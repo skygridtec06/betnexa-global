@@ -76,6 +76,10 @@ function isValidUUID(str) {
   return uuidRegex.test(str);
 }
 
+function isApiManagedGameId(gameId) {
+  return /^af-\d+$/i.test(String(gameId || ''));
+}
+
 // Helper function to determine market type from market key
 function determineMarketType(key) {
   if (key.startsWith('cs')) return 'CS';
@@ -1130,6 +1134,10 @@ router.put('/games/:gameId', checkAdmin, async (req, res) => {
     const { gameId } = req.params;
     const updates = req.body;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be edited by admin' });
+    }
+
     console.log(`📝 Updating game: ${gameId}`);
     console.log('   Received updates:', JSON.stringify(updates, null, 2));
 
@@ -1250,6 +1258,10 @@ router.delete('/games/:gameId', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be deleted by admin' });
+    }
+
     console.log(`🗑️  Deleting game: ${gameId}`);
 
     // Find the game first - check if gameId is UUID or text game_id
@@ -1311,6 +1323,10 @@ router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
     const { homeScore, awayScore, minute, status } = req.body;
+
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot have scores edited by admin' });
+    }
 
     console.log(`📝 Updating score for game: ${gameId}, score: ${homeScore}-${awayScore}, minute: ${minute}`);
 
@@ -1393,6 +1409,10 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
     const { gameId } = req.params;
     const { markets } = req.body;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot have markets edited by admin' });
+    }
+
     if (!markets || typeof markets !== 'object') {
       return res.status(400).json({ error: 'Invalid markets data' });
     }
@@ -1473,6 +1493,10 @@ router.put('/games/:gameId/halftime', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be controlled by admin' });
+    }
+
     console.log(`⏱️  Marking halftime for game: ${gameId}`);
 
     // Find the game first - check if gameId is UUID or text game_id
@@ -1530,6 +1554,10 @@ router.put('/games/:gameId/halftime', checkAdmin, async (req, res) => {
 router.put('/games/:gameId/resume-second-half', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
+
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be controlled by admin' });
+    }
 
     console.log(`▶️  Resuming second half for game: ${gameId}`);
 
@@ -1598,6 +1626,10 @@ router.put('/games/:gameId/end', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be ended by admin' });
+    }
+
     console.log(`🏁 Ending game: ${gameId}`);
 
     // Find the game first - check if gameId is UUID or text game_id
@@ -1655,6 +1687,10 @@ router.put('/games/:gameId/details', checkAdmin, async (req, res) => {
     const { gameId } = req.params;
     const { league, homeTeam, awayTeam, homeOdds, drawOdds, awayOdds, kickoffTime } = req.body;
 
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot have details edited by admin' });
+    }
+
     console.log(`✏️  Updating game details for: ${gameId}`);
 
     // Find the game first
@@ -1710,6 +1746,10 @@ router.put('/games/:gameId/set-time', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
     const { minute, seconds } = req.body;
+
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot have timer edited by admin' });
+    }
 
     console.log(`⏱️  Setting custom time for game: ${gameId} to ${minute}:${seconds}`);
 

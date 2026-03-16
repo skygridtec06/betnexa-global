@@ -712,7 +712,16 @@ const AdminPortal = () => {
     }]);
   };
 
+  const isApiManagedGame = (gameId: string) => gameId?.startsWith('af-');
+
+  const ensureManualGame = (gameId: string) => {
+    if (!isApiManagedGame(gameId)) return true;
+    alert('API-Football matches are managed automatically. Admin can only edit manually added matches.');
+    return false;
+  };
+
   const regenerateOdds = async (id: string) => {
+    if (!ensureManualGame(id)) return;
     const game = games.find((g) => g.id === id);
     if (!game) return;
 
@@ -745,6 +754,7 @@ const AdminPortal = () => {
   };
 
   const startEditMarkets = (game: GameOdds) => {
+    if (!ensureManualGame(game.id)) return;
     setEditingGame(game.id);
     // Use generateMarketOdds to fill in any missing/zero markets with proper values
     const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
@@ -752,6 +762,7 @@ const AdminPortal = () => {
   };
 
   const saveMarkets = async (id: string) => {
+    if (!ensureManualGame(id)) return;
     if (!editMarkets) return;
     
     try {
@@ -782,6 +793,7 @@ const AdminPortal = () => {
   };
 
   const removeGameHandler = async (id: string) => {
+    if (!ensureManualGame(id)) return;
     if (!confirm('Are you sure you want to delete this game?')) return;
     
     try {
@@ -808,6 +820,7 @@ const AdminPortal = () => {
 
   // Live play functions
   const startKickoff = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -860,6 +873,7 @@ const AdminPortal = () => {
   };
 
   const pauseKickoff = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game || game.minute === undefined) return;
 
@@ -896,6 +910,7 @@ const AdminPortal = () => {
   };
 
   const resumeKickoff = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game || !game.kickoffStartTime || !game.kickoffPausedAt) return;
 
@@ -983,6 +998,7 @@ const AdminPortal = () => {
   };
 
   const updateLiveScore = async (gameId: string, homeScore: number, awayScore: number) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1026,6 +1042,7 @@ const AdminPortal = () => {
   };
 
   const endGame = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1057,6 +1074,7 @@ const AdminPortal = () => {
   };
 
   const markHalftime = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1089,6 +1107,7 @@ const AdminPortal = () => {
   };
 
   const resumeSecondHalf = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1132,6 +1151,7 @@ const AdminPortal = () => {
   };
 
   const markGameLive = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       console.log(`🔴 Marking game as live: ${gameId}`);
@@ -1162,6 +1182,7 @@ const AdminPortal = () => {
   };
 
   const updateGameDetails = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1216,6 +1237,7 @@ const AdminPortal = () => {
   };
 
   const setCustomGameTime = async (gameId: string, minute: number, seconds: number) => {
+    if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
     if (!game) return;
 
@@ -1685,6 +1707,11 @@ const AdminPortal = () => {
             <div className="space-y-3">
               {sortGamesByKickoffTime(games).map((game) => (
                 <div key={game.id} className="rounded-xl border border-border/50 bg-card p-4">
+                  {isApiManagedGame(game.id) && (
+                    <div className="mb-3 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-xs font-medium text-blue-300">
+                      API-managed match. Scores, status and odds sync automatically from API-Football. Admin editing is disabled.
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
@@ -1708,6 +1735,7 @@ const AdminPortal = () => {
                         <Button
                           size="sm"
                           variant="ghost"
+                          disabled={isApiManagedGame(game.id)}
                           onClick={() => {
                             setEditingGameDetails(editingGameDetails === game.id ? null : game.id);
                             if (editingGameDetails !== game.id) {
@@ -1938,6 +1966,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="hero"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => markGameLive(game.id)}
                                 className="text-xs"
                               >
@@ -1949,6 +1978,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="hero"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => startKickoff(game.id)}
                                 className="text-xs"
                               >
@@ -1960,6 +1990,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => pauseKickoff(game.id)}
                                 className="text-xs"
                               >
@@ -1971,6 +2002,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => resumeKickoff(game.id)}
                                 className="text-xs"
                               >
@@ -1982,6 +2014,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => markHalftime(game.id)}
                                 className="text-xs"
                               >
@@ -1993,6 +2026,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="secondary"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => resumeSecondHalf(game.id)}
                                 className="text-xs"
                               >
@@ -2004,6 +2038,7 @@ const AdminPortal = () => {
                               <Button
                                 size="sm"
                                 variant="destructive"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => endGame(game.id)}
                                 className="text-xs"
                               >
@@ -2040,6 +2075,7 @@ const AdminPortal = () => {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                disabled={isApiManagedGame(game.id)}
                                 onClick={() => {
                                   const score = scoreUpdate[game.id];
                                   if (score) {
@@ -2060,6 +2096,7 @@ const AdminPortal = () => {
                         <Button 
                           variant="hero" 
                           size="sm"
+                          disabled={isApiManagedGame(game.id)}
                           onClick={() => markGameLive(game.id)}
                           className="text-xs"
                           title="Mark this match as live"
@@ -2067,13 +2104,13 @@ const AdminPortal = () => {
                           Mark Live
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" onClick={() => regenerateOdds(game.id)} title="Regenerate all market odds">
+                      <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => regenerateOdds(game.id)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Regenerate all market odds"}>
                         <RefreshCw className="h-4 w-4 text-primary" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => editingGame === game.id ? saveMarkets(game.id) : startEditMarkets(game)} title="Edit market odds">
+                      <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => editingGame === game.id ? saveMarkets(game.id) : startEditMarkets(game)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Edit market odds"}>
                         {editingGame === game.id ? <Save className="h-4 w-4 text-primary" /> : <Edit2 className="h-4 w-4 text-muted-foreground" />}
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => removeGameHandler(game.id)} className="text-destructive hover:text-destructive">
+                      <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => removeGameHandler(game.id)} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
