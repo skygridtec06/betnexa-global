@@ -213,6 +213,21 @@ function classifyGameDateInTZ(isoString) {
   return formatDateInTZ(dt);
 }
 
+function isUpcomingFixtureForSchedule(fixture, targetDate) {
+  const short = String(fixture?.fixture?.status?.short || '').toUpperCase();
+  if (!['NS', 'TBD', 'PST'].includes(short)) return false;
+
+  const kickoffMs = new Date(fixture?.fixture?.date || 0).getTime();
+  if (isNaN(kickoffMs)) return false;
+
+  const today = formatDateInTZ(new Date());
+  if (targetDate === today) {
+    return kickoffMs > Date.now();
+  }
+
+  return true;
+}
+
 const REQUIRED_MARKET_KEYS = [
   'bttsYes', 'bttsNo',
   'over15', 'under15', 'over25', 'under25',
@@ -352,7 +367,7 @@ router.get('/bootstrap-schedule', async (req, res) => {
           const id = f?.fixture?.id;
           if (!id || seen.has(id)) return false;
           seen.add(id);
-          return isMajorCompetition(f);
+          return isMajorCompetition(f) && isUpcomingFixtureForSchedule(f, dateStr);
         })
         .sort((a, b) => new Date(a?.fixture?.date || 0) - new Date(b?.fixture?.date || 0));
 
