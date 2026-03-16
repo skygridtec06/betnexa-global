@@ -24,6 +24,10 @@ export function Header() {
   const navigate = useNavigate();
   const { balance } = useBets();
   const { isLoggedIn, logout, user } = useUser();
+  const compactBalance = new Intl.NumberFormat("en", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(balance);
 
   const handleLogout = () => {
     logout();
@@ -92,8 +96,8 @@ export function Header() {
         </nav>
 
         {/* Right actions */}
-        <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-3 md:flex">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="hidden items-center gap-2 md:flex">
             <Button variant="ghost" size="icon" disabled className="opacity-50 cursor-not-allowed pointer-events-none">
               <Search className="h-4 w-4" />
             </Button>
@@ -103,16 +107,16 @@ export function Header() {
             </Button>
             {isLoggedIn && (
               <Link to="/finance">
-                <Button size="sm" className="bg-yellow-400 text-black hover:bg-yellow-300 font-semibold">
-                  <PlusCircle className="mr-1 h-4 w-4" />
+                <Button size="sm" className="h-8 px-2.5 text-xs bg-yellow-400 text-black hover:bg-yellow-300 font-semibold whitespace-nowrap">
+                  <PlusCircle className="mr-1 h-3.5 w-3.5" />
                   Deposit
                 </Button>
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-1.5">
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="text-sm font-bold text-foreground">KSH {balance.toLocaleString()}</span>
+              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[160px]">
+                <Wallet className="h-3.5 w-3.5 text-primary shrink-0" />
+                <span className="text-xs font-bold text-foreground whitespace-nowrap truncate">KSH {balance.toLocaleString()}</span>
               </div>
             )}
             {isLoggedIn && user?.isAdmin && (
@@ -129,18 +133,19 @@ export function Header() {
               </Button>
             )}
           </div>
-          <div className="flex items-center gap-2 md:hidden">
+          <div className="flex items-center gap-1.5 md:hidden min-w-0">
             {isLoggedIn && (
               <Link to="/finance">
-                <Button size="sm" className="bg-yellow-400 text-black hover:bg-yellow-300 h-8 px-2">
-                  <PlusCircle className="h-4 w-4" />
+                <Button size="sm" className="h-7 px-2 text-[11px] bg-yellow-400 text-black hover:bg-yellow-300 font-semibold whitespace-nowrap">
+                  <PlusCircle className="mr-1 h-3 w-3" />
+                  Deposit
                 </Button>
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1.5">
-                <Wallet className="h-4 w-4 text-primary" />
-                <span className="text-xs font-bold text-foreground">KSH {balance.toLocaleString()}</span>
+              <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[120px] min-w-0">
+                <Wallet className="h-3 w-3 text-primary shrink-0" />
+                <span className="text-[11px] font-bold text-foreground whitespace-nowrap truncate">KSH {compactBalance}</span>
               </div>
             )}
             <button
