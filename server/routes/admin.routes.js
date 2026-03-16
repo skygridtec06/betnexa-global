@@ -377,7 +377,7 @@ router.get('/games/:gameId/time', async (req, res) => {
     // Query the database - search by game_id field (the text ID)
     const query = supabase
       .from('games')
-      .select('id, game_id, kickoff_start_time, is_kickoff_started, status, is_halftime, game_paused')
+      .select('id, game_id, kickoff_start_time, is_kickoff_started, status, is_halftime, game_paused, minute')
       .eq('game_id', gameId);
 
     const { data, error } = await query.maybeSingle();
@@ -423,8 +423,12 @@ router.get('/games/:gameId/time', async (req, res) => {
     let minute = 0;
     let seconds = 0;
 
-    // Calculate elapsed time only if game is live
-    if (data.is_kickoff_started && kickoffMs && !isNaN(kickoffMs)) {
+    // Freeze timer during halftime/pause so UI clearly shows HALFTIME and doesn't keep counting.
+    if (data.is_halftime || data.game_paused) {
+      minute = Number.isFinite(data.minute) ? data.minute : 0;
+      seconds = 0;
+      console.log(`⏸️  [TIMER] ${data.game_id}: Paused at ${String(minute).padStart(2, '0')}:00`);
+    } else if (data.is_kickoff_started && kickoffMs && !isNaN(kickoffMs)) {
       const elapsedMs = serverNow - kickoffMs;
       const elapsedSeconds = Math.floor(elapsedMs / 1000);
       minute = Math.floor(elapsedSeconds / 60);

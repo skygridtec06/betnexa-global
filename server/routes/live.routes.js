@@ -174,7 +174,7 @@ router.get('/sync', async (req, res) => {
     // Step 2: load af-* games from DB that are live or upcoming
     const { data: dbGames, error: dbError } = await supabase
       .from('games')
-      .select('id, game_id, status')
+      .select('id, game_id, status, kickoff_start_time, game_paused, kickoff_paused_at')
       .like('game_id', 'af-%')
       .in('status', ['live', 'upcoming']);
 
@@ -195,6 +195,37 @@ router.get('/sync', async (req, res) => {
       const elapsed = parseInt(liveFixture?.fixture?.status?.elapsed || 0, 10) || 0;
       const homeScore = liveFixture?.goals?.home ?? 0;
       const awayScore = liveFixture?.goals?.away ?? 0;
+      const nowIso = new Date().toISOString();
+
+      let kickoffStartTime = dbGame.kickoff_start_time;
+      let gamePaused = !!dbGame.game_paused;
+      let kickoffPausedAt = dbGame.kickoff_paused_at || null;
+
+      // Ensure kickoff_start_time exists for timer-based live display.
+      if (!kickoffStartTime) {
+        kickoffStartTime = new Date(Date.now() - elapsed * 60000).toISOString();
+      }
+
+      // If API says halftime, pause the clock once. If match resumes, shift kickoff
+      // forward by the break duration so the timer resumes correctly.
+      if (isHalftime) {
+        if (!gamePaused) {
+          gamePaused = true;
+          kickoffPausedAt = nowIso;
+        }
+      } else if (gamePaused && kickoffPausedAt && kickoffStartTime) {
+        const pausedAtMs = new Date(kickoffPausedAt).getTime();
+        const kickoffStartMs = new Date(kickoffStartTime).getTime();
+        if (!isNaN(pausedAtMs) && !isNaN(kickoffStartMs)) {
+          const pauseDurationMs = Math.max(0, Date.now() - pausedAtMs);
+          kickoffStartTime = new Date(kickoffStartMs + pauseDurationMs).toISOString();
+        }
+        gamePaused = false;
+        kickoffPausedAt = null;
+      } else if (!isHalftime) {
+        gamePaused = false;
+        kickoffPausedAt = null;
+      }
 
       // 3a. Update scores, minute, status in games table
       const { error: gameErr } = await supabase
@@ -205,8 +236,11 @@ router.get('/sync', async (req, res) => {
           minute: elapsed,
           status: 'live',
           is_kickoff_started: true,
+          kickoff_start_time: kickoffStartTime,
           is_halftime: isHalftime,
-          updated_at: new Date().toISOString(),
+          game_paused: gamePaused,
+          kickoff_paused_at: kickoffPausedAt,
+          updated_at: nowIso,
         })
         .eq('id', dbGame.id);
 
@@ -260,14 +294,22 @@ router.get('/sync', async (req, res) => {
       if (alreadyProcessed) continue;
 
       // Game exists in DB as upcoming — flip status to live
+      const statusShort = liveFixture?.fixture?.status?.short || '';
+      const isHalftime = statusShort === 'HT';
+      const elapsed = parseInt(liveFixture?.fixture?.status?.elapsed || 0, 10) || 0;
+
       await supabase
         .from('games')
         .update({
           status: 'live',
           is_kickoff_started: true,
+          kickoff_start_time: new Date(Date.now() - elapsed * 60000).toISOString(),
           home_score: liveFixture?.goals?.home ?? 0,
           away_score: liveFixture?.goals?.away ?? 0,
-          minute: parseInt(liveFixture?.fixture?.status?.elapsed || 0, 10) || 0,
+          minute: elapsed,
+          is_halftime: isHalftime,
+          game_paused: isHalftime,
+          kickoff_paused_at: isHalftime ? new Date().toISOString() : null,
           updated_at: new Date().toISOString(),
         })
         .eq('game_id', gameId);

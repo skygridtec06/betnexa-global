@@ -299,7 +299,7 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
 
       {displayGame.status === "live" && (
         <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 p-2 text-center">
-          <p className="text-xs font-semibold text-green-600">🟢 Live Betting Open — odds update in real-time</p>
+          <p className="text-xs font-semibold text-green-600">🟢 Live Betting Open</p>
         </div>
       )}
 

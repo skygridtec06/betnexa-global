@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import heroImage from "@/assets/hero-stadium.svg";
 import { Badge } from "@/components/ui/badge";
@@ -38,11 +38,38 @@ const sortGamesByKickoffTime = (games: any[]) => {
 };
 
 const Index = () => {
-  const [betSlip, setBetSlip] = useState<BetSlipItem[]>([]);
-  const [selectedOdds, setSelectedOdds] = useState<Record<string, string>>({});
+  const [betSlip, setBetSlip] = useState<BetSlipItem[]>(() => {
+    try {
+      const raw = localStorage.getItem('betSlipItems');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const [selectedOdds, setSelectedOdds] = useState<Record<string, string>>(() => {
+    try {
+      const raw = localStorage.getItem('selectedOddsMap');
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  });
   const [showAllFinished, setShowAllFinished] = useState(false);
   const { games: apiGames } = useOdds();;
   const { isLoggedIn } = useUser();
+
+  // Persist bet slip selections so they remain even if match cards move/disappear.
+  useEffect(() => {
+    localStorage.setItem('betSlipItems', JSON.stringify(betSlip));
+  }, [betSlip]);
+
+  useEffect(() => {
+    localStorage.setItem('selectedOddsMap', JSON.stringify(selectedOdds));
+  }, [selectedOdds]);
 
   // Enable auto bet calculation
   useBetAutoCalculation();
