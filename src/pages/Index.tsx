@@ -9,6 +9,8 @@ import { TrendingUp, Search } from "lucide-react";
 import { useBetAutoCalculation } from "@/hooks/useBetAutoCalculation";
 import { useOdds } from "@/context/OddsContext";
 
+type MatchView = "upcoming" | "live" | "ended";
+
 const getMarketFromType = (type: string): string => {
   if (['home', 'draw', 'away'].includes(type)) return '1X2';
   if (type.startsWith('btts')) return 'BTTS';
@@ -28,6 +30,18 @@ const sortGamesByKickoffTime = (games: any[]) => {
       return timeA - timeB; // Earlier times first (upcoming)
     } catch (e) {
       return 0; // If time parsing fails, maintain order
+    }
+  });
+};
+
+const sortEndedGames = (games: any[]) => {
+  return [...games].sort((a, b) => {
+    try {
+      const timeA = new Date(a.time).getTime();
+      const timeB = new Date(b.time).getTime();
+      return timeB - timeA;
+    } catch (e) {
+      return 0;
     }
   });
 };
@@ -55,6 +69,7 @@ const Index = () => {
   });
   const [showAllFinished, setShowAllFinished] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeView, setActiveView] = useState<MatchView>("upcoming");
   const { games: apiGames } = useOdds();;
 
   // Persist bet slip selections so they remain even if match cards move/disappear.
@@ -82,6 +97,10 @@ const Index = () => {
         );
       })
     : games;
+
+  const upcomingGames = sortGamesByKickoffTime(filteredGames.filter((g) => g.status === "upcoming"));
+  const liveGames = filteredGames.filter((g) => g.status === "live");
+  const endedGames = sortEndedGames(filteredGames.filter((g) => g.status === "finished"));
 
   const handleSelectOdd = (matchId: string, type: string, odds: number, match: Match) => {
     const key = `${matchId}-${type}`;
@@ -126,43 +145,34 @@ const Index = () => {
 
       {/* Matches - Organized by Status */}
       <section className="container mx-auto px-4 py-4">
-        {/* Live Matches Section */}
-        {filteredGames.filter(g => g.status === 'live').length > 0 && (
-          <div className="mb-10">
-            <div className="mb-6 flex items-center justify-between">
-              <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
-                <span className="inline-block h-3 w-3 rounded-full bg-live mr-2 animate-pulse" />
-                🔴 Live Matches
-              </h2>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {filteredGames.filter(g => g.status === 'live').map((game) => {
-                const match: Match = {
-                  id: game.id,
-                  league: game.league,
-                  homeTeam: game.homeTeam,
-                  awayTeam: game.awayTeam,
-                  homeOdds: game.homeOdds,
-                  drawOdds: game.drawOdds,
-                  awayOdds: game.awayOdds,
-                  time: game.time,
-                  markets: game.markets,
-                };
-                return (
-                  <MatchCard
-                    key={game.id}
-                    match={match}
-                    onSelectOdd={(id, type, odds) => handleSelectOdd(id, type, odds, match)}
-                    selectedOdd={selectedOdds[game.id] || null}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Button
+            variant={activeView === "upcoming" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("upcoming")}
+            className="min-w-[92px]"
+          >
+            Upcoming
+          </Button>
+          <Button
+            variant={activeView === "live" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("live")}
+            className="min-w-[92px]"
+          >
+            LIVE
+          </Button>
+          <Button
+            variant={activeView === "ended" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("ended")}
+            className="min-w-[92px]"
+          >
+            ENDED
+          </Button>
+        </div>
 
-        {/* Upcoming Matches Section */}
-        {filteredGames.filter(g => g.status === 'upcoming').length > 0 && (
+        {activeView === "upcoming" && upcomingGames.length > 0 && (
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
@@ -171,7 +181,7 @@ const Index = () => {
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {sortGamesByKickoffTime(filteredGames.filter(g => g.status === 'upcoming')).map((game) => {
+              {upcomingGames.map((game) => {
                 const match: Match = {
                   id: game.id,
                   league: game.league,
@@ -196,19 +206,51 @@ const Index = () => {
           </div>
         )}
 
-        {/* Finished Matches Section */}
-        {filteredGames.filter(g => g.status === 'finished').length > 0 && (
+        {activeView === "live" && liveGames.length > 0 && (
+          <div className="mb-10">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
+                <span className="inline-block h-3 w-3 rounded-full bg-live mr-2 animate-pulse" />
+                LIVE Matches
+              </h2>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {liveGames.map((game) => {
+                const match: Match = {
+                  id: game.id,
+                  league: game.league,
+                  homeTeam: game.homeTeam,
+                  awayTeam: game.awayTeam,
+                  homeOdds: game.homeOdds,
+                  drawOdds: game.drawOdds,
+                  awayOdds: game.awayOdds,
+                  time: game.time,
+                  markets: game.markets,
+                };
+                return (
+                  <MatchCard
+                    key={game.id}
+                    match={match}
+                    onSelectOdd={(id, type, odds) => handleSelectOdd(id, type, odds, match)}
+                    selectedOdd={selectedOdds[game.id] || null}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {activeView === "ended" && endedGames.length > 0 && (
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
                 <span className="text-gray-500 mr-2">✓</span>
-                Finished Matches
+                Ended Matches
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              {filteredGames
-                .filter(g => g.status === 'finished')
-                .slice(0, showAllFinished ? undefined : 2)
+              {endedGames
+                .slice(0, showAllFinished ? undefined : 6)
                 .map((game) => (
                   <FinishedMatchCard
                     key={game.id}
@@ -224,7 +266,7 @@ const Index = () => {
                   />
                 ))}
             </div>
-            {filteredGames.filter(g => g.status === 'finished').length > 2 && !showAllFinished && (
+            {endedGames.length > 6 && !showAllFinished && (
               <Button
                 onClick={() => setShowAllFinished(true)}
                 className="mt-4 w-full"
@@ -233,7 +275,7 @@ const Index = () => {
                 Show More Matches
               </Button>
             )}
-            {showAllFinished && filteredGames.filter(g => g.status === 'finished').length > 2 && (
+            {showAllFinished && endedGames.length > 6 && (
               <Button
                 onClick={() => setShowAllFinished(false)}
                 className="mt-4 w-full"
@@ -245,10 +287,12 @@ const Index = () => {
           </div>
         )}
 
-        {filteredGames.length === 0 && (
+        {((activeView === "upcoming" && upcomingGames.length === 0) ||
+          (activeView === "live" && liveGames.length === 0) ||
+          (activeView === "ended" && endedGames.length === 0)) && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
-              {searchQuery ? `No matches found for "${searchQuery}"` : "No matches available. Check back soon!"}
+              {searchQuery ? `No matches found for "${searchQuery}"` : `No ${activeView} matches available right now.`}
             </p>
           </div>
         )}
