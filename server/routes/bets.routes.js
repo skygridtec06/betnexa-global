@@ -304,7 +304,7 @@ router.put('/:betId/status', async (req, res) => {
       
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('winnings_balance, total_winnings, id, phone_number, username')
+        .select('account_balance, winnings_balance, total_winnings, id, phone_number, username')
         .eq('id', bet.user_id)
         .single();
 
@@ -317,13 +317,17 @@ router.put('/:betId/status', async (req, res) => {
         });
       }
 
-      console.log(`   Current winnings balance: KSH ${user.winnings_balance}`);
+      console.log(`   Current main balance: KSH ${user.account_balance || 0}`);
+      console.log(`   Current winnings balance: KSH ${user.winnings_balance || 0}`);
       console.log(`   Current total winnings: KSH ${user.total_winnings || 0}`);
       
+      const currentMainBalance = parseFloat(user.account_balance || 0);
+      const newMainBalance = currentMainBalance + parseFloat(amountWon);
       const newWinningsBalance = (user.winnings_balance || 0) + parseFloat(amountWon);
       const currentWinnings = user.total_winnings || 0;
       const newWinnings = currentWinnings + parseFloat(amountWon);
 
+      console.log(`   New main balance will be: KSH ${newMainBalance}`);
       console.log(`   New winnings balance will be: KSH ${newWinningsBalance}`);
       console.log(`   New total winnings will be: KSH ${newWinnings}`);
       console.log('   📝 Updating user in database...');
@@ -331,6 +335,7 @@ router.put('/:betId/status', async (req, res) => {
       const { data: updatedUserData, error: balanceError } = await supabase
         .from('users')
         .update({
+          account_balance: newMainBalance,
           winnings_balance: newWinningsBalance,
           total_winnings: newWinnings,
           updated_at: new Date().toISOString()
@@ -343,14 +348,15 @@ router.put('/:betId/status', async (req, res) => {
         console.error('❌ Error updating winnings balance:', balanceError.message);
         return res.status(500).json({
           success: false,
-          error: 'Failed to update winnings balance',
+          error: 'Failed to update user balance',
           details: balanceError.message
         });
       }
 
       updatedUser = updatedUserData;
-      console.log(`✅ User winnings balance updated successfully`);
+      console.log(`✅ User balance updated successfully`);
       console.log(`   Phone: ${updatedUser.phone_number}`);
+      console.log(`   New main balance: KSH ${updatedUser.account_balance}`);
       console.log(`   New winnings balance: KSH ${updatedUser.winnings_balance}`);
       console.log(`   New total winnings: KSH ${updatedUser.total_winnings}`);
     }
