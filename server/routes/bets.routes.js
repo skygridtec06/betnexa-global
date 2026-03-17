@@ -274,13 +274,29 @@ router.put('/:betId/status', async (req, res) => {
 
     console.log('   📋 Updating bet with:', updateData);
 
-    // Update bet status
-    const { data: bet, error: updateError } = await supabase
+    // Update bet status (schema-compatible retry if amount_won column is unavailable)
+    let { data: bet, error: updateError } = await supabase
       .from('bets')
       .update(updateData)
       .eq('id', betId)
       .select()
       .single();
+
+    if (updateError && updateData.amount_won !== undefined && `${updateError.message || ''}`.includes('amount_won')) {
+      console.warn('⚠️ bets.amount_won column not found, retrying bet update without amount_won');
+      const fallbackUpdateData = { ...updateData };
+      delete fallbackUpdateData.amount_won;
+
+      const retryResult = await supabase
+        .from('bets')
+        .update(fallbackUpdateData)
+        .eq('id', betId)
+        .select()
+        .single();
+
+      bet = retryResult.data;
+      updateError = retryResult.error;
+    }
 
     if (updateError || !bet) {
       console.error('❌ Error updating bet:', updateError?.message);
