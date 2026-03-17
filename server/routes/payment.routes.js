@@ -146,6 +146,49 @@ router.post('/initiate', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Amount must be at least KSH 1' });
     }
 
+    // If withdrawal, enforce only winnings_balance can be withdrawn
+    if (resolvedPaymentType === 'withdrawal') {
+      // Fetch user's winnings_balance
+      const { data: user, error: userError } = await supabase
+        .from('users')
+        .select('winnings_balance')
+        .eq('id', userId)
+        .single();
+
+      if (userError || !user) {
+        console.log('❌ Withdrawal failed: User not found');
+        return res.status(400).json({
+          success: false,
+          message: 'User not found for withdrawal'
+        });
+      }
+
+      if (parseFloat(user.winnings_balance) < numAmount) {
+        console.log('❌ Withdrawal failed: Insufficient winnings balance');
+        return res.status(400).json({
+          success: false,
+          message: 'Insufficient winnings balance for withdrawal',
+          winnings_balance: user.winnings_balance
+        });
+      }
+
+      // Deduct from winnings_balance
+      const newWinningsBalance = parseFloat(user.winnings_balance) - numAmount;
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ winnings_balance: newWinningsBalance, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+      if (updateError) {
+        console.log('❌ Withdrawal failed: Could not update winnings_balance');
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to update winnings balance for withdrawal',
+          details: updateError.message
+        });
+      }
+    }
+
     // Generate reference
     const externalReference = `DEP-${Date.now()}-${userId}`;
     const callbackUrl = `${process.env.CALLBACK_URL || 'https://betnexa-server.vercel.app'}/api/callbacks/payhero`;

@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS users (
   password TEXT NOT NULL,
   email TEXT UNIQUE,
   account_balance DECIMAL(15,2) DEFAULT 0.00,
+  deposited_balance DECIMAL(15,2) DEFAULT 0.00,
+  winnings_balance DECIMAL(15,2) DEFAULT 0.00,
   total_bets INTEGER DEFAULT 0,
   total_winnings DECIMAL(15,2) DEFAULT 0.00,
   is_admin BOOLEAN DEFAULT FALSE,
