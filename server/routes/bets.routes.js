@@ -20,55 +20,82 @@ router.post('/place', async (req, res) => {
     console.log('   Stake:', stake);
     console.log('   Selections:', selections?.length || 0);
 
-    if (!phoneNumber || !stake || !selections) {
+    if ((!phoneNumber && !userId) || !stake || !selections) {
       return res.status(400).json({
         success: false,
-        error: 'Phone number, stake, and selections are required'
+        error: 'User identifier, stake, and selections are required'
       });
     }
 
-    // Get user from database
-    const { data: user, error: userError } = await supabase
-      .from('users')
-      .select('id, deposited_balance, total_bets')
-      .eq('phone_number', phoneNumber)
-      .single();
+    // Get user from database (prefer userId, fallback to phone)
+    let user = null;
+    let userError = null;
 
-    if (userError || !user) {
-      console.error('❌ User not found:', phoneNumber);
+    if (userId) {
+      const byIdResult = await supabase
+        .from('users')
+        .select('id, account_balance, total_bets')
+        .eq('id', userId)
+        .maybeSingle();
+      user = byIdResult.data;
+      userError = byIdResult.error;
+    }
+
+    if (!user && phoneNumber) {
+      const byPhoneResult = await supabase
+        .from('users')
+        .select('id, account_balance, total_bets')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle();
+      user = byPhoneResult.data;
+      userError = byPhoneResult.error;
+    }
+
+    if (userError) {
+      console.error('❌ Error looking up user for bet placement:', userError.message);
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch user',
+        details: userError.message
+      });
+    }
+
+    if (!user) {
+      console.error('❌ User not found:', { userId, phoneNumber });
       return res.status(401).json({
         success: false,
         error: 'User not found'
       });
     }
 
-    // Check if user has sufficient deposited balance
-    if (user.deposited_balance < stake) {
-      console.warn('⚠️ Insufficient deposited balance for user:', phoneNumber);
+    // Check if user has sufficient main account balance
+    const currentBalance = parseFloat(user.account_balance || 0);
+    if (currentBalance < stake) {
+      console.warn('⚠️ Insufficient account balance for user:', phoneNumber || userId);
       return res.status(400).json({
         success: false,
-        error: 'Insufficient deposited balance',
-        balance: user.deposited_balance,
+        error: 'Insufficient balance',
+        balance: currentBalance,
         required: stake
       });
     }
 
-    // Deduct stake from deposited_balance
-    const newDepositedBalance = user.deposited_balance - stake;
+    // Deduct stake from account_balance
+    const newBalance = currentBalance - parseFloat(stake);
     const { error: updateError } = await supabase
       .from('users')
       .update({
-        deposited_balance: newDepositedBalance,
+        account_balance: newBalance,
         total_bets: (user.total_bets || 0) + 1,
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id);
 
     if (updateError) {
-      console.error('❌ Error updating deposited balance:', updateError.message);
+      console.error('❌ Error updating account balance:', updateError.message);
       return res.status(500).json({
         success: false,
-        error: 'Failed to update deposited balance',
+        error: 'Failed to update balance',
         details: updateError.message
       });
     }
@@ -143,7 +170,7 @@ router.post('/place', async (req, res) => {
 
     console.log('✅ Bet placed successfully:', betId);
     console.log('   Database ID (UUID):', bet.id);
-    console.log('   Deposited Balance After: KSH', newDepositedBalance);
+    console.log('   Account Balance After: KSH', newBalance);
 
     res.json({
       success: true,
@@ -155,7 +182,7 @@ router.post('/place', async (req, res) => {
         totalOdds: parseFloat(totalOdds),
         status: 'Open'
       },
-      newDepositedBalance
+      newBalance
     });
   } catch (error) {
     console.error('❌ Place bet error:', error);

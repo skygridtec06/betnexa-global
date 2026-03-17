@@ -143,6 +143,7 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          userId: user.id,
           phoneNumber: user.phone,
           stake: stakeNum,
           potentialWin: Math.round(potentialWin),
