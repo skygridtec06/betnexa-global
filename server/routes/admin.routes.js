@@ -3589,7 +3589,10 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
           
           const { error: balanceError } = await supabase
             .from('users')
-            .update({ account_balance: newBalance })
+            .update({
+              account_balance: newBalance,
+              updated_at: new Date().toISOString()
+            })
             .eq('id', transaction.user_id);
 
           if (balanceError) {
@@ -3864,7 +3867,13 @@ router.put('/transactions/:transactionId/mark-pending', checkAdmin, async (req, 
 
         if (user) {
           const newBalance = Math.max(0, (parseFloat(user.account_balance) || 0) - parseFloat(transaction.amount));
-          await supabase.from('users').update({ account_balance: newBalance }).eq('id', transaction.user_id);
+          await supabase
+            .from('users')
+            .update({
+              account_balance: newBalance,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', transaction.user_id);
           console.log(`✅ Reversed deposit balance: -KSH ${transaction.amount}`);
         }
       } catch (balErr) {

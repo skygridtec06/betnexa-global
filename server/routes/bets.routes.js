@@ -6,6 +6,69 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
+const DEPOSIT_ONLY_STAKING_START = process.env.DEPOSIT_ONLY_STAKING_START || '2026-03-17T09:47:00.000Z';
+
+function asNumber(value, fallback = 0) {
+  const n = parseFloat(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+async function getStakeableDepositBalance(userId) {
+  const startIso = new Date(DEPOSIT_ONLY_STAKING_START).toISOString();
+
+  const { data: depositTransactions, error: txError } = await supabase
+    .from('transactions')
+    .select('amount, external_reference')
+    .eq('user_id', userId)
+    .eq('type', 'deposit')
+    .eq('status', 'completed')
+    .gte('created_at', startIso);
+
+  if (txError) {
+    throw new Error(`Failed to fetch completed deposit transactions: ${txError.message}`);
+  }
+
+  const { data: deposits, error: depError } = await supabase
+    .from('deposits')
+    .select('amount, external_reference')
+    .eq('user_id', userId)
+    .eq('status', 'completed')
+    .gte('created_at', startIso);
+
+  if (depError) {
+    throw new Error(`Failed to fetch completed deposits: ${depError.message}`);
+  }
+
+  const { data: bets, error: betError } = await supabase
+    .from('bets')
+    .select('stake')
+    .eq('user_id', userId)
+    .gte('created_at', startIso);
+
+  if (betError) {
+    throw new Error(`Failed to fetch placed bets: ${betError.message}`);
+  }
+
+  const seenRefs = new Set(
+    (depositTransactions || [])
+      .map((tx) => tx.external_reference)
+      .filter(Boolean)
+  );
+
+  const transactionDepositsTotal = (depositTransactions || []).reduce(
+    (sum, tx) => sum + asNumber(tx.amount, 0),
+    0
+  );
+
+  const depositsTableTotal = (deposits || [])
+    .filter((dep) => !dep.external_reference || !seenRefs.has(dep.external_reference))
+    .reduce((sum, dep) => sum + asNumber(dep.amount, 0), 0);
+
+  const stakesTotal = (bets || []).reduce((sum, bet) => sum + asNumber(bet.stake, 0), 0);
+  const completedDepositsTotal = transactionDepositsTotal + depositsTableTotal;
+
+  return Math.max(0, completedDepositsTotal - stakesTotal);
+}
 
 /**
  * POST /api/bets/place
@@ -14,6 +77,7 @@ const supabase = require('../services/database.js');
 router.post('/place', async (req, res) => {
   try {
     const { userId, phoneNumber, stake, potentialWin, totalOdds, selections } = req.body;
+    const stakeAmount = parseFloat(stake);
 
     console.log('\n🎲 [POST /api/bets/place] Placing bet');
     console.log('   User:', { userId, phoneNumber });
@@ -24,6 +88,12 @@ router.post('/place', async (req, res) => {
       return res.status(400).json({
         success: false,
         error: 'User identifier, stake, and selections are required'
+      });
+    }
+    if (!Number.isFinite(stakeAmount) || stakeAmount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Stake must be a valid number greater than zero'
       });
     }
 
@@ -68,20 +138,31 @@ router.post('/place', async (req, res) => {
       });
     }
 
-    // Check if user has sufficient main account balance
     const currentBalance = parseFloat(user.account_balance || 0);
-    if (currentBalance < stake) {
+    const availableToBet = await getStakeableDepositBalance(user.id);
+
+    if (availableToBet < stakeAmount) {
+      console.warn('⚠️ Insufficient deposited balance for user:', phoneNumber || userId);
+      return res.status(400).json({
+        success: false,
+        error: 'Insufficient deposited balance',
+        balance: availableToBet,
+        required: stakeAmount
+      });
+    }
+
+    if (currentBalance < stakeAmount) {
       console.warn('⚠️ Insufficient account balance for user:', phoneNumber || userId);
       return res.status(400).json({
         success: false,
         error: 'Insufficient balance',
         balance: currentBalance,
-        required: stake
+        required: stakeAmount
       });
     }
 
-    // Deduct stake from account_balance
-    const newBalance = currentBalance - parseFloat(stake);
+    // Deduct stake from account_balance only (stakeability is derived from deposit history)
+    const newBalance = currentBalance - stakeAmount;
     const { error: updateError } = await supabase
       .from('users')
       .update({
@@ -110,7 +191,7 @@ router.post('/place', async (req, res) => {
       .insert([{
         bet_id: betId,
         user_id: user.id,
-        stake: parseFloat(stake),
+        stake: stakeAmount,
         potential_win: parseFloat(potentialWin),
         total_odds: parseFloat(totalOdds),
         status: 'Open',
@@ -177,12 +258,13 @@ router.post('/place', async (req, res) => {
       bet: {
         id: bet.id,
         betId: betId,
-        stake: parseFloat(stake),
+        stake: stakeAmount,
         potentialWin: parseFloat(potentialWin),
         totalOdds: parseFloat(totalOdds),
         status: 'Open'
       },
-      newBalance
+      newBalance,
+      availableToBet: Math.max(0, availableToBet - stakeAmount)
     });
   } catch (error) {
     console.error('❌ Place bet error:', error);

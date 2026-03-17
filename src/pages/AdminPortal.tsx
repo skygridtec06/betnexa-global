@@ -106,6 +106,9 @@ const AdminPortal = () => {
   const [allTransactions, setAllTransactions] = useState<any[]>([]);
   const [allPayments, setAllPayments] = useState<any[]>([]);
   const [activationFees, setActivationFees] = useState<any[]>([]);
+  const [showAllDeposits, setShowAllDeposits] = useState(false);
+  const [showAllActivationFees, setShowAllActivationFees] = useState(false);
+  const [showAllWithdrawals, setShowAllWithdrawals] = useState(false);
   
   // User balance editing state
   const [editingBalance, setEditingBalance] = useState<string | null>(null);
@@ -2448,6 +2451,7 @@ const AdminPortal = () => {
             {/* --- DEPOSITS SECTION --- */}
             {(() => {
               const deposits = allTransactions.filter((t: any) => t.type === 'deposit');
+              const visibleDeposits = showAllDeposits ? deposits : deposits.slice(0, 5);
               const resolved = deposits.filter((t: any) => t.status === 'completed' || t.status === 'failed');
               const completed = resolved.filter((t: any) => t.status === 'completed');
               const failed = resolved.filter((t: any) => t.status === 'failed');
@@ -2478,7 +2482,7 @@ const AdminPortal = () => {
                     {deposits.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">No deposits found</p>
                     )}
-                    {deposits.map((transaction: any) => (
+                    {visibleDeposits.map((transaction: any) => (
                       <Card key={transaction.id} className="border-border bg-card p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 flex-1">
@@ -2538,6 +2542,17 @@ const AdminPortal = () => {
                         </div>
                       </Card>
                     ))}
+                    {deposits.length > 5 && (
+                      <div className="flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowAllDeposits((prev) => !prev)}
+                        >
+                          {showAllDeposits ? 'See less' : `See more (${deposits.length - 5})`}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </>
               );
@@ -2545,6 +2560,7 @@ const AdminPortal = () => {
 
             {/* --- ACTIVATION FEES SECTION (KSH 1000 + KSH 399) --- */}
             {(() => {
+              const visibleFees = showAllActivationFees ? activationFees : activationFees.slice(0, 5);
               const resolved = activationFees.filter((f: any) => f.status === 'completed' || f.status === 'failed');
               const completed = resolved.filter((f: any) => f.status === 'completed');
               const failed = resolved.filter((f: any) => f.status === 'failed');
@@ -2597,7 +2613,7 @@ const AdminPortal = () => {
                     {activationFees.length === 0 && (
                       <p className="text-sm text-muted-foreground text-center py-4">No activation fees found</p>
                     )}
-                    {activationFees.map((fee: any) => (
+                    {visibleFees.map((fee: any) => (
                       <Card key={fee.id} className="border-border bg-card p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 flex-1">
@@ -2661,20 +2677,36 @@ const AdminPortal = () => {
                         </div>
                       </Card>
                     ))}
+                    {activationFees.length > 5 && (
+                      <div className="flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowAllActivationFees((prev) => !prev)}
+                        >
+                          {showAllActivationFees ? 'See less' : `See more (${activationFees.length - 5})`}
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </>
               );
             })()}
 
             {/* --- WITHDRAWALS SECTION --- */}
+            {(() => {
+              const withdrawals = allTransactions.filter((t: any) => t.type === 'withdrawal');
+              const visibleWithdrawals = showAllWithdrawals ? withdrawals : withdrawals.slice(0, 5);
+              return (
+                <>
             <div className="mt-8 mb-2">
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Withdrawals</h3>
             </div>
             <div className="space-y-3">
-              {allTransactions.filter((t: any) => t.type !== 'deposit').length === 0 && (
+              {withdrawals.length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-4">No withdrawals found</p>
               )}
-              {allTransactions.filter((t: any) => t.type !== 'deposit').map((transaction: any) => (
+              {visibleWithdrawals.map((transaction: any) => (
                 <Card key={transaction.id} className="border-border bg-card p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">
@@ -2734,9 +2766,22 @@ const AdminPortal = () => {
                   </div>
                 </Card>
               ))}
+              {withdrawals.length > 5 && (
+                <div className="flex justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAllWithdrawals((prev) => !prev)}
+                  >
+                    {showAllWithdrawals ? 'See less' : `See more (${withdrawals.length - 5})`}
+                  </Button>
+                </div>
+              )}
             </div>
+                </>
+              );
+            })()}
           </TabsContent>
-
           <TabsContent value="bets" className="space-y-6">
             <div className="mb-4">
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Manage Bets</h3>
