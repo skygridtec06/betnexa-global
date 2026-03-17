@@ -8,69 +8,6 @@ const router = express.Router();
 const { initiatePayment } = require('../services/paymentService.js');
 const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
-const DEPOSIT_ONLY_STAKING_START = process.env.DEPOSIT_ONLY_STAKING_START || '2026-03-17T09:47:00.000Z';
-
-function asNumber(value, fallback = 0) {
-  const n = parseFloat(value);
-  return Number.isFinite(n) ? n : fallback;
-}
-
-async function getStakeableDepositBalance(userId) {
-  const startIso = new Date(DEPOSIT_ONLY_STAKING_START).toISOString();
-
-  const { data: depositTransactions, error: txError } = await supabase
-    .from('transactions')
-    .select('amount, external_reference')
-    .eq('user_id', userId)
-    .eq('type', 'deposit')
-    .eq('status', 'completed')
-    .gte('created_at', startIso);
-
-  if (txError) {
-    throw new Error(`Failed to fetch completed deposit transactions: ${txError.message}`);
-  }
-
-  const { data: deposits, error: depError } = await supabase
-    .from('deposits')
-    .select('amount, external_reference')
-    .eq('user_id', userId)
-    .eq('status', 'completed')
-    .gte('created_at', startIso);
-
-  if (depError) {
-    throw new Error(`Failed to fetch completed deposits: ${depError.message}`);
-  }
-
-  const { data: bets, error: betError } = await supabase
-    .from('bets')
-    .select('stake')
-    .eq('user_id', userId)
-    .gte('created_at', startIso);
-
-  if (betError) {
-    throw new Error(`Failed to fetch placed bets: ${betError.message}`);
-  }
-
-  const seenRefs = new Set(
-    (depositTransactions || [])
-      .map((tx) => tx.external_reference)
-      .filter(Boolean)
-  );
-
-  const transactionDepositsTotal = (depositTransactions || []).reduce(
-    (sum, tx) => sum + asNumber(tx.amount, 0),
-    0
-  );
-
-  const depositsTableTotal = (deposits || [])
-    .filter((dep) => !dep.external_reference || !seenRefs.has(dep.external_reference))
-    .reduce((sum, dep) => sum + asNumber(dep.amount, 0), 0);
-
-  const stakesTotal = (bets || []).reduce((sum, bet) => sum + asNumber(bet.stake, 0), 0);
-  const completedDepositsTotal = transactionDepositsTotal + depositsTableTotal;
-
-  return Math.max(0, completedDepositsTotal - stakesTotal);
-}
 
 /**
  * Handle payment timeout - mark as failed if no callback after 10 seconds
@@ -821,10 +758,7 @@ router.post('/admin/resolve/:externalReference', async (req, res) => {
 
           const { error: balanceError } = await supabase
             .from('users')
-            .update({
-              account_balance: newBalance,
-              updated_at: new Date().toISOString()
-            })
+            .update({ account_balance: newBalance })
             .eq('id', user_id);
 
           if (balanceError) {
@@ -914,7 +848,7 @@ router.get('/user-balance/:userId', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('account_balance, withdrawal_activated, withdrawal_activation_date')
+        .select('deposited_balance, winnings_balance, withdrawal_activated, withdrawal_activation_date')
         .eq('id', userId);
 
       if (error) {
@@ -937,9 +871,10 @@ router.get('/user-balance/:userId', async (req, res) => {
         });
       }
 
-      const accountBalance = parseFloat(data[0].account_balance) || 0;
-      const availableToBet = await getStakeableDepositBalance(userId);
-      const nonStakeableBalance = Math.max(0, accountBalance - availableToBet);
+      const depositedBalance = parseFloat(data[0].deposited_balance) || 0;
+      const winningsBalance = parseFloat(data[0].winnings_balance) || 0;
+      const accountBalance = depositedBalance + winningsBalance;
+      const availableToBet = depositedBalance;
       const withdrawalActivated = data[0].withdrawal_activated || false;
       const withdrawalActivationDate = data[0].withdrawal_activation_date || null;
       console.log('✅ User balance fetched successfully:', { userId, accountBalance, availableToBet, withdrawalActivated });
@@ -948,8 +883,8 @@ router.get('/user-balance/:userId', async (req, res) => {
         success: true,
         account_balance: accountBalance,
         available_to_bet: availableToBet,
-        deposited_balance: availableToBet,
-        winnings_balance: nonStakeableBalance,
+        deposited_balance: depositedBalance,
+        winnings_balance: winningsBalance,
         withdrawalActivated,
         withdrawalActivationDate,
         userId,
