@@ -1921,12 +1921,18 @@ const AdminPortal = () => {
                                   max="120"
                                   placeholder="Minute"
                                   className="h-7 w-16 text-xs"
-                                  defaultValue={Math.floor(game.minute ?? 0)}
+                                  value={customTimeSettings[`${game.id}_minute`] ?? Math.floor(game.minute ?? 0)}
+                                  onChange={(e) => {
+                                    const nextMinute = parseInt(e.target.value, 10);
+                                    setCustomTimeSettings((prev) => ({
+                                      ...prev,
+                                      [`${game.id}_minute`]: Number.isFinite(nextMinute) ? nextMinute : 0
+                                    }));
+                                  }}
                                   onKeyPress={(e) => {
                                     if (e.key === 'Enter') {
                                       const minute = parseInt((e.target as HTMLInputElement).value) || 0;
-                                      const secondsInput = (e.currentTarget as any).parentElement?.querySelector('input[placeholder="Seconds"]') as HTMLInputElement;
-                                      const seconds = secondsInput ? parseInt(secondsInput.value) || 0 : 0;
+                                      const seconds = customTimeSettings[`${game.id}_seconds`] ?? Math.floor(game.seconds ?? 0);
                                       setCustomGameTime(game.id, minute, seconds);
                                     }
                                   }}
@@ -1937,18 +1943,25 @@ const AdminPortal = () => {
                                   max="59"
                                   placeholder="Seconds"
                                   className="h-7 w-16 text-xs"
-                                  defaultValue={Math.floor(game.seconds ?? 0)}
+                                  value={customTimeSettings[`${game.id}_seconds`] ?? Math.floor(game.seconds ?? 0)}
+                                  onChange={(e) => {
+                                    const parsedSeconds = parseInt(e.target.value, 10);
+                                    const clampedSeconds = Number.isFinite(parsedSeconds)
+                                      ? Math.max(0, Math.min(59, parsedSeconds))
+                                      : 0;
+                                    setCustomTimeSettings((prev) => ({
+                                      ...prev,
+                                      [`${game.id}_seconds`]: clampedSeconds
+                                    }));
+                                  }}
                                 />
                                 <Button
                                   size="sm"
                                   variant="secondary"
                                   onClick={() => {
-                                    const inputs = (event?.currentTarget?.parentElement?.parentElement as any)?.querySelectorAll('input');
-                                    if (inputs) {
-                                      const minute = parseInt(inputs[0].value) || 0;
-                                      const seconds = parseInt(inputs[1].value) || 0;
-                                      setCustomGameTime(game.id, minute, seconds);
-                                    }
+                                    const minute = customTimeSettings[`${game.id}_minute`] ?? Math.floor(game.minute ?? 0);
+                                    const seconds = customTimeSettings[`${game.id}_seconds`] ?? Math.floor(game.seconds ?? 0);
+                                    setCustomGameTime(game.id, minute, seconds);
                                   }}
                                   className="text-xs"
                                 >

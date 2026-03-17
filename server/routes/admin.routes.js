@@ -1324,14 +1324,6 @@ router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
 
     console.log(`📝 Updating score for game: ${gameId}, score: ${homeScore}-${awayScore}, minute: ${minute}`);
 
-    const updates = {
-      home_score: homeScore,
-      away_score: awayScore,
-      minute: minute,
-      status: status,
-      updated_at: new Date().toISOString(),
-    };
-
     // Find the game first - check if gameId is UUID or text game_id
     let existingGameQuery = supabase.from('games').select('*');
     
@@ -1356,6 +1348,21 @@ router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
     }
 
     console.log(`   Found game with id: ${existingGame.id}`);
+
+    let resolvedMinute = parseInt(minute, 10);
+    if (!Number.isFinite(resolvedMinute) || resolvedMinute < 0) {
+      resolvedMinute = parseInt(existingGame.minute, 10) || 0;
+    } else if ((parseInt(existingGame.minute, 10) || 0) > 0 && resolvedMinute === 0) {
+      resolvedMinute = parseInt(existingGame.minute, 10) || 0;
+    }
+
+    const updates = {
+      home_score: homeScore,
+      away_score: awayScore,
+      minute: resolvedMinute,
+      status: status,
+      updated_at: new Date().toISOString(),
+    };
 
     // Try to update by UUID
     let { data: game, error } = await supabase
@@ -1591,6 +1598,7 @@ router.put('/games/:gameId/resume-second-half', checkAdmin, async (req, res) => 
       is_halftime: false,
       game_paused: false,
       kickoff_start_time: newKickoffTime.toISOString(),
+      minute: 45,
       kickoff_paused_at: null,
       updated_at: now.toISOString()
     };
@@ -1772,12 +1780,16 @@ router.put('/games/:gameId/set-time', checkAdmin, async (req, res) => {
     // We want: (minute * 60 + seconds) * 1000 = now - kickoff_start_time
     // So: kickoff_start_time = now - ((minute * 60 + seconds) * 1000)
     const now = new Date();
-    const targetElapsedSeconds = minute * 60 + seconds;
+    const parsedMinute = Math.max(0, parseInt(minute, 10) || 0);
+    const parsedSeconds = Math.max(0, Math.min(59, parseInt(seconds, 10) || 0));
+    const targetElapsedSeconds = parsedMinute * 60 + parsedSeconds;
     const newKickoffTime = new Date(now.getTime() - targetElapsedSeconds * 1000);
+    const minuteAnchorUpdatedAt = new Date(now.getTime() - parsedSeconds * 1000);
 
     const updates = {
       kickoff_start_time: newKickoffTime.toISOString(),
-      updated_at: now.toISOString()
+      minute: parsedMinute,
+      updated_at: minuteAnchorUpdatedAt.toISOString()
     };
 
     const { data: game, error } = await supabase
@@ -1792,13 +1804,13 @@ router.put('/games/:gameId/set-time', checkAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Failed to set time', details: error.message });
     }
 
-    console.log(`✅ Timer set to ${minute}:${String(seconds).padStart(2, '0')} for game ${gameId}`);
+    console.log(`✅ Timer set to ${parsedMinute}:${String(parsedSeconds).padStart(2, '0')} for game ${gameId}`);
     res.json({ 
       success: true, 
       game,
       newKickoffStartTime: newKickoffTime.toISOString(),
-      minute,
-      seconds
+      minute: parsedMinute,
+      seconds: parsedSeconds
     });
   } catch (error) {
     console.error('❌ Set time error:', error.message);
