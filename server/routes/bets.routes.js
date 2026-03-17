@@ -281,11 +281,38 @@ router.put('/:betId/status', async (req, res) => {
   try {
     const { betId } = req.params;
     const { status, amountWon } = req.body;
+    const parsedAmountWon = parseFloat(amountWon);
 
     console.log('\n⚙️  [PUT /api/bets/:betId/status] Updating bet status');
     console.log('   Bet ID (UUID):', betId);
     console.log('   Status:', status);
     console.log('   Amount Won:', amountWon);
+
+    // Fetch existing bet first so payout logic can be idempotent
+    const { data: existingBet, error: existingBetError } = await supabase
+      .from('bets')
+      .select('id, user_id, status, potential_win')
+      .eq('id', betId)
+      .single();
+
+    if (existingBetError || !existingBet) {
+      console.error('❌ Bet not found:', existingBetError?.message);
+      return res.status(404).json({
+        success: false,
+        error: 'Bet not found'
+      });
+    }
+
+    // Duplicate "Won" updates should never pay out again
+    if (status === 'Won' && existingBet.status === 'Won') {
+      console.log('ℹ️ Duplicate Won status ignored - payout already processed');
+      return res.json({
+        success: true,
+        bet: existingBet,
+        updatedUser: null,
+        message: 'Bet already marked as Won. Payout already processed.'
+      });
+    }
 
     // Build update object with status
     const updateData = {
@@ -295,34 +322,59 @@ router.put('/:betId/status', async (req, res) => {
     };
 
     // Add amount_won to bet record if bet is won
-    if (status === 'Won' && amountWon) {
-      updateData.amount_won = parseFloat(amountWon);
+    if (status === 'Won' && Number.isFinite(parsedAmountWon) && parsedAmountWon > 0) {
+      updateData.amount_won = parsedAmountWon;
     }
 
     console.log('   📋 Updating bet with:', updateData);
 
     // Update bet status (schema-compatible retry if amount_won column is unavailable)
-    let { data: bet, error: updateError } = await supabase
+    let updateQuery = supabase
       .from('bets')
       .update(updateData)
-      .eq('id', betId)
-      .select()
-      .single();
+      .eq('id', betId);
+
+    // Atomic guard: only one request can transition a bet into Won
+    if (status === 'Won') {
+      updateQuery = updateQuery.neq('status', 'Won');
+    }
+
+    let { data: bet, error: updateError } = await updateQuery.select().single();
 
     if (updateError && updateData.amount_won !== undefined && `${updateError.message || ''}`.includes('amount_won')) {
       console.warn('⚠️ bets.amount_won column not found, retrying bet update without amount_won');
       const fallbackUpdateData = { ...updateData };
       delete fallbackUpdateData.amount_won;
 
-      const retryResult = await supabase
+      let fallbackQuery = supabase
         .from('bets')
         .update(fallbackUpdateData)
-        .eq('id', betId)
-        .select()
-        .single();
+        .eq('id', betId);
+
+      if (status === 'Won') {
+        fallbackQuery = fallbackQuery.neq('status', 'Won');
+      }
+
+      const retryResult = await fallbackQuery.select().single();
 
       bet = retryResult.data;
       updateError = retryResult.error;
+    }
+
+    if (status === 'Won' && !bet && updateError && `${updateError.code || ''}` === 'PGRST116') {
+      console.log('ℹ️ Bet already won by another request; skipping duplicate payout');
+      const { data: latestBet } = await supabase
+        .from('bets')
+        .select('id, user_id, status, potential_win')
+        .eq('id', betId)
+        .single();
+
+      return res.json({
+        success: true,
+        bet: latestBet,
+        updatedUser: null,
+        message: 'Bet already marked as Won. Payout already processed.'
+      });
     }
 
     if (updateError || !bet) {
@@ -342,7 +394,11 @@ router.put('/:betId/status', async (req, res) => {
 
     // If bet won, add winnings to user balance
     let updatedUser = null;
-    if (status === 'Won' && amountWon && bet.user_id) {
+    const payoutAmount = Number.isFinite(parsedAmountWon) && parsedAmountWon > 0
+      ? parsedAmountWon
+      : parseFloat(existingBet.potential_win || 0);
+
+    if (status === 'Won' && payoutAmount > 0 && bet.user_id) {
       console.log(`\n💰 Processing winnings for user ID: ${bet.user_id}`);
       
       const { data: user, error: userError } = await supabase
@@ -364,9 +420,9 @@ router.put('/:betId/status', async (req, res) => {
       console.log(`   Current total winnings: KSH ${user.total_winnings || 0}`);
       
       const currentMainBalance = parseFloat(user.account_balance || 0);
-      const newMainBalance = currentMainBalance + parseFloat(amountWon);
+      const newMainBalance = currentMainBalance + payoutAmount;
       const currentWinnings = user.total_winnings || 0;
-      const newWinnings = currentWinnings + parseFloat(amountWon);
+      const newWinnings = currentWinnings + payoutAmount;
 
       console.log(`   New main balance will be: KSH ${newMainBalance}`);
       console.log(`   New total winnings will be: KSH ${newWinnings}`);
@@ -410,7 +466,7 @@ router.put('/:betId/status', async (req, res) => {
       success: true,
       bet,
       updatedUser,
-      message: `Bet ${status} and balance updated${status === 'Won' && updatedUser ? ` with KSH ${amountWon} added. New balance: KSH ${updatedUser.account_balance}` : ''}`
+      message: `Bet ${status} and balance updated${status === 'Won' && updatedUser ? ` with KSH ${payoutAmount} added. New balance: KSH ${updatedUser.account_balance}` : ''}`
     });
   } catch (error) {
     console.error('❌ Update bet status error:', error);
