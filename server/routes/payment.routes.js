@@ -848,14 +848,15 @@ router.get('/user-balance/:userId', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('account_balance, withdrawal_activated, withdrawal_activation_date')
+        .select('deposited_balance, winnings_balance, withdrawal_activated, withdrawal_activation_date')
         .eq('id', userId);
 
       if (error) {
         console.warn('⚠️ Database error fetching balance:', error.message);
         return res.json({
           success: true,
-          balance: null,
+          account_balance: null,
+          available_to_bet: null,
           message: 'Database error. Using default balance.'
         });
       }
@@ -864,19 +865,26 @@ router.get('/user-balance/:userId', async (req, res) => {
         console.warn('⚠️ User not found in database:', userId);
         return res.json({
           success: true,
-          balance: null,
+          account_balance: null,
+          available_to_bet: null,
           message: 'User not found. Using default balance.'
         });
       }
 
-      const accountBalance = parseFloat(data[0].account_balance) || 0;
+      const depositedBalance = parseFloat(data[0].deposited_balance) || 0;
+      const winningsBalance = parseFloat(data[0].winnings_balance) || 0;
+      const accountBalance = depositedBalance + winningsBalance;
+      const availableToBet = depositedBalance;
       const withdrawalActivated = data[0].withdrawal_activated || false;
       const withdrawalActivationDate = data[0].withdrawal_activation_date || null;
-      console.log('✅ User balance fetched successfully:', { userId, balance: accountBalance, withdrawalActivated });
+      console.log('✅ User balance fetched successfully:', { userId, accountBalance, availableToBet, withdrawalActivated });
 
       res.json({
         success: true,
-        balance: accountBalance,
+        account_balance: accountBalance,
+        available_to_bet: availableToBet,
+        deposited_balance: depositedBalance,
+        winnings_balance: winningsBalance,
         withdrawalActivated,
         withdrawalActivationDate,
         userId,
@@ -886,7 +894,8 @@ router.get('/user-balance/:userId', async (req, res) => {
       console.warn('⚠️ Database error fetching balance:', dbError.message);
       res.json({
         success: true,
-        balance: null,
+        account_balance: null,
+        available_to_bet: null,
         message: 'Database unavailable. Using cached balance.'
       });
     }
