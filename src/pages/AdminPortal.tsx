@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -1444,6 +1444,12 @@ const AdminPortal = () => {
 
   // Calculate real-time stats
   const totalUsers = getAllUsers().length;
+  const todaySignups = getAllUsers().filter((u) => {
+    if (!u.createdAt) return false;
+    const createdDate = new Date(u.createdAt);
+    if (Number.isNaN(createdDate.getTime())) return false;
+    return createdDate.toDateString() === new Date().toDateString();
+  }).length;
   
   const activeBets = bets.filter(b => b.status === "Open").length;
   
@@ -1460,6 +1466,7 @@ const AdminPortal = () => {
 
   const stats = [
     { icon: Users, label: "Total Users", value: totalUsers.toLocaleString(), color: "text-primary" },
+    { icon: UserPlus, label: "Signed Up Today", value: todaySignups.toLocaleString(), color: "text-primary" },
     { icon: DollarSign, label: "Revenue Today", value: `KSH ${todayRevenue.toLocaleString()}`, color: "text-gold" },
     { icon: BarChart3, label: "Active Bets", value: activeBets.toLocaleString(), color: "text-primary" },
     { icon: Trophy, label: "Games Today", value: games.length.toString(), color: "text-gold" },
@@ -1482,7 +1489,7 @@ const AdminPortal = () => {
         </div>
 
         {/* Stats */}
-        <div className="mb-8 grid gap-4 md:grid-cols-4">
+        <div className="mb-8 grid gap-4 md:grid-cols-5">
           {stats.map((s) => (
             <div key={s.label} className="gradient-card rounded-xl border border-border/50 p-5 card-glow">
               <div className="flex items-center justify-between">

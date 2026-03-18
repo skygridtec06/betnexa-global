@@ -10,6 +10,7 @@ export interface User {
   verified: boolean;
   level: string;
   joinDate: string;
+  createdAt?: string;
   totalBets: number;
   totalWinnings: number;
   accountBalance: number;
@@ -84,6 +85,7 @@ export function UserManagementProvider({ children }: { children: ReactNode }) {
             verified: isVerified,
             level: u.is_admin ? 'Admin' : 'Regular User',
             joinDate: u.created_at ? new Date(u.created_at).toLocaleDateString() : new Date().toLocaleDateString(),
+            createdAt: u.created_at || undefined,
             totalBets: parseInt(u.total_bets || 0),
             totalWinnings: parseFloat(u.total_winnings || 0),
             accountBalance: parseFloat(u.account_balance || 0),
