@@ -177,55 +177,67 @@ async function settleBetsForGame(gameId, game) {
 
     console.log(`   Found ${selections.length} selections to evaluate`);
 
-    // Group selections by bet ID
-    const betSelections = {};
-    selections.forEach(sel => {
-      const betId = sel.bet_id;
-      if (!betSelections[betId]) {
-        betSelections[betId] = {
-          bets_data: sel.bets,
-          selections: []
-        };
-      }
-      betSelections[betId].selections.push(sel);
-    });
+    // Process each affected bet using all its selections (not only this game)
+    const affectedBetIds = [...new Set((selections || []).map((sel) => sel.bet_id))];
 
-    // Process each bet
-    for (const [betId, betData] of Object.entries(betSelections)) {
-      const bet = betData.bets_data;
+    for (const betId of affectedBetIds) {
+      const { data: bet, error: betError } = await supabase
+        .from('bets')
+        .select('id, user_id, stake, potential_win, status')
+        .eq('id', betId)
+        .single();
+
+      if (betError || !bet) {
+        console.warn(`   ⚠️ Bet not found while settling ${betId}:`, betError?.message);
+        continue;
+      }
+
       if (bet.status !== 'Open') {
-        continue; // Skip already settled bets
+        continue;
       }
 
-      const betSelections = betData.selections;
-      console.log(`\n   🎯 Processing bet ${betId.substring(0, 8)}... (${betSelections.length} selections)`);
+      const { data: allSelections, error: allSelectionsError } = await supabase
+        .from('bet_selections')
+        .select('id, market_key, market_type, outcome, game_id, games:game_id(status, home_score, away_score)')
+        .eq('bet_id', betId);
 
-      // Evaluate each selection
-      let allFinished = true;
+      if (allSelectionsError || !allSelections || allSelections.length === 0) {
+        console.warn(`   ⚠️ Could not fetch all selections for bet ${betId}:`, allSelectionsError?.message);
+        continue;
+      }
+
+      console.log(`\n   🎯 Processing bet ${betId.substring(0, 8)}... (${allSelections.length} selections)`);
+
+      let allGamesFinished = true;
       let allWon = true;
       let hasLost = false;
       const updatesToApply = [];
 
-      for (const selection of betSelections) {
-        const outcome = evaluateSelectionOutcome(selection, game);
-        console.log(`      Selection ${selection.id.substring(0, 8)}... market:${selection.market_key} => ${outcome}`);
+      for (const selection of allSelections) {
+        const selectionGame = selection.games;
+        const gameStatus = (selectionGame?.status || '').toLowerCase();
+        let evaluatedOutcome = 'pending';
 
-        if (outcome !== 'pending') {
-          updatesToApply.push({
-            id: selection.id,
-            outcome: outcome
-          });
-
-          if (outcome === 'lost') {
-            hasLost = true;
-            allWon = false;
-          }
+        if (gameStatus === 'finished') {
+          evaluatedOutcome = evaluateSelectionOutcome(selection, selectionGame);
         } else {
-          allFinished = false;
+          allGamesFinished = false;
+        }
+
+        console.log(`      Selection ${selection.id.substring(0, 8)}... market:${selection.market_key} => ${evaluatedOutcome} (game:${gameStatus || 'unknown'})`);
+
+        if (selection.outcome !== evaluatedOutcome) {
+          updatesToApply.push({ id: selection.id, outcome: evaluatedOutcome });
+        }
+
+        if (evaluatedOutcome === 'lost') {
+          hasLost = true;
+          allWon = false;
+        } else if (evaluatedOutcome !== 'won') {
+          allWon = false;
         }
       }
 
-      // Apply selection outcome updates
       for (const update of updatesToApply) {
         const { error: updateError } = await supabase
           .from('bet_selections')
@@ -237,23 +249,21 @@ async function settleBetsForGame(gameId, game) {
         }
       }
 
-      // Determine new bet status
       let newBetStatus = 'Open';
       if (hasLost) {
         newBetStatus = 'Lost';
-      } else if (allFinished && allWon) {
+      } else if (allGamesFinished && allWon) {
         newBetStatus = 'Won';
       }
 
-      console.log(`      New bet status: ${newBetStatus} (allFinished:${allFinished}, allWon:${allWon}, hasLost:${hasLost})`);
+      console.log(`      New bet status: ${newBetStatus} (allGamesFinished:${allGamesFinished}, allWon:${allWon}, hasLost:${hasLost})`);
 
-      // Update bet status if changed
       if (newBetStatus !== 'Open' && newBetStatus !== bet.status) {
         const amountWon = newBetStatus === 'Won' ? bet.potential_win : null;
-        
+
         const { error: betUpdateError } = await supabase
           .from('bets')
-          .update({ 
+          .update({
             status: newBetStatus,
             amount_won: amountWon,
             settled_at: new Date().toISOString(),
@@ -268,13 +278,12 @@ async function settleBetsForGame(gameId, game) {
 
         console.log(`      ✅ Bet status updated to ${newBetStatus}`);
 
-        // If bet won, update user balance
         if (newBetStatus === 'Won' && amountWon && bet.user_id) {
           console.log(`      💰 Processing winnings: KSH ${amountWon}`);
-          
+
           const { data: user, error: userError } = await supabase
             .from('users')
-            .select('account_balance, total_winnings')
+            .select('winnings_balance, total_winnings')
             .eq('id', bet.user_id)
             .single();
 
@@ -283,22 +292,22 @@ async function settleBetsForGame(gameId, game) {
             continue;
           }
 
-          const newBalance = parseFloat(user.account_balance) + parseFloat(amountWon);
+          const newWinningsBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
           const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
 
           const { error: balanceError } = await supabase
             .from('users')
             .update({
-              account_balance: newBalance,
+              winnings_balance: newWinningsBalance,
               total_winnings: newWinnings,
               updated_at: new Date().toISOString()
             })
             .eq('id', bet.user_id);
 
           if (balanceError) {
-            console.error('   ❌ Error updating user balance:', balanceError.message);
+            console.error('   ❌ Error updating user winnings:', balanceError.message);
           } else {
-            console.log(`      ✅ User balance updated: KSH ${newBalance} (+KSH ${amountWon})`);
+            console.log(`      ✅ User winnings updated: KSH ${newWinningsBalance} (+KSH ${amountWon})`);
           }
         }
       }
@@ -3163,7 +3172,7 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
     // Get the bet selection
     const { data: selection, error: selError } = await supabase
       .from('bet_selections')
-      .select('*')
+      .select('*, games:game_id(status)')
       .eq('id', selectionId)
       .single();
 
@@ -3172,6 +3181,14 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
       return res.status(404).json({ 
         success: false, 
         error: 'Bet selection not found' 
+      });
+    }
+
+    const selectionGameStatus = (selection.games?.status || '').toLowerCase();
+    if ((outcome === 'won' || outcome === 'lost') && selectionGameStatus !== 'finished') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot set selection to won/lost before the game is finished'
       });
     }
 
@@ -3200,15 +3217,15 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
     // Get all selections for this bet
     const { data: allSelections } = await supabase
       .from('bet_selections')
-      .select('*')
+      .select('*, games:game_id(status)')
       .eq('bet_id', selection.bet_id);
 
     if (allSelections && allSelections.length > 0) {
       // Check if any selection is lost - if so, bet is lost
       const hasLostSelection = allSelections.some(sel => sel.outcome === 'lost');
       
-      // Check if all selections are not pending
-      const allFinished = allSelections.every(sel => sel.outcome !== 'pending');
+      // A bet is finished only when every selection has a non-pending outcome and every game is finished
+      const allFinished = allSelections.every(sel => sel.outcome !== 'pending' && (sel.games?.status || '').toLowerCase() === 'finished');
       
       // Check if all selections are won
       const allWon = allSelections.every(sel => sel.outcome === 'won');
@@ -3258,38 +3275,38 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
           } else {
             console.log(`✅ Bet status automatically updated to: ${newBetStatus}`);
 
-            // 🔥 NEW: Update user balance if bet won
+            // Update winnings wallet if bet won
             if (newBetStatus === 'Won' && amountWon && bet.user_id) {
               console.log(`\n💰 [BALANCE UPDATE] Processing winnings for user ID: ${bet.user_id}`);
               
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('account_balance, total_winnings, phone_number')
+                .select('winnings_balance, total_winnings, phone_number')
                 .eq('id', bet.user_id)
                 .single();
 
               if (!user || userError) {
                 console.error('   ❌ Error fetching user:', userError?.message);
               } else {
-                const newBalance = parseFloat(user.account_balance) + parseFloat(amountWon);
+                const newBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
                 const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
 
                 const { error: balanceError } = await supabase
                   .from('users')
                   .update({
-                    account_balance: newBalance,
+                    winnings_balance: newBalance,
                     total_winnings: newWinnings,
                     updated_at: new Date().toISOString()
                   })
                   .eq('id', bet.user_id);
 
                 if (balanceError) {
-                  console.error('   ❌ Error updating user balance:', balanceError.message);
+                  console.error('   ❌ Error updating user winnings balance:', balanceError.message);
                 } else {
-                  console.log(`   ✅ User balance updated successfully`);
+                  console.log(`   ✅ User winnings updated successfully`);
                   console.log(`      Phone: ${user.phone_number}`);
-                  console.log(`      Previous balance: KSH ${user.account_balance}`);
-                  console.log(`      New balance: KSH ${newBalance}`);
+                  console.log(`      Previous winnings balance: KSH ${user.winnings_balance || 0}`);
+                  console.log(`      New winnings balance: KSH ${newBalance}`);
                   console.log(`      Winnings added: KSH ${amountWon}`);
                 }
               }
@@ -4162,10 +4179,10 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
 
-    // Get current balance
+    // Get current winnings wallet
     const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('account_balance, username')
+      .select('winnings_balance, total_winnings, username')
       .eq('id', user_id)
       .single();
 
@@ -4173,17 +4190,23 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const prevBalance = parseFloat(user.account_balance) || 0;
+    const prevBalance = parseFloat(user.winnings_balance) || 0;
     const newBalance = prevBalance + creditAmount;
+    const prevTotalWinnings = parseFloat(user.total_winnings) || 0;
+    const newTotalWinnings = prevTotalWinnings + creditAmount;
 
-    // Update balance
+    // Update winnings wallet
     const { error: updateErr } = await supabase
       .from('users')
-      .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+      .update({
+        winnings_balance: newBalance,
+        total_winnings: newTotalWinnings,
+        updated_at: new Date().toISOString()
+      })
       .eq('id', user_id);
 
     if (updateErr) {
-      return res.status(500).json({ success: false, error: 'Failed to update balance', details: updateErr.message });
+      return res.status(500).json({ success: false, error: 'Failed to update winnings balance', details: updateErr.message });
     }
 
     // Record in balance_history
@@ -4193,13 +4216,13 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
         balance_before: prevBalance,
         balance_after: newBalance,
         change: creditAmount,
-        reason: `Admin credit: Win from bet ${bet_id || 'unknown'}`,
+        reason: `Admin credit: Win from bet ${bet_id || 'unknown'} (winnings wallet)`,
         created_by: req.user?.phone || 'admin',
         created_at: new Date().toISOString(),
       }]);
     } catch (_) {}
 
-    console.log(`💰 Credited KSH ${creditAmount} to ${user.username} (${user_id}). Balance: ${prevBalance} → ${newBalance}`);
+    console.log(`💰 Credited KSH ${creditAmount} to winnings wallet for ${user.username} (${user_id}). Winnings: ${prevBalance} → ${newBalance}`);
 
     res.json({ success: true, newBalance, previousBalance: prevBalance, credited: creditAmount });
   } catch (err) {

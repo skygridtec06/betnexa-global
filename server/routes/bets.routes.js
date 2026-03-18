@@ -314,6 +314,40 @@ router.put('/:betId/status', async (req, res) => {
       });
     }
 
+    // Strict guard: a bet can only be marked as Won after all selected games are finished
+    if (status === 'Won') {
+      const { data: selections, error: selectionsError } = await supabase
+        .from('bet_selections')
+        .select('id, outcome, games:game_id(status)')
+        .eq('bet_id', betId);
+
+      if (selectionsError) {
+        console.error('❌ Error validating selections before winning bet:', selectionsError.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to validate bet selections',
+          details: selectionsError.message
+        });
+      }
+
+      if (!selections || selections.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cannot mark bet as Won without selections'
+        });
+      }
+
+      const hasUnfinishedGames = selections.some((sel) => (sel.games?.status || '').toLowerCase() !== 'finished');
+      const hasNonWonSelections = selections.some((sel) => (sel.outcome || '').toLowerCase() !== 'won');
+
+      if (hasUnfinishedGames || hasNonWonSelections) {
+        return res.status(400).json({
+          success: false,
+          error: 'Bet cannot be marked as Won until all selected games are finished and all outcomes are won'
+        });
+      }
+    }
+
     // Build update object with status
     const updateData = {
       status: status,
@@ -392,7 +426,7 @@ router.put('/:betId/status', async (req, res) => {
       console.log('✅ Amount won recorded:', amountWon);
     }
 
-    // If bet won, add winnings to user balance
+    // If bet won, add winnings to winnings_balance only (not account_balance)
     let updatedUser = null;
     const payoutAmount = Number.isFinite(parsedAmountWon) && parsedAmountWon > 0
       ? parsedAmountWon
@@ -403,7 +437,7 @@ router.put('/:betId/status', async (req, res) => {
       
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('account_balance, total_winnings, id, phone_number, username')
+        .select('winnings_balance, total_winnings, id, phone_number, username')
         .eq('id', bet.user_id)
         .single();
 
@@ -416,22 +450,22 @@ router.put('/:betId/status', async (req, res) => {
         });
       }
 
-      console.log(`   Current main balance: KSH ${user.account_balance || 0}`);
+      console.log(`   Current winnings balance: KSH ${user.winnings_balance || 0}`);
       console.log(`   Current total winnings: KSH ${user.total_winnings || 0}`);
       
-      const currentMainBalance = parseFloat(user.account_balance || 0);
-      const newMainBalance = currentMainBalance + payoutAmount;
+      const currentWinningsBalance = parseFloat(user.winnings_balance || 0);
+      const newWinningsBalance = currentWinningsBalance + payoutAmount;
       const currentWinnings = user.total_winnings || 0;
       const newWinnings = currentWinnings + payoutAmount;
 
-      console.log(`   New main balance will be: KSH ${newMainBalance}`);
+      console.log(`   New winnings balance will be: KSH ${newWinningsBalance}`);
       console.log(`   New total winnings will be: KSH ${newWinnings}`);
       console.log('   📝 Updating user in database...');
 
       const { data: updatedUserData, error: balanceError } = await supabase
         .from('users')
         .update({
-          account_balance: newMainBalance,
+          winnings_balance: newWinningsBalance,
           total_winnings: newWinnings,
           updated_at: new Date().toISOString()
         })
@@ -449,9 +483,9 @@ router.put('/:betId/status', async (req, res) => {
       }
 
       updatedUser = updatedUserData;
-      console.log(`✅ User balance updated successfully`);
+      console.log(`✅ User winnings updated successfully`);
       console.log(`   Phone: ${updatedUser.phone_number}`);
-      console.log(`   New main balance: KSH ${updatedUser.account_balance}`);
+      console.log(`   New winnings balance: KSH ${updatedUser.winnings_balance}`);
       console.log(`   New total winnings: KSH ${updatedUser.total_winnings}`);
     }
 
@@ -466,7 +500,7 @@ router.put('/:betId/status', async (req, res) => {
       success: true,
       bet,
       updatedUser,
-      message: `Bet ${status} and balance updated${status === 'Won' && updatedUser ? ` with KSH ${payoutAmount} added. New balance: KSH ${updatedUser.account_balance}` : ''}`
+      message: `Bet ${status} updated${status === 'Won' && updatedUser ? ` with KSH ${payoutAmount} added to winnings balance` : ''}`
     });
   } catch (error) {
     console.error('❌ Update bet status error:', error);

@@ -120,11 +120,7 @@ export function BetProvider({ children }: { children: ReactNode }) {
     );
     console.log(`   ✓ Local state updated`);
 
-    // If bet won, add winnings to balance
-    if (status === "Won" && amountWon) {
-      setBalance((prev) => prev + amountWon);
-      console.log(`   ✓ Local balance updated with KSH ${amountWon}`);
-    }
+    // Do not credit main balance locally on Won; backend controls wallet settlement.
 
     // Now sync with backend database
     try {
@@ -190,7 +186,7 @@ export function BetProvider({ children }: { children: ReactNode }) {
         }));
         console.log(`   📢 Dispatched balance_updated event`);
         
-        console.log(`   ✅ Amount won KSH ${amountWon} added to balance. New balance: KSH ${serverBalance}`);
+        console.log(`   ✅ Synced main balance from server after status update. New balance: KSH ${serverBalance}`);
       }
 
       return {
