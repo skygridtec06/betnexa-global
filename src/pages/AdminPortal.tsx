@@ -13,6 +13,7 @@ import { useUser } from "@/context/UserContext";
 import { useTransactions } from "@/context/TransactionContext";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
 import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT, formatTimeInEAT } from "@/lib/timezoneFormatter";
@@ -68,11 +69,22 @@ const AdminPortal = () => {
   const { updateTransactionStatus } = useTransactions();
   
   const [showAddGame, setShowAddGame] = useState(false);
+  const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
   const [editingGame, setEditingGame] = useState<string | null>(null);
   const [editMarkets, setEditMarkets] = useState<Record<string, number> | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingUserData, setEditingUserData] = useState<Record<string, any>>({});
-  const [newGame, setNewGame] = useState({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" as const });
+  const [newGame, setNewGame] = useState<{
+    league: string;
+    homeTeam: string;
+    awayTeam: string;
+    homeOdds: string;
+    drawOdds: string;
+    awayOdds: string;
+    time: string;
+    kickoffDateTime: string;
+    status: "upcoming" | "live" | "finished";
+  }>({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
   const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
@@ -99,6 +111,14 @@ const AdminPortal = () => {
     };
     if (bets.length > 0) fetchCredited();
   }, [bets]);
+
+  useEffect(() => {
+    return () => {
+      if (darajaTestIntervalRef.current) {
+        clearInterval(darajaTestIntervalRef.current);
+      }
+    };
+  }, []);
   
   // Payment management state
   const [failedPayments, setFailedPayments] = useState<any[]>([]);
@@ -113,6 +133,19 @@ const AdminPortal = () => {
   const [editingBalance, setEditingBalance] = useState<string | null>(null);
   const [balanceEditValue, setBalanceEditValue] = useState<string>("");
   const [balanceEditReason, setBalanceEditReason] = useState<string>("");
+  const [darajaTestPhone, setDarajaTestPhone] = useState("");
+  const [darajaTestAmount, setDarajaTestAmount] = useState("");
+  const [isDarajaTesting, setIsDarajaTesting] = useState(false);
+  const [darajaTestStatus, setDarajaTestStatus] = useState<string | null>(null);
+  const [darajaTestMessage, setDarajaTestMessage] = useState("");
+  const [darajaTestSession, setDarajaTestSession] = useState<null | {
+    externalReference: string;
+    checkoutRequestId: string;
+    merchantRequestId?: string;
+    phoneNumber: string;
+    amount: number;
+  }>(null);
+  const darajaTestIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Image OCR import state
   const [showImageImport, setShowImageImport] = useState(false);
@@ -1474,6 +1507,114 @@ const AdminPortal = () => {
     { icon: Trophy, label: "Games Today", value: games.length.toString(), color: "text-gold" },
   ];
 
+  const stopDarajaTestPolling = () => {
+    if (darajaTestIntervalRef.current) {
+      clearInterval(darajaTestIntervalRef.current);
+      darajaTestIntervalRef.current = null;
+    }
+  };
+
+  const pollDarajaTestStatus = (checkoutRequestId: string) => {
+    stopDarajaTestPolling();
+
+    let attempts = 0;
+    darajaTestIntervalRef.current = setInterval(async () => {
+      attempts += 1;
+
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const response = await fetch(`${apiUrl}/api/admin/daraja-test/status?phone=${encodeURIComponent(loggedInUser?.phone || '')}&checkoutRequestId=${encodeURIComponent(checkoutRequestId)}`);
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          if (attempts >= 20) {
+            setDarajaTestStatus('failed');
+            setDarajaTestMessage(data.error || 'Failed to fetch Daraja test status');
+            stopDarajaTestPolling();
+          }
+          return;
+        }
+
+        setDarajaTestStatus(data.status || 'pending');
+
+        if (data.status === 'success') {
+          const receipt = data.result?.mpesaReceipt ? ` Receipt: ${data.result.mpesaReceipt}` : '';
+          setDarajaTestMessage(`STK test completed successfully.${receipt}`);
+          stopDarajaTestPolling();
+          return;
+        }
+
+        if (data.status === 'failed') {
+          setDarajaTestMessage(data.result?.resultDesc || data.result?.ResultDesc || 'Daraja test payment failed');
+          stopDarajaTestPolling();
+          return;
+        }
+
+        setDarajaTestMessage(data.result?.ResultDesc || data.result?.resultDesc || 'Waiting for customer action on phone...');
+
+        if (attempts >= 20) {
+          setDarajaTestStatus('pending');
+          setDarajaTestMessage('STK push sent. Status polling stopped after timeout; you can reopen and retry if needed.');
+          stopDarajaTestPolling();
+        }
+      } catch (error) {
+        if (attempts >= 20) {
+          setDarajaTestStatus('failed');
+          setDarajaTestMessage(error instanceof Error ? error.message : 'Failed to poll Daraja test status');
+          stopDarajaTestPolling();
+        }
+      }
+    }, 5000);
+  };
+
+  const handleAdminDarajaTestDeposit = async () => {
+    const trimmedPhone = darajaTestPhone.trim();
+    const parsedAmount = parseFloat(darajaTestAmount);
+
+    if (!trimmedPhone) {
+      alert('Enter an M-Pesa number for testing');
+      return;
+    }
+
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 1) {
+      alert('Enter a valid amount greater than 0');
+      return;
+    }
+
+    setIsDarajaTesting(true);
+    setDarajaTestStatus('pending');
+    setDarajaTestMessage('Sending STK push request to Daraja...');
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/daraja-test/deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser?.phone || '',
+          phoneNumber: trimmedPhone,
+          amount: parsedAmount,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to initiate admin Daraja test deposit');
+      }
+
+      setDarajaTestSession(data.testPayment);
+      setDarajaTestMessage(data.message || 'STK push sent. Check the phone and complete the prompt.');
+      pollDarajaTestStatus(data.testPayment.checkoutRequestId);
+    } catch (error) {
+      setDarajaTestStatus('failed');
+      setDarajaTestMessage(error instanceof Error ? error.message : 'Failed to initiate Daraja test deposit');
+      stopDarajaTestPolling();
+    } finally {
+      setIsDarajaTesting(false);
+    }
+  };
+
   const inputClass = "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary";
 
   return (
@@ -1488,7 +1629,75 @@ const AdminPortal = () => {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">Manage games, users, and withdrawals</p>
           </div>
+          <Button variant="hero" size="sm" onClick={() => setShowDarajaTestModal(true)}>
+            <ArrowDown className="mr-2 h-4 w-4" /> Test STK Push
+          </Button>
         </div>
+
+        <Dialog
+          open={showDarajaTestModal}
+          onOpenChange={(open) => {
+            setShowDarajaTestModal(open);
+            if (!open) {
+              stopDarajaTestPolling();
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Admin Daraja Test Deposit</DialogTitle>
+              <DialogDescription>
+                This is isolated from the live deposit flow. It only sends a direct Daraja STK push for admin testing.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">M-Pesa Number</label>
+                <Input
+                  value={darajaTestPhone}
+                  onChange={(e) => setDarajaTestPhone(e.target.value)}
+                  placeholder="07XXXXXXXX or 2547XXXXXXXX"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Amount (KSH)</label>
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={darajaTestAmount}
+                  onChange={(e) => setDarajaTestAmount(e.target.value)}
+                  placeholder="100"
+                />
+              </div>
+
+              <Button variant="hero" className="w-full" disabled={isDarajaTesting} onClick={handleAdminDarajaTestDeposit}>
+                {isDarajaTesting ? 'Sending STK Push...' : 'Send Test Deposit'}
+              </Button>
+
+              {darajaTestStatus && (
+                <Card className="border-border bg-card p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
+                  <p className={`mt-1 text-sm font-semibold ${darajaTestStatus === 'success' ? 'text-primary' : darajaTestStatus === 'failed' ? 'text-destructive' : 'text-gold'}`}>
+                    {darajaTestStatus.toUpperCase()}
+                  </p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{darajaTestMessage}</p>
+
+                  {darajaTestSession && (
+                    <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                      <p>Reference: <span className="font-mono text-foreground">{darajaTestSession.externalReference}</span></p>
+                      <p>Checkout ID: <span className="break-all font-mono text-foreground">{darajaTestSession.checkoutRequestId}</span></p>
+                      <p>Phone: <span className="font-mono text-foreground">{darajaTestSession.phoneNumber}</span></p>
+                      <p>Amount: <span className="font-mono text-foreground">KSH {Number(darajaTestSession.amount).toLocaleString()}</span></p>
+                    </div>
+                  )}
+                </Card>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Stats */}
         <div className="mb-8 grid gap-4 md:grid-cols-5">

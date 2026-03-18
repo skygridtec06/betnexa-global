@@ -353,4 +353,44 @@ router.post('/payhero', async (req, res) => {
   }
 });
 
+router.post('/daraja-admin-test', async (req, res) => {
+  try {
+    const stkCallback = req.body?.Body?.stkCallback || req.body?.stkCallback || req.body;
+    const checkoutRequestId = stkCallback?.CheckoutRequestID;
+    const merchantRequestId = stkCallback?.MerchantRequestID;
+    const resultCode = stkCallback?.ResultCode;
+    const resultDesc = stkCallback?.ResultDesc;
+    const metadataItems = Array.isArray(stkCallback?.CallbackMetadata?.Item)
+      ? stkCallback.CallbackMetadata.Item
+      : [];
+
+    const metadata = metadataItems.reduce((acc, item) => {
+      if (item?.Name) {
+        acc[item.Name] = item.Value;
+      }
+      return acc;
+    }, {});
+
+    console.log('\n🔔 Daraja Admin Test Callback Received:', JSON.stringify(req.body, null, 2));
+
+    if (checkoutRequestId) {
+      paymentCache.storeCallback(checkoutRequestId, {
+        status: `${resultCode}` === '0' ? 'Success' : 'Failed',
+        resultCode,
+        resultDesc,
+        merchantRequestId,
+        mpesaReceipt: metadata.MpesaReceiptNumber || null,
+        amount: metadata.Amount || null,
+        phoneNumber: metadata.PhoneNumber || null,
+        transactionDate: metadata.TransactionDate || null,
+      });
+    }
+
+    res.json({ ResponseCode: '00000000', ResponseDesc: 'Accepted' });
+  } catch (error) {
+    console.error('Daraja admin test callback error:', error.message || error);
+    res.status(200).json({ ResponseCode: '00000000', ResponseDesc: 'Accepted with error' });
+  }
+});
+
 module.exports = router;

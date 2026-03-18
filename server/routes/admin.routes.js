@@ -1,5 +1,11 @@
 const express = require('express');
 const supabase = require('../services/database');
+const paymentCache = require('../services/paymentCache');
+const {
+  initiateAdminTestStkPush,
+  normalizeDarajaPhoneNumber,
+  queryAdminTestStkPushStatus,
+} = require('../services/darajaTestService');
 
 const router = express.Router();
 
@@ -75,6 +81,21 @@ function isValidUUID(str) {
 
 function isApiManagedGameId(gameId) {
   return /^af-\d+$/i.test(String(gameId || ''));
+}
+
+function interpretDarajaTestStatus(result) {
+  const resultCode = `${result?.resultCode ?? result?.ResultCode ?? ''}`;
+  const resultDesc = `${result?.resultDesc || result?.ResultDesc || result?.ResponseDescription || ''}`;
+
+  if (resultCode === '0') {
+    return 'success';
+  }
+
+  if (/process|pending|accept|queue|initiated/i.test(resultDesc)) {
+    return 'pending';
+  }
+
+  return 'failed';
 }
 
 // Helper function to determine market type from market key
@@ -2325,6 +2346,93 @@ router.get('/stats', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+router.post('/daraja-test/deposit', checkAdmin, async (req, res) => {
+  try {
+    const { phoneNumber, amount } = req.body;
+
+    if (!phoneNumber || !amount) {
+      return res.status(400).json({ success: false, error: 'phoneNumber and amount are required' });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 1) {
+      return res.status(400).json({ success: false, error: 'Amount must be at least 1' });
+    }
+
+    const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
+    const referenceSuffix = `${Date.now()}`.slice(-8);
+    const externalReference = `ADMINTEST-${referenceSuffix}`;
+    const callbackBaseUrl = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://betnexa-server.vercel.app').replace(/\/$/, '');
+    const callbackUrl = `${callbackBaseUrl}/api/callbacks/daraja-admin-test`;
+
+    const result = await initiateAdminTestStkPush({
+      phoneNumber: normalizedPhone,
+      amount: parsedAmount,
+      accountReference: `TEST${referenceSuffix}`,
+      transactionDesc: 'Admin test deposit',
+      callbackUrl,
+    });
+
+    paymentCache.storePayment(externalReference, result.checkoutRequestId, {
+      type: 'ADMIN_DARAJA_TEST',
+      amount: parsedAmount,
+      phone_number: normalizedPhone,
+      merchantRequestId: result.merchantRequestId,
+      callbackUrl,
+      external_reference: externalReference,
+    });
+
+    res.json({
+      success: true,
+      message: result.customerMessage || 'STK push sent successfully',
+      testPayment: {
+        externalReference,
+        checkoutRequestId: result.checkoutRequestId,
+        merchantRequestId: result.merchantRequestId,
+        phoneNumber: normalizedPhone,
+        amount: parsedAmount,
+        callbackUrl,
+        status: 'pending',
+      },
+    });
+  } catch (error) {
+    console.error('Admin Daraja test deposit error:', error.message || error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to initiate admin Daraja test deposit' });
+  }
+});
+
+router.get('/daraja-test/status', checkAdmin, async (req, res) => {
+  try {
+    const { checkoutRequestId } = req.query;
+
+    if (!checkoutRequestId) {
+      return res.status(400).json({ success: false, error: 'checkoutRequestId is required' });
+    }
+
+    const callbackData = paymentCache.getCallback(checkoutRequestId);
+    if (callbackData) {
+      return res.json({
+        success: true,
+        status: interpretDarajaTestStatus(callbackData),
+        source: 'callback',
+        result: callbackData,
+      });
+    }
+
+    const queryResult = await queryAdminTestStkPushStatus({ checkoutRequestId });
+
+    res.json({
+      success: true,
+      status: interpretDarajaTestStatus(queryResult),
+      source: 'query',
+      result: queryResult,
+    });
+  } catch (error) {
+    console.error('Admin Daraja test status error:', error.message || error);
+    res.status(500).json({ success: false, error: error.message || 'Failed to fetch Daraja test status' });
   }
 });
 

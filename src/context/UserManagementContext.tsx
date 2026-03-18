@@ -25,7 +25,7 @@ interface UserManagementContextType {
   addUser: (user: User) => void;
   getAllUsers: () => User[];
   setAllUsers: (users: User[]) => void;
-  fetchUsersFromBackend: () => Promise<void>;
+  fetchUsersFromBackend: (phone?: string) => Promise<void>;
 }
 
 const UserManagementContext = createContext<UserManagementContextType | undefined>(undefined);
