@@ -23,7 +23,9 @@ const marketLabels: Record<string, string> = {
   doubleChanceHomeOrDraw: "DC 1X", doubleChanceAwayOrDraw: "DC X2", doubleChanceHomeOrAway: "DC 12",
   htftHomeHome: "HT/FT H/H", htftDrawDraw: "HT/FT D/D", htftAwayAway: "HT/FT A/A", htftDrawHome: "HT/FT D/H", htftDrawAway: "HT/FT D/A",
   cs10: "CS 1-0", cs20: "CS 2-0", cs11: "CS 1-1", cs00: "CS 0-0", cs01: "CS 0-1", cs21: "CS 2-1", cs12: "CS 1-2", cs02: "CS 0-2",
+  cs22: "CS 2-2",
   cs30: "CS 3-0", cs03: "CS 0-3", cs31: "CS 3-1", cs13: "CS 1-3", cs32: "CS 3-2", cs23: "CS 2-3", cs40: "CS 4-0", cs04: "CS 0-4",
+  cs33: "CS 3-3",
   cs41: "CS 4-1", cs14: "CS 1-4", cs42: "CS 4-2", cs24: "CS 2-4", cs43: "CS 4-3", cs34: "CS 3-4", cs44: "CS 4-4",
 };
 
