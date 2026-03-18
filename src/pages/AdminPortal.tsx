@@ -1368,6 +1368,7 @@ const AdminPortal = () => {
       const data = await resp.json();
       if (data.success) {
         setCreditedBets(prev => ({ ...prev, [bet.id]: true }));
+        await fetchUsersFromBackend();
       } else {
         alert(`Failed to credit: ${data.error}`);
       }

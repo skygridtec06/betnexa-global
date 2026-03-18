@@ -4293,10 +4293,10 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid amount' });
     }
 
-    // Get current winnings wallet
+    // Get current main user balance
     const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('winnings_balance, total_winnings, username')
+      .select('account_balance, total_winnings, username')
       .eq('id', user_id)
       .single();
 
@@ -4304,23 +4304,23 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    const prevBalance = parseFloat(user.winnings_balance) || 0;
+    const prevBalance = parseFloat(user.account_balance) || 0;
     const newBalance = prevBalance + creditAmount;
     const prevTotalWinnings = parseFloat(user.total_winnings) || 0;
     const newTotalWinnings = prevTotalWinnings + creditAmount;
 
-    // Update winnings wallet
+    // Update user main balance and winnings aggregate
     const { error: updateErr } = await supabase
       .from('users')
       .update({
-        winnings_balance: newBalance,
+        account_balance: newBalance,
         total_winnings: newTotalWinnings,
         updated_at: new Date().toISOString()
       })
       .eq('id', user_id);
 
     if (updateErr) {
-      return res.status(500).json({ success: false, error: 'Failed to update winnings balance', details: updateErr.message });
+      return res.status(500).json({ success: false, error: 'Failed to update account balance', details: updateErr.message });
     }
 
     // Record in balance_history
@@ -4330,13 +4330,13 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
         balance_before: prevBalance,
         balance_after: newBalance,
         change: creditAmount,
-        reason: `Admin credit: Win from bet ${bet_id || 'unknown'} (winnings wallet)`,
+        reason: `Admin credit: Win from bet ${bet_id || 'unknown'} (main balance)`,
         created_by: req.user?.phone || 'admin',
         created_at: new Date().toISOString(),
       }]);
     } catch (_) {}
 
-    console.log(`💰 Credited KSH ${creditAmount} to winnings wallet for ${user.username} (${user_id}). Winnings: ${prevBalance} → ${newBalance}`);
+    console.log(`💰 Credited KSH ${creditAmount} to main balance for ${user.username} (${user_id}). Balance: ${prevBalance} → ${newBalance}`);
 
     res.json({ success: true, newBalance, previousBalance: prevBalance, credited: creditAmount });
   } catch (err) {
