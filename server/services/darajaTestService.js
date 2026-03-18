@@ -8,6 +8,7 @@ function getDarajaTestConfig() {
     consumerSecret: process.env.DARAJA_TEST_CONSUMER_SECRET,
     passkey: process.env.DARAJA_TEST_PASSKEY,
     shortCode: process.env.DARAJA_TEST_SHORT_CODE,
+    partyB: process.env.DARAJA_TEST_PARTY_B,
     transactionType: process.env.DARAJA_TEST_TRANSACTION_TYPE || 'CustomerPayBillOnline',
   };
 
@@ -155,6 +156,7 @@ async function initiateAdminTestStkPush({ phoneNumber, amount, accountReference,
   const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
   const timestamp = getTimestamp();
   const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString('base64');
+  const partyB = config.partyB || config.shortCode;
 
   const response = await callDaraja('/mpesa/stkpush/v1/processrequest', {
     BusinessShortCode: config.shortCode,
@@ -163,7 +165,7 @@ async function initiateAdminTestStkPush({ phoneNumber, amount, accountReference,
     TransactionType: config.transactionType,
     Amount: Math.round(parseFloat(amount)),
     PartyA: normalizedPhone,
-    PartyB: config.shortCode,
+    PartyB: partyB,
     PhoneNumber: normalizedPhone,
     CallBackURL: callbackUrl,
     AccountReference: accountReference,
