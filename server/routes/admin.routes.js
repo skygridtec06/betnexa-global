@@ -91,8 +91,9 @@ function interpretDarajaTestStatus(result) {
     return 'success';
   }
 
-  // Daraja code 1032 is explicit user cancellation on handset
-  if (resultCode === '1032' || /cancel/i.test(resultDesc)) {
+  // Daraja code 1032 is explicit user cancellation on handset.
+  // Insufficient funds should also be treated as cancelled per admin test requirement.
+  if (resultCode === '1032' || /cancel|insufficient\s*funds|balance\s+is\s+insufficient/i.test(resultDesc)) {
     return 'cancelled';
   }
 

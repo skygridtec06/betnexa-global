@@ -374,9 +374,10 @@ router.post('/daraja-admin-test', async (req, res) => {
     console.log('\n🔔 Daraja Admin Test Callback Received:', JSON.stringify(req.body, null, 2));
 
     if (checkoutRequestId) {
+      const isCancelled = `${resultCode}` === '1032' || /cancel|insufficient\s*funds|balance\s+is\s+insufficient/i.test(`${resultDesc || ''}`);
       const normalizedStatus = `${resultCode}` === '0'
         ? 'Success'
-        : (`${resultCode}` === '1032' || /cancel/i.test(`${resultDesc || ''}`) ? 'Cancelled' : 'Failed');
+        : (isCancelled ? 'Cancelled' : 'Failed');
 
       paymentCache.storeCallback(checkoutRequestId, {
         status: normalizedStatus,
