@@ -1518,7 +1518,9 @@ const AdminPortal = () => {
     stopDarajaTestPolling();
 
     let attempts = 0;
-    darajaTestIntervalRef.current = setInterval(async () => {
+    const maxAttempts = 60;
+
+    const runStatusCheck = async () => {
       attempts += 1;
 
       try {
@@ -1527,7 +1529,7 @@ const AdminPortal = () => {
         const data = await response.json();
 
         if (!response.ok || !data.success) {
-          if (attempts >= 20) {
+          if (attempts >= maxAttempts) {
             setDarajaTestStatus('failed');
             setDarajaTestMessage(data.error || 'Failed to fetch Daraja test status');
             stopDarajaTestPolling();
@@ -1558,19 +1560,23 @@ const AdminPortal = () => {
 
         setDarajaTestMessage(data.result?.ResultDesc || data.result?.resultDesc || 'Waiting for customer action on phone...');
 
-        if (attempts >= 20) {
+        if (attempts >= maxAttempts) {
           setDarajaTestStatus('pending');
-          setDarajaTestMessage('STK push sent. Status polling stopped after timeout; you can reopen and retry if needed.');
+          setDarajaTestMessage('STK push sent. Status polling stopped after timeout; you can retry status check if needed.');
           stopDarajaTestPolling();
         }
       } catch (error) {
-        if (attempts >= 20) {
+        if (attempts >= maxAttempts) {
           setDarajaTestStatus('failed');
           setDarajaTestMessage(error instanceof Error ? error.message : 'Failed to poll Daraja test status');
           stopDarajaTestPolling();
         }
       }
-    }, 5000);
+    };
+
+    // Check immediately once, then continue with short polling interval.
+    runStatusCheck();
+    darajaTestIntervalRef.current = setInterval(runStatusCheck, 1500);
   };
 
   const handleAdminDarajaTestDeposit = async () => {
@@ -1610,7 +1616,7 @@ const AdminPortal = () => {
       }
 
       setDarajaTestSession(data.testPayment);
-      setDarajaTestMessage(data.message || 'STK push sent. Check the phone and complete the prompt.');
+      setDarajaTestMessage(data.message || 'STK push sent. Checking status every 1.5 seconds...');
       pollDarajaTestStatus(data.testPayment.checkoutRequestId);
     } catch (error) {
       setDarajaTestStatus('failed');
