@@ -91,6 +91,11 @@ function interpretDarajaTestStatus(result) {
     return 'success';
   }
 
+  // Daraja code 1032 is explicit user cancellation on handset
+  if (resultCode === '1032' || /cancel/i.test(resultDesc)) {
+    return 'cancelled';
+  }
+
   if (/process|pending|accept|queue|initiated/i.test(resultDesc)) {
     return 'pending';
   }

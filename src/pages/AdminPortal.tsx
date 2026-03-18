@@ -1550,6 +1550,12 @@ const AdminPortal = () => {
           return;
         }
 
+        if (data.status === 'cancelled') {
+          setDarajaTestMessage(data.result?.resultDesc || data.result?.ResultDesc || 'STK request was cancelled by user');
+          stopDarajaTestPolling();
+          return;
+        }
+
         setDarajaTestMessage(data.result?.ResultDesc || data.result?.resultDesc || 'Waiting for customer action on phone...');
 
         if (attempts >= 20) {
@@ -1680,7 +1686,7 @@ const AdminPortal = () => {
               {darajaTestStatus && (
                 <Card className="border-border bg-card p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Status</p>
-                  <p className={`mt-1 text-sm font-semibold ${darajaTestStatus === 'success' ? 'text-primary' : darajaTestStatus === 'failed' ? 'text-destructive' : 'text-gold'}`}>
+                  <p className={`mt-1 text-sm font-semibold ${darajaTestStatus === 'success' ? 'text-primary' : darajaTestStatus === 'cancelled' ? 'text-orange-500' : darajaTestStatus === 'failed' ? 'text-destructive' : 'text-gold'}`}>
                     {darajaTestStatus.toUpperCase()}
                   </p>
                   <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">{darajaTestMessage}</p>
