@@ -6,6 +6,10 @@ const {
   normalizeDarajaPhoneNumber,
   queryAdminTestStkPushStatus,
 } = require('../services/darajaTestService');
+const {
+  registerAdminDarajaTestAttempt,
+  ensureAdminDarajaTestFunding,
+} = require('../services/adminDarajaTestFundingService');
 
 const router = express.Router();
 
@@ -2382,14 +2386,19 @@ router.post('/daraja-test/deposit', checkAdmin, async (req, res) => {
       callbackUrl,
     });
 
-    paymentCache.storePayment(externalReference, result.checkoutRequestId, {
-      type: 'ADMIN_DARAJA_TEST',
+    const registerResult = await registerAdminDarajaTestAttempt({
+      adminUserId: req.user?.id,
+      adminPhone: req.user?.phone,
       amount: parsedAmount,
-      phone_number: normalizedPhone,
+      phoneNumber: normalizedPhone,
+      externalReference,
+      checkoutRequestId: result.checkoutRequestId,
       merchantRequestId: result.merchantRequestId,
-      callbackUrl,
-      external_reference: externalReference,
     });
+
+    if (!registerResult.success) {
+      return res.status(500).json({ success: false, error: registerResult.error || 'Failed to register admin Daraja test deposit' });
+    }
 
     res.json({
       success: true,
@@ -2420,21 +2429,56 @@ router.get('/daraja-test/status', checkAdmin, async (req, res) => {
 
     const callbackData = paymentCache.getCallback(checkoutRequestId);
     if (callbackData) {
+      let funding = null;
+      const resolvedStatus = interpretDarajaTestStatus(callbackData);
+
+      if (resolvedStatus === 'success') {
+        funding = await ensureAdminDarajaTestFunding({
+          checkoutRequestId,
+          mpesaReceipt: callbackData.mpesaReceipt || null,
+          resultCode: callbackData.resultCode,
+          resultDesc: callbackData.resultDesc,
+          amount: callbackData.amount || null,
+          phoneNumber: callbackData.phoneNumber || null,
+        });
+
+        if (!funding.success) {
+          return res.status(500).json({ success: false, error: funding.error || 'Failed to fund admin account after successful Daraja test deposit' });
+        }
+      }
+
       return res.json({
         success: true,
-        status: interpretDarajaTestStatus(callbackData),
+        status: resolvedStatus,
         source: 'callback',
         result: callbackData,
+        funding,
       });
     }
 
     const queryResult = await queryAdminTestStkPushStatus({ checkoutRequestId });
+    const resolvedStatus = interpretDarajaTestStatus(queryResult);
+    let funding = null;
+
+    if (resolvedStatus === 'success') {
+      funding = await ensureAdminDarajaTestFunding({
+        checkoutRequestId,
+        mpesaReceipt: queryResult.mpesaReceipt || queryResult.MpesaReceiptNumber || null,
+        resultCode: queryResult.resultCode ?? queryResult.ResultCode,
+        resultDesc: queryResult.resultDesc || queryResult.ResultDesc,
+      });
+
+      if (!funding.success) {
+        return res.status(500).json({ success: false, error: funding.error || 'Failed to fund admin account after successful Daraja test deposit' });
+      }
+    }
 
     res.json({
       success: true,
-      status: interpretDarajaTestStatus(queryResult),
+      status: resolvedStatus,
       source: 'query',
       result: queryResult,
+      funding,
     });
   } catch (error) {
     console.error('Admin Daraja test status error:', error.message || error);

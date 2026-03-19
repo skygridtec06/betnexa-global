@@ -1541,8 +1541,18 @@ const AdminPortal = () => {
         setDarajaTestStatus(data.status || 'pending');
 
         if (data.status === 'success') {
+          if (loggedInUser?.id) {
+            const syncedBalance = await balanceSyncService.sync(loggedInUser.id);
+            if (syncedBalance !== null) {
+              updateCurrentUser({ accountBalance: syncedBalance });
+            }
+          }
+          await fetchUsersFromBackend();
           const receipt = data.result?.mpesaReceipt ? ` Receipt: ${data.result.mpesaReceipt}` : '';
-          setDarajaTestMessage(`STK test completed successfully.${receipt}`);
+          const fundingSuffix = data.funding?.newBalance !== undefined
+            ? ` New balance: KSH ${Number(data.funding.newBalance).toLocaleString()}`
+            : '';
+          setDarajaTestMessage(`STK test completed successfully.${receipt}${fundingSuffix}`);
           stopDarajaTestPolling();
           return;
         }

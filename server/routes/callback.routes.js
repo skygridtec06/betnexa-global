@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
+const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
 
 /**
  * POST /api/callbacks/payhero
@@ -451,6 +452,21 @@ router.post('/daraja-admin-test', async (req, res) => {
         phoneNumber: metadata.PhoneNumber || null,
         transactionDate: metadata.TransactionDate || null,
       });
+
+      if (normalizedStatus === 'Success') {
+        const fundingResult = await ensureAdminDarajaTestFunding({
+          checkoutRequestId,
+          mpesaReceipt: metadata.MpesaReceiptNumber || null,
+          resultCode,
+          resultDesc,
+          amount: metadata.Amount || null,
+          phoneNumber: metadata.PhoneNumber || null,
+        });
+
+        if (!fundingResult.success) {
+          console.error('Admin Daraja test funding error:', fundingResult.error || 'Unknown funding error');
+        }
+      }
     }
 
     res.json({ ResponseCode: '00000000', ResponseDesc: 'Accepted' });
