@@ -336,4 +336,112 @@ async function ensureUserDarajaFunding({
   };
 }
 
-module.exports = { registerUserDarajaAttempt, ensureUserDarajaFunding };
+/**
+ * Persist terminal (non-success) status for a user Daraja attempt.
+ * Ensures failed/cancelled attempts are not left as pending.
+ */
+async function persistUserDarajaTerminalStatus({
+  checkoutRequestId,
+  status,
+  resultCode,
+  resultDesc,
+  mpesaReceipt,
+  amount,
+  phoneNumber,
+}) {
+  if (!supabase || !checkoutRequestId) {
+    return { success: false, error: 'Missing supabase or checkoutRequestId' };
+  }
+
+  const normalized = `${status || ''}`.toLowerCase();
+  if (!['failed', 'cancelled'].includes(normalized)) {
+    return { success: true, skipped: true, reason: 'non-terminal or unsupported status' };
+  }
+
+  let transaction = null;
+
+  const { data: existing } = await supabase
+    .from('transactions')
+    .select('id, user_id, amount, status, external_reference, checkout_request_id, phone_number')
+    .eq('checkout_request_id', checkoutRequestId)
+    .maybeSingle();
+
+  if (existing) {
+    transaction = existing;
+  } else {
+    const cached = paymentCache.getPayment(checkoutRequestId);
+    if (cached?.user_id) {
+      const reg = await registerUserDarajaAttempt({
+        userId: cached.user_id,
+        phoneNumber: cached.phone_number || phoneNumber,
+        amount: cached.amount || amount,
+        externalReference: cached.external_reference || cached.externalReference,
+        checkoutRequestId,
+        merchantRequestId: cached.merchantRequestId,
+        paymentType: cached.payment_type || 'deposit',
+        relatedWithdrawalId: cached.related_withdrawal_id,
+      });
+      if (!reg.success) return reg;
+      transaction = reg.transaction;
+    }
+  }
+
+  if (!transaction) {
+    return { success: false, error: 'User Daraja payment record not found in DB or cache' };
+  }
+
+  if (transaction.status === 'completed') {
+    return { success: true, skipped: true, reason: 'already completed' };
+  }
+
+  const timestamp = nowIso();
+  const description = normalized === 'cancelled'
+    ? `M-Pesa Daraja payment cancelled${resultDesc ? `: ${resultDesc}` : ''}`
+    : `M-Pesa Daraja payment failed${resultDesc ? `: ${resultDesc}` : ''}`;
+
+  const { error: txError } = await supabase
+    .from('transactions')
+    .update({
+      status: normalized,
+      mpesa_receipt: mpesaReceipt || null,
+      description,
+      result_code: resultCode ?? null,
+      result_desc: resultDesc || null,
+      completed_at: timestamp,
+      updated_at: timestamp,
+    })
+    .eq('id', transaction.id)
+    .in('status', ['pending', 'failed', 'cancelled']);
+
+  if (txError) {
+    return { success: false, error: txError.message };
+  }
+
+  supabase.from('fund_transfers')
+    .update({
+      status: normalized,
+      mpesa_receipt: mpesaReceipt || null,
+      result_code: resultCode ?? null,
+      result_description: resultDesc || null,
+      completed_at: timestamp,
+      updated_at: timestamp,
+    })
+    .eq('checkout_request_id', checkoutRequestId)
+    .in('status', ['pending', 'failed', 'cancelled'])
+    .then(({ error }) => {
+      if (error) console.warn('[persistUserDarajaTerminalStatus] fund_transfers warning:', error.message);
+    });
+
+  return {
+    success: true,
+    status: normalized,
+    userId: transaction.user_id,
+    transactionId: transaction.id,
+  };
+}
+
+module.exports = {
+  registerUserDarajaAttempt,
+  ensureUserDarajaFunding,
+  persistUserDarajaTerminalStatus,
+};

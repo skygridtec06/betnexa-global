@@ -166,7 +166,7 @@ export default function Finance() {
       const ckId = data.checkoutRequestId;
       setDarajaCheckoutId(ckId);
       setPaymentStatus("sent");
-      setStatusMessage("🔔 STK Push sent! Check your phone and enter your M-Pesa PIN to activate account...");
+      setStatusMessage("📱 STK push sent to your phone. Waiting for completion...");
 
       // Poll for activation payment status
       let pollCount = 0;
@@ -208,11 +208,19 @@ export default function Finance() {
             }
 
             setTimeout(() => { setStatusMessage(""); setPaymentStatus(null); }, 4000);
-          } else if (st === 'failed' || st === 'cancelled') {
+          } else if (st === 'cancelled') {
             clearInterval(interval);
             setStatusCheckInterval(null);
             setPaymentStatus("failed");
-            setStatusMessage("❌ Activation payment was cancelled or failed. Please try again.");
+            setStatusMessage("❌ Activation payment was cancelled on phone.");
+            setIsActivating(false);
+            setShowActivationModal(true);
+            setShowProcessingModal(false);
+          } else if (st === 'failed') {
+            clearInterval(interval);
+            setStatusCheckInterval(null);
+            setPaymentStatus("failed");
+            setStatusMessage("❌ Activation payment failed. Please try again.");
             setIsActivating(false);
             setShowActivationModal(true);
             setShowProcessingModal(false);
@@ -357,7 +365,7 @@ export default function Finance() {
         setDarajaCheckoutId(ckId);
         setExternalReference(data.externalReference || '');
         setPaymentStatus("sent");
-        setStatusMessage("📱 STK push sent to your phone!\nEnter your M-Pesa PIN to complete the payment.");
+        setStatusMessage("📱 STK push sent to your phone. Waiting for completion...");
 
         await fetchTransactions(actualUserId);
 
@@ -392,11 +400,17 @@ export default function Finance() {
               setAmount("");
               setMpesaNumber("");
               setTimeout(() => { setPaymentStatus(null); setStatusMessage(""); setIsProcessing(false); }, 4000);
-            } else if (st === 'failed' || st === 'cancelled') {
+            } else if (st === 'cancelled') {
               clearInterval(interval);
               setStatusCheckInterval(null);
               setPaymentStatus("failed");
-              setStatusMessage("❌ Payment was cancelled or failed. Please try again.");
+              setStatusMessage("❌ Transaction cancelled on phone.");
+              setIsProcessing(false);
+            } else if (st === 'failed') {
+              clearInterval(interval);
+              setStatusCheckInterval(null);
+              setPaymentStatus("failed");
+              setStatusMessage("❌ Transaction failed. Please try again.");
               setIsProcessing(false);
             }
           } catch (err) {

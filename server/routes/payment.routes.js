@@ -16,6 +16,7 @@ const {
 const {
   registerUserDarajaAttempt,
   ensureUserDarajaFunding,
+  persistUserDarajaTerminalStatus,
 } = require('../services/userDarajaFundingService.js');
 
 function interpretUserDarajaStatus(result) {
@@ -1314,6 +1315,7 @@ router.get('/daraja/status', async (req, res) => {
     if (callbackData) {
       const status = interpretUserDarajaStatus(callbackData);
       let funding = null;
+      let terminal = null;
 
       if (status === 'success') {
         funding = await ensureUserDarajaFunding({
@@ -1327,15 +1329,29 @@ router.get('/daraja/status', async (req, res) => {
         if (!funding.success) {
           return res.status(500).json({ success: false, message: funding.error || 'Failed to credit balance' });
         }
+      } else if (status === 'failed' || status === 'cancelled') {
+        terminal = await persistUserDarajaTerminalStatus({
+          checkoutRequestId,
+          status,
+          resultCode: callbackData.resultCode,
+          resultDesc: callbackData.resultDesc,
+          mpesaReceipt: callbackData.mpesaReceipt || null,
+          amount: callbackData.amount || null,
+          phoneNumber: callbackData.phoneNumber || null,
+        });
+        if (!terminal.success) {
+          return res.status(500).json({ success: false, message: terminal.error || 'Failed to persist terminal status' });
+        }
       }
 
-      return res.json({ success: true, status, source: 'callback', result: callbackData, funding });
+      return res.json({ success: true, status, source: 'callback', result: callbackData, funding, terminal });
     }
 
     // Query Daraja live
     const queryResult = await queryAdminTestStkPushStatus({ checkoutRequestId });
     const status = interpretUserDarajaStatus(queryResult);
     let funding = null;
+    let terminal = null;
 
     if (status === 'success') {
       funding = await ensureUserDarajaFunding({
@@ -1347,9 +1363,22 @@ router.get('/daraja/status', async (req, res) => {
       if (!funding.success) {
         return res.status(500).json({ success: false, message: funding.error || 'Failed to credit balance' });
       }
+    } else if (status === 'failed' || status === 'cancelled') {
+      terminal = await persistUserDarajaTerminalStatus({
+        checkoutRequestId,
+        status,
+        resultCode: queryResult.ResultCode ?? queryResult.resultCode,
+        resultDesc: queryResult.ResultDesc || queryResult.resultDesc,
+        mpesaReceipt: queryResult.MpesaReceiptNumber || queryResult.mpesaReceipt || null,
+        amount: queryResult.Amount || queryResult.amount || null,
+        phoneNumber: queryResult.PhoneNumber || queryResult.phoneNumber || null,
+      });
+      if (!terminal.success) {
+        return res.status(500).json({ success: false, message: terminal.error || 'Failed to persist terminal status' });
+      }
     }
 
-    return res.json({ success: true, status, source: 'query', result: queryResult, funding });
+    return res.json({ success: true, status, source: 'query', result: queryResult, funding, terminal });
   } catch (error) {
     console.error('[daraja/status] Error:', error.message || error);
     // Return pending instead of error so frontend keeps polling

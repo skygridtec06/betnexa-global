@@ -8,7 +8,7 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
 const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
-const { ensureUserDarajaFunding } = require('../services/userDarajaFundingService');
+const { ensureUserDarajaFunding, persistUserDarajaTerminalStatus } = require('../services/userDarajaFundingService');
 
 /**
  * POST /api/callbacks/payhero
@@ -531,6 +531,23 @@ router.post('/daraja-user', async (req, res) => {
           console.error('User Daraja funding error in callback:', fundingResult.error || 'Unknown error');
         } else {
           console.log(`\u2705 User Daraja callback: Credited KSH ${fundingResult.creditedAmount} to user ${fundingResult.userId}. New balance: ${fundingResult.newBalance}`);
+        }
+      } else {
+        const terminalStatus = normalizedStatus === 'Cancelled' ? 'cancelled' : 'failed';
+        const terminalResult = await persistUserDarajaTerminalStatus({
+          checkoutRequestId,
+          status: terminalStatus,
+          resultCode,
+          resultDesc,
+          mpesaReceipt: metadata.MpesaReceiptNumber || null,
+          amount: metadata.Amount || null,
+          phoneNumber: metadata.PhoneNumber || null,
+        });
+
+        if (!terminalResult.success) {
+          console.error('User Daraja terminal status persist error:', terminalResult.error || 'Unknown error');
+        } else {
+          console.log(`✅ User Daraja callback: Marked transaction as ${terminalStatus} for checkout ${checkoutRequestId}`);
         }
       }
     }
