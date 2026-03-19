@@ -2628,6 +2628,8 @@ router.get('/transactions/user/:userId', async (req, res) => {
     // the same withdrawal).
     let transactionList = (transactions || []).map(tx => ({
       ...tx,
+      // Normalize status casing and treat cancelled as failed for user-facing history
+      status: `${tx.status || ''}`.toLowerCase() === 'cancelled' ? 'failed' : `${tx.status || ''}`.toLowerCase(),
       source: 'transactions'
     }));
 
@@ -2640,11 +2642,27 @@ router.get('/transactions/user/:userId', async (req, res) => {
         .order('created_at', { ascending: false });
 
       if (!depError && deposits && deposits.length > 0) {
+        // Reconcile pending transaction rows against deposits terminal states.
+        const byExternalRef = new Map(
+          deposits
+            .filter(d => d.external_reference)
+            .map(d => [d.external_reference, `${d.status || ''}`.toLowerCase()])
+        );
+
+        transactionList = transactionList.map(tx => {
+          const depStatus = tx.external_reference ? byExternalRef.get(tx.external_reference) : null;
+          if (tx.status === 'pending' && (depStatus === 'failed' || depStatus === 'cancelled')) {
+            return { ...tx, status: 'failed' };
+          }
+          return tx;
+        });
+
         const existingRefs = new Set(transactionList.map(tx => tx.external_reference).filter(Boolean));
         const newDeposits = deposits.filter(d => !existingRefs.has(d.external_reference)).map(d => ({
           ...d,
           type: 'deposit',
           transaction_id: d.external_reference,
+          status: `${d.status || ''}`.toLowerCase() === 'cancelled' ? 'failed' : `${d.status || ''}`.toLowerCase(),
           source: 'deposits_table'
         }));
         transactionList = [...transactionList, ...newDeposits].sort((a, b) =>
@@ -2654,6 +2672,33 @@ router.get('/transactions/user/:userId', async (req, res) => {
       }
     } catch (depErr) {
       console.warn('⚠️ Could not fetch from deposits table:', depErr.message);
+    }
+
+    // Final reconciliation against fund_transfers for fastest terminal-state reflection.
+    if (Array.isArray(fundTransfers) && fundTransfers.length > 0) {
+      const ftByExternalRef = new Map(
+        fundTransfers
+          .filter(ft => ft.external_reference)
+          .map(ft => [ft.external_reference, `${ft.status || ''}`.toLowerCase()])
+      );
+      const ftByCheckout = new Map(
+        fundTransfers
+          .filter(ft => ft.checkout_request_id)
+          .map(ft => [ft.checkout_request_id, `${ft.status || ''}`.toLowerCase()])
+      );
+
+      transactionList = transactionList.map(tx => {
+        if (tx.status !== 'pending') return tx;
+
+        const statusByRef = tx.external_reference ? ftByExternalRef.get(tx.external_reference) : null;
+        const statusByCheckout = tx.checkout_request_id ? ftByCheckout.get(tx.checkout_request_id) : null;
+        const resolved = statusByRef || statusByCheckout;
+
+        if (resolved === 'failed' || resolved === 'cancelled') {
+          return { ...tx, status: 'failed' };
+        }
+        return tx;
+      });
     }
 
     // Also fetch activation_fees for this user
