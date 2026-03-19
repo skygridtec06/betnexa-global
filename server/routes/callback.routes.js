@@ -39,7 +39,7 @@ router.post('/payhero', async (req, res) => {
       });
     }
 
-    // Step 1: Get payment record by checkout_request_id (try DB first, then cache)
+    // Step 1: Get payment record by checkout_request_id (payments -> deposits -> cache)
     console.log('\n🔍 Looking up payment record...');
     let paymentData = null;
     let isFromCache = false;
@@ -52,14 +52,29 @@ router.post('/payhero', async (req, res) => {
 
     if (!fetchError && dbPaymentData) {
       paymentData = dbPaymentData;
-      console.log('✅ Payment found in database');
+      console.log('✅ Payment found in payments table');
     } else {
-      console.warn('⚠️ Payment not found in database, checking cache:', fetchError?.message);
+      // Fallback to deposits table (this table reliably stores checkout_request_id)
+      const { data: depData, error: depError } = await supabase
+        .from('deposits')
+        .select('user_id, amount, external_reference, checkout_request_id')
+        .eq('checkout_request_id', checkoutRequestId)
+        .maybeSingle();
+
+      if (!depError && depData) {
+        paymentData = depData;
+        console.log('✅ Payment found in deposits table');
+      } else {
+        console.warn('⚠️ Payment not found in DB tables, checking cache:', fetchError?.message || depError?.message);
+      }
+
       // Try cache as fallback (checks by checkoutRequestId)
-      paymentData = paymentCache.getPayment(checkoutRequestId);
-      if (paymentData) {
-        isFromCache = true;
-        console.log('✅ Payment found in cache');
+      if (!paymentData) {
+        paymentData = paymentCache.getPayment(checkoutRequestId);
+        if (paymentData) {
+          isFromCache = true;
+          console.log('✅ Payment found in cache');
+        }
       }
     }
 
@@ -104,7 +119,7 @@ router.post('/payhero', async (req, res) => {
       const { error: updateError } = await supabase
         .from('payments')
         .update(updateData)
-        .eq('checkout_request_id', checkoutRequestId);
+        .eq('external_reference', external_reference);
 
       if (updateError) {
         console.warn('⚠️ Failed to update payment in database:', updateError.message);
@@ -134,7 +149,14 @@ router.post('/payhero', async (req, res) => {
           .eq('status', 'completed')
           .maybeSingle();
 
-        if (alreadyDone) {
+        const { data: completedDeposit } = await supabase
+          .from('deposits')
+          .select('id, status')
+          .eq('external_reference', external_reference)
+          .eq('status', 'completed')
+          .maybeSingle();
+
+        if (alreadyDone || completedDeposit) {
           console.log('⚠️ Transaction already completed for this reference — skipping double credit');
         } else {
           // --- Credit user account_balance ---

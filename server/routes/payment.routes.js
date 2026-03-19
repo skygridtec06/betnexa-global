@@ -250,9 +250,23 @@ router.post('/initiate', async (req, res) => {
         status: 'PENDING'
       };
 
-      const { error } = await supabase
+      let { error } = await supabase
         .from('payments')
         .insert(paymentData);
+
+      // Production schema fallback: if checkout_request_id is not present in payments,
+      // retry insert without it so we still have a durable payment record.
+      if (error && /checkout_request_id/i.test(error.message || '')) {
+        const minimalPaymentData = {
+          user_id: userId,
+          amount: numAmount,
+          phone_number: phoneNumber,
+          external_reference: externalReference,
+          status: 'PENDING'
+        };
+        const retry = await supabase.from('payments').insert(minimalPaymentData);
+        error = retry.error;
+      }
 
       if (error) {
         console.warn('⚠️ Database Storage Warning:', error.message);
@@ -503,7 +517,8 @@ async function queryPayHeroStatus(externalReference) {
  */
 async function creditBalanceIfNotDone(externalReference, userId, amount) {
   const { data: done } = await supabase.from('transactions').select('id').eq('external_reference', externalReference).eq('status', 'completed').maybeSingle();
-  if (done) { console.log('⚠️ Already credited for', externalReference); return false; }
+  const { data: doneDeposit } = await supabase.from('deposits').select('id').eq('external_reference', externalReference).eq('status', 'completed').maybeSingle();
+  if (done || doneDeposit) { console.log('⚠️ Already credited for', externalReference); return false; }
 
   const { data: user } = await supabase.from('users').select('account_balance').eq('id', userId).single();
   if (!user) { console.warn('⚠️ User not found for credit:', userId); return false; }
@@ -545,6 +560,28 @@ router.get('/status/:externalReference', async (req, res) => {
       const { data } = await supabase.from('payments').select('*').eq('external_reference', externalReference).single();
       if (data) paymentRecord = data;
     } catch (_) {}
+
+    // Fallback: recover payment metadata from deposits if payments table insert failed
+    if (!paymentRecord) {
+      try {
+        const { data: depData } = await supabase
+          .from('deposits')
+          .select('user_id, amount, status, external_reference, checkout_request_id')
+          .eq('external_reference', externalReference)
+          .maybeSingle();
+
+        if (depData) {
+          paymentRecord = {
+            user_id: depData.user_id,
+            amount: depData.amount,
+            status: depData.status,
+            external_reference: depData.external_reference,
+            checkout_request_id: depData.checkout_request_id
+          };
+        }
+      } catch (_) {}
+    }
+
     if (!paymentRecord) paymentRecord = paymentCache.getPayment(externalReference);
 
     // Query PayHero directly for real-time status
@@ -835,7 +872,7 @@ router.get('/user-balance/:userId', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('account_balance, winnings_balance, withdrawal_activated, withdrawal_activation_date')
+        .select('account_balance, withdrawal_activated, withdrawal_activation_date')
         .eq('id', userId);
 
       if (error) {
@@ -861,7 +898,9 @@ router.get('/user-balance/:userId', async (req, res) => {
       }
 
       const depositedBalance = parseFloat(data[0].account_balance) || 0;
-      const winningsBalance = parseFloat(data[0].winnings_balance) || 0;
+      // Some environments do not have winnings_balance column on users.
+      // Keep response shape stable by returning zero instead of throwing.
+      const winningsBalance = 0;
       const accountBalance = depositedBalance;
       const availableToBet = depositedBalance;
       const withdrawalActivated = data[0].withdrawal_activated || false;
