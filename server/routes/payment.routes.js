@@ -97,7 +97,7 @@ router.post('/initiate', async (req, res) => {
 
     const numAmount = parseFloat(amount);
     const resolvedPaymentType = paymentType || 'deposit';
-    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
+    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '1');
     // Enforce configurable minimum for regular deposits; activation/priority fees are exempt
     if (resolvedPaymentType === 'deposit' && numAmount < minDepositAmount) {
       console.log('❌ Validation failed: Deposit amount too low');

@@ -150,7 +150,7 @@ export default function Finance() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: 1000,
+          amount: 10,
           phoneNumber: activationPhoneNumber,
           userId: user?.id || "user1",
           paymentType: 'activation'
@@ -184,7 +184,7 @@ export default function Finance() {
 
             const newBalance = (statusData.funding?.newBalance !== undefined)
               ? Number(statusData.funding.newBalance)
-              : balance + 1000;
+              : balance + 10;
 
             updateUser({
               withdrawalActivated: true,
@@ -197,7 +197,7 @@ export default function Finance() {
             await refreshUserData();
 
             setPaymentStatus("success");
-            setStatusMessage(`✅ Account activated! KSH 1000 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
+            setStatusMessage(`✅ Account activated! KSH 10 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
             setIsActivating(false);
             setActivationPhoneNumber("");
             setShowProcessingModal(false);
@@ -856,15 +856,15 @@ export default function Finance() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>STK Push will be sent for <strong className="text-foreground">KSH 1000</strong></span>
+                  <span>STK Push will be sent for <strong className="text-foreground">KSH 10</strong></span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>Deposit KSH 1000 via M-Pesa PIN</span>
+                  <span>Deposit KSH 10 via M-Pesa PIN</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span><strong className="text-foreground">KSH 1000 will be added</strong> to your account balance</span>
+                  <span><strong className="text-foreground">KSH 10 will be added</strong> to your account balance</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
@@ -951,7 +951,7 @@ export default function Finance() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg border border-red-600/50 bg-red-600/10 p-4">
               <p className="text-sm text-red-600 leading-relaxed">
-                <strong>• Ensure your M-Pesa account has KSH 1000</strong>
+                <strong>• Ensure your M-Pesa account has KSH 10</strong>
                 <br/>
                 <strong>• You MUST complete the payment when STK appears</strong>
                 <br/>
