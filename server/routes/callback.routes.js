@@ -117,12 +117,26 @@ router.post('/payhero', async (req, res) => {
     }
 
     // Step 3: If payment successful, immediately credit user balance and mark transaction completed.
-    // Cancelled/Failed paths below do NOT touch balance.
-    if (status === 'Success' && (resultCode === 0 || resultCode === '0')) {
-      console.log('\n💰 Payment successful! Crediting balance automatically...');
+    // Case-insensitive status check — PayHero may send Success / SUCCESS / success.
+    // Cancelled/Failed paths below do NOT touch balance at all.
+    const normalizedStatus = (status || '').toString().trim().toLowerCase();
+    const isPaymentSuccess = normalizedStatus === 'success' && (resultCode === 0 || resultCode === '0');
 
-      if (!isFromCache) {
-        try {
+    if (isPaymentSuccess) {
+      console.log('\n💰 Payment successful! Checking idempotency before crediting balance...');
+
+      try {
+        // --- Idempotency check: skip if balance was already credited for this reference ---
+        const { data: alreadyDone } = await supabase
+          .from('transactions')
+          .select('id, status')
+          .eq('external_reference', external_reference)
+          .eq('status', 'completed')
+          .maybeSingle();
+
+        if (alreadyDone) {
+          console.log('⚠️ Transaction already completed for this reference — skipping double credit');
+        } else {
           // --- Credit user account_balance ---
           const { data: userRow, error: userFetchErr } = await supabase
             .from('users')
@@ -149,15 +163,15 @@ router.post('/payhero', async (req, res) => {
             }
           }
 
-          // --- Update or create transaction as completed ---
-          const { data: existingTx } = await supabase
+          // --- Mark existing pending transaction as completed (or create one) ---
+          const { data: pendingTx } = await supabase
             .from('transactions')
             .select('id')
             .eq('external_reference', external_reference)
             .eq('status', 'pending')
-            .single();
+            .maybeSingle();
 
-          if (existingTx) {
+          if (pendingTx) {
             const { error: updateError } = await supabase
               .from('transactions')
               .update({
@@ -166,32 +180,16 @@ router.post('/payhero', async (req, res) => {
                 description: 'M-Pesa payment received and balance credited',
                 updated_at: new Date().toISOString()
               })
-              .eq('id', existingTx.id);
+              .eq('id', pendingTx.id);
 
             if (updateError) {
               console.warn('⚠️ Failed to mark transaction completed:', updateError.message);
             } else {
               console.log('✅ Transaction marked as completed');
             }
-
-            // Update fund_transfers to completed
-            try {
-              await supabase
-                .from('fund_transfers')
-                .update({
-                  status: 'completed',
-                  mpesa_receipt: mpesaReceipt,
-                  result_code: resultCode,
-                  result_description: resultDesc,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('transaction_id', existingTx.id);
-            } catch (fundError) {
-              console.warn('⚠️ Error updating fund transfer:', fundError.message);
-            }
           } else {
-            // No existing pending transaction — create one already completed
-            const { error: transactionError } = await supabase
+            // No pending transaction existed — insert a completed one (balance was already credited above)
+            const { error: insertErr } = await supabase
               .from('transactions')
               .insert({
                 transaction_id: `DEP-${Date.now()}-${external_reference}`,
@@ -205,17 +203,31 @@ router.post('/payhero', async (req, res) => {
                 created_at: new Date().toISOString()
               });
 
-            if (transactionError) {
-              console.warn('⚠️ Failed to record completed transaction:', transactionError.message);
+            if (insertErr) {
+              console.warn('⚠️ Failed to record completed transaction:', insertErr.message);
             } else {
               console.log('✅ Completed deposit transaction recorded');
             }
           }
-        } catch (dbError) {
-          console.warn('⚠️ Database error processing successful payment:', dbError.message);
+
+          // --- Update fund_transfers by external_reference (checkout_request_id also tried) ---
+          try {
+            await supabase
+              .from('fund_transfers')
+              .update({
+                status: 'completed',
+                mpesa_receipt: mpesaReceipt,
+                result_code: resultCode,
+                result_description: resultDesc,
+                updated_at: new Date().toISOString()
+              })
+              .eq('external_reference', external_reference);
+          } catch (fundError) {
+            console.warn('⚠️ Error updating fund transfer:', fundError.message);
+          }
         }
-      } else {
-        console.log('✅ Payment success noted (database unavailable, will sync when DB available)');
+      } catch (dbError) {
+        console.warn('⚠️ Database error processing successful payment:', dbError.message);
       }
 
       // Also update deposits or activation_fees table to mark completed
@@ -254,7 +266,8 @@ router.post('/payhero', async (req, res) => {
       } catch (tableErr) {
         console.warn('⚠️ Error updating deposits/activation_fees:', tableErr.message);
       }
-    } else if (status === 'Cancelled' || status === 'Failed' || resultCode !== 0) {
+    } else if (!isPaymentSuccess) {
+      // Payment failed or was cancelled — never touch balance
       console.log('\n❌ Payment failed or cancelled. Status:', status, 'ResultCode:', resultCode);
       
       // Update or record the failed transaction

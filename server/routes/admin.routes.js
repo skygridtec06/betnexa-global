@@ -3666,9 +3666,11 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
       });
     }
 
-    // Update the source table
+    // Update the source table atomically — add .eq('status','pending') so only the first writer
+    // succeeds; the callback may have already completed it while admin was looking at the page.
+    let rowsAffected = 0;
     if (fromDepositsTable) {
-      const { error: updateError } = await supabase
+      const { data: updatedRows, error: updateError } = await supabase
         .from('deposits')
         .update({
           status: 'completed',
@@ -3678,14 +3680,17 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
           completed_by: req.user?.id,
           updated_at: new Date().toISOString()
         })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .eq('status', 'pending')
+        .select('id');
 
       if (updateError) {
         console.error('❌ Error updating deposit:', updateError);
         return res.status(500).json({ success: false, message: 'Failed to update deposit', error: updateError.message });
       }
+      rowsAffected = updatedRows?.length || 0;
     } else {
-      const { error: updateError } = await supabase
+      const { data: updatedRows, error: updateError } = await supabase
         .from('transactions')
         .update({
           status: 'completed',
@@ -3695,18 +3700,27 @@ router.put('/transactions/:transactionId/mark-completed', checkAdmin, async (req
           completed_by: req.user?.id,
           updated_at: new Date().toISOString()
         })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .eq('status', 'pending')
+        .select('id');
 
       if (updateError) {
         console.error('❌ Error updating transaction:', updateError);
         return res.status(500).json({ success: false, message: 'Failed to update transaction', error: updateError.message });
       }
+      rowsAffected = updatedRows?.length || 0;
+    }
+
+    if (rowsAffected === 0) {
+      // Another process (e.g. callback) already completed this transaction — do not double-credit
+      console.log('⚠️ Transaction was already completed by another process — skipping balance credit');
+      return res.json({ success: true, message: 'Transaction already completed', alreadyProcessed: true });
     }
 
     console.log('✅ Transaction marked as completed');
 
-    // If this is a deposit and transaction was pending, ensure user balance is updated
-    if (transaction.type === 'deposit' && transaction.status === 'pending') {
+    // Credit user balance — only reached when we were the process that flipped status to completed
+    if (transaction.type === 'deposit') {
       try {
         console.log('💰 Updating user balance for completed deposit...');
         const { data: user, error: userError } = await supabase
