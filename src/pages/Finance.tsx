@@ -224,6 +224,8 @@ export default function Finance() {
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation payment was cancelled on phone.");
             setIsActivating(false);
+            await fetchTransactions(actualUserId);
+            await refreshUserData();
             setTimeout(() => {
               setShowProcessingModal(false);
               setShowActivationModal(true);
@@ -234,6 +236,8 @@ export default function Finance() {
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation payment failed. Please try again.");
             setIsActivating(false);
+            await fetchTransactions(actualUserId);
+            await refreshUserData();
             setTimeout(() => {
               setShowProcessingModal(false);
               setShowActivationModal(true);
@@ -248,6 +252,8 @@ export default function Finance() {
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation verification failed. Please try again.");
             setIsActivating(false);
+            await fetchTransactions(actualUserId);
+            await refreshUserData();
             setTimeout(() => {
               setShowProcessingModal(false);
               setShowActivationModal(true);
@@ -261,6 +267,8 @@ export default function Finance() {
           setPaymentStatus("failed");
           setStatusMessage("❌ Activation timeout. If you completed payment, your balance will update automatically.");
           setIsActivating(false);
+          await fetchTransactions(actualUserId);
+          await refreshUserData();
           setTimeout(() => {
             setShowProcessingModal(false);
             setShowActivationModal(true);
@@ -438,12 +446,16 @@ export default function Finance() {
               setStatusCheckInterval(null);
               setPaymentStatus("failed");
               setStatusMessage("❌ Transaction cancelled on phone.");
+              await fetchTransactions(actualUserId);
+              await refreshUserData();
               setIsProcessing(false);
             } else if (st === 'failed') {
               clearInterval(interval);
               setStatusCheckInterval(null);
               setPaymentStatus("failed");
               setStatusMessage("❌ Transaction failed. Please try again.");
+              await fetchTransactions(actualUserId);
+              await refreshUserData();
               setIsProcessing(false);
             }
           } catch (err) {
@@ -454,6 +466,8 @@ export default function Finance() {
               setStatusCheckInterval(null);
               setPaymentStatus("failed");
               setStatusMessage("❌ Transaction verification failed. Marked as failed.");
+              await fetchTransactions(actualUserId);
+              await refreshUserData();
               setIsProcessing(false);
             }
           }
@@ -463,6 +477,8 @@ export default function Finance() {
             setStatusCheckInterval(null);
             setPaymentStatus("timeout");
             setStatusMessage("⏱️ Payment check timeout. Please verify your balance.");
+            await fetchTransactions(actualUserId);
+            await refreshUserData();
             setIsProcessing(false);
           }
         }, 1500);

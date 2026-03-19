@@ -65,12 +65,13 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
       if (data.success && data.transactions) {
         // Transform server transactions to match frontend format
         const transformedTransactions = data.transactions.map((tx: any) => ({
+          // UI should treat all non-completed terminal outcomes as failed.
+          status: tx.status === 'cancelled' ? 'failed' : tx.status,
           id: tx.id,
           userId: tx.user_id,
           username: data.user?.username || 'User',
           type: tx.type,
           amount: tx.amount,
-          status: tx.status,
           method: tx.method || 'M-Pesa',
           date: new Date(tx.created_at).toLocaleString(),
           mpesaReceipt: tx.mpesa_receipt,

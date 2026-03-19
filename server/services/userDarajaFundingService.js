@@ -361,6 +361,7 @@ async function persistUserDarajaTerminalStatus({
   const finalStatus = 'failed';
 
   let transaction = null;
+  let externalReference = null;
 
   const { data: existing } = await supabase
     .from('transactions')
@@ -370,9 +371,11 @@ async function persistUserDarajaTerminalStatus({
 
   if (existing) {
     transaction = existing;
+    externalReference = existing.external_reference || null;
   } else {
     const cached = paymentCache.getPayment(checkoutRequestId);
     if (cached?.user_id) {
+      externalReference = cached.external_reference || cached.externalReference || null;
       const reg = await registerUserDarajaAttempt({
         userId: cached.user_id,
         phoneNumber: cached.phone_number || phoneNumber,
@@ -385,11 +388,38 @@ async function persistUserDarajaTerminalStatus({
       });
       if (!reg.success) return reg;
       transaction = reg.transaction;
+      externalReference = transaction?.external_reference || externalReference;
     }
   }
 
   if (!transaction) {
-    return { success: false, error: 'User Daraja payment record not found in DB or cache' };
+    // Fallback: update deposits row directly by checkout_request_id if transaction record is missing.
+    const timestamp = nowIso();
+    const { data: depRows, error: depError } = await supabase
+      .from('deposits')
+      .update({
+        status: 'failed',
+        result_code: resultCode ?? null,
+        result_desc: resultDesc || null,
+        mpesa_receipt: mpesaReceipt || null,
+        updated_at: timestamp,
+      })
+      .eq('checkout_request_id', checkoutRequestId)
+      .select('id, external_reference');
+
+    if (depError || !depRows || depRows.length === 0) {
+      return { success: false, error: 'User Daraja payment record not found in DB or cache' };
+    }
+
+    return {
+      success: true,
+      status: 'failed',
+      originalStatus: normalized,
+      userId: null,
+      transactionId: null,
+      updatedFrom: 'deposits_fallback',
+      externalReference: depRows[0]?.external_reference || null,
+    };
   }
 
   if (transaction.status === 'completed') {
@@ -433,6 +463,23 @@ async function persistUserDarajaTerminalStatus({
     .then(({ error }) => {
       if (error) console.warn('[persistUserDarajaTerminalStatus] fund_transfers warning:', error.message);
     });
+
+  // Keep deposits table aligned because user history merges from deposits for missing references.
+  if (externalReference) {
+    supabase.from('deposits')
+      .update({
+        status: finalStatus,
+        result_code: resultCode ?? null,
+        result_desc: resultDesc || null,
+        mpesa_receipt: mpesaReceipt || null,
+        updated_at: timestamp,
+      })
+      .eq('external_reference', externalReference)
+      .in('status', ['pending', 'failed', 'cancelled'])
+      .then(({ error }) => {
+        if (error) console.warn('[persistUserDarajaTerminalStatus] deposits warning:', error.message);
+      });
+  }
 
   return {
     success: true,
