@@ -98,7 +98,7 @@ router.post('/initiate', async (req, res) => {
 
     const numAmount = parseFloat(amount);
     const resolvedPaymentType = paymentType || 'deposit';
-    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '1');
+    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
     // Enforce configurable minimum for regular deposits; activation/priority fees are exempt
     if (resolvedPaymentType === 'deposit' && numAmount < minDepositAmount) {
       console.log('❌ Validation failed: Deposit amount too low');
@@ -1240,7 +1240,7 @@ router.post('/daraja/initiate', async (req, res) => {
     }
 
     // Minimum for regular deposits only
-    const minDeposit = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '1');
+    const minDeposit = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
     if (paymentType === 'deposit' && parsedAmount < minDeposit) {
       return res.status(400).json({ success: false, message: `Minimum deposit is KSH ${minDeposit}` });
     }

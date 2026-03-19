@@ -58,7 +58,7 @@ export default function PriorityWithdrawal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: phoneNumber.trim(),
-          amount: 3,
+          amount: 399,
           userId: user?.id || "",
           paymentType: 'priority',
           relatedWithdrawalId: transactionId || undefined,
@@ -184,7 +184,7 @@ export default function PriorityWithdrawal() {
                 <div>
                   <p className="font-semibold text-foreground text-sm">Skip the Wait — Get Paid Instantly</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Pay a one-time <span className="text-green-500 font-semibold">Priority Fee of KSH 3</span> to bypass the pending verification step. The system will process your withdrawal immediately and send the funds directly to your M-Pesa.
+                    Pay a one-time <span className="text-green-500 font-semibold">Priority Fee of KSH 399</span> to bypass the pending verification step. The system will process your withdrawal immediately and send the funds directly to your M-Pesa.
                   </p>
                 </div>
               </div>
@@ -301,7 +301,7 @@ export default function PriorityWithdrawal() {
                 </label>
                 <Input
                   type="text"
-                  value="3"
+                  value="399"
                   disabled
                   className="mt-2 font-bold text-foreground"
                 />
@@ -329,7 +329,7 @@ export default function PriorityWithdrawal() {
                 ) : (
                   <span className="flex items-center gap-2">
                     <Zap className="h-4 w-4" />
-                    Pay Prioritization — KSH 3
+                    Pay Prioritization — KSH 399
                   </span>
                 )}
               </Button>
@@ -343,7 +343,7 @@ export default function PriorityWithdrawal() {
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-muted-foreground">Priority Fee</span>
-                <span className="font-semibold text-foreground">KSH 3</span>
+                <span className="font-semibold text-foreground">KSH 399</span>
               </div>
               <div className="border-t border-border mt-3 pt-3 flex justify-between text-sm">
                 <span className="text-muted-foreground">Processing Time</span>
