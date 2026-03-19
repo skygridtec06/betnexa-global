@@ -191,7 +191,10 @@ router.post('/initiate', async (req, res) => {
 
     // Generate reference
     const externalReference = `DEP-${Date.now()}-${userId}`;
-    const callbackUrl = `${process.env.CALLBACK_URL || 'https://betnexa-server.vercel.app'}/api/callbacks/payhero`;
+    // Trim trailing whitespace/newlines that PowerShell piped env var input can add
+    const baseCallbackUrl = (process.env.CALLBACK_URL || 'https://server-tau-puce.vercel.app').trim();
+    const callbackUrl = `${baseCallbackUrl}/api/callbacks/payhero`;
+    console.log('📡 Callback URL being sent to PayHero:', callbackUrl);
 
     console.log('🔄 Initiating payment with PayHero...');
     console.log('📞 Phone:', phoneNumber);
@@ -521,83 +524,104 @@ router.post('/initiate', async (req, res) => {
 });
 
 /**
+ * Helper: query PayHero transaction-status API directly
+ */
+async function queryPayHeroStatus(externalReference) {
+  return new Promise((resolve) => {
+    const { generateBasicAuthToken } = require('../services/paymentService.js');
+    const https = require('https');
+    const options = {
+      hostname: 'backend.payhero.co.ke',
+      port: 443,
+      path: `/api/v2/transaction-status?reference=${encodeURIComponent(externalReference)}`,
+      method: 'GET',
+      headers: { 'Authorization': generateBasicAuthToken() },
+      timeout: 10000,
+      rejectUnauthorized: false
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try { resolve({ ok: true, body: JSON.parse(data) }); }
+        catch (_) { resolve({ ok: false }); }
+      });
+    });
+    req.on('error', () => resolve({ ok: false }));
+    req.on('timeout', () => { req.destroy(); resolve({ ok: false }); });
+    req.end();
+  });
+}
+
+/**
+ * Helper: credit user balance with idempotency guard
+ */
+async function creditBalanceIfNotDone(externalReference, userId, amount) {
+  const { data: done } = await supabase.from('transactions').select('id').eq('external_reference', externalReference).eq('status', 'completed').maybeSingle();
+  if (done) { console.log('⚠️ Already credited for', externalReference); return false; }
+
+  const { data: user } = await supabase.from('users').select('account_balance').eq('id', userId).single();
+  if (!user) { console.warn('⚠️ User not found for credit:', userId); return false; }
+
+  const prev = parseFloat(user.account_balance) || 0;
+  const next = prev + parseFloat(amount);
+  await supabase.from('users').update({ account_balance: next, updated_at: new Date().toISOString() }).eq('id', userId);
+  console.log(`✅ [STATUS POLL] Balance credited: ${prev} → ${next} (user ${userId})`);
+
+  const { data: pending } = await supabase.from('transactions').select('id').eq('external_reference', externalReference).eq('status', 'pending').maybeSingle();
+  if (pending) {
+    await supabase.from('transactions').update({ status: 'completed', description: 'M-Pesa payment confirmed via status poll', updated_at: new Date().toISOString() }).eq('id', pending.id);
+  }
+  await supabase.from('fund_transfers').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('external_reference', externalReference).eq('status', 'pending');
+  await supabase.from('deposits').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('external_reference', externalReference);
+  return true;
+}
+
+/**
  * GET /api/payments/status/:externalReference
- * Check payment status
+ * Check payment status — also queries PayHero live and credits balance on success
  */
 router.get('/status/:externalReference', async (req, res) => {
   try {
     const { externalReference } = req.params;
-
     console.log('🔍 Checking payment status:', externalReference);
 
+    // Get payment record (user_id, amount) from DB or cache
+    let paymentRecord = null;
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('external_reference', externalReference)
-        .single();
+      const { data } = await supabase.from('payments').select('*').eq('external_reference', externalReference).single();
+      if (data) paymentRecord = data;
+    } catch (_) {}
+    if (!paymentRecord) paymentRecord = paymentCache.getPayment(externalReference);
 
-      if (error) {
-        console.warn('⚠️ Payment not found in database, checking cache:', externalReference);
-        
-        // Try cache as fallback
-        const cachedPayment = paymentCache.getPayment(externalReference);
-        if (cachedPayment) {
-          console.log('✅ Payment found in cache:', cachedPayment.status);
-          return res.json({
-            success: true,
-            payment: cachedPayment,
-            cached: true
-          });
+    // Query PayHero directly for real-time status
+    if (paymentRecord) {
+      const phResult = await queryPayHeroStatus(externalReference);
+      if (phResult.ok && phResult.body) {
+        const phStatus = (phResult.body.status || phResult.body.Status || '').toString().toLowerCase();
+        const phCode = phResult.body.result_code ?? phResult.body.ResultCode ?? phResult.body.response_code;
+        console.log('📡 PayHero live status:', phStatus, 'code:', phCode);
+
+        if (phStatus === 'success' || phCode === 0 || phCode === '0') {
+          try { await creditBalanceIfNotDone(externalReference, paymentRecord.user_id, paymentRecord.amount); } catch (e) { console.warn('⚠️ Credit error in poll:', e.message); }
+          await supabase.from('payments').update({ status: 'Success', updated_at: new Date().toISOString() }).eq('external_reference', externalReference);
+          return res.json({ success: true, payment: { ...paymentRecord, status: 'Success', source: 'payhero-live' } });
+        } else if (phStatus === 'failed' || phStatus === 'cancelled') {
+          return res.json({ success: true, payment: { ...paymentRecord, status: phResult.body.status, source: 'payhero-live' } });
         }
-
-        // Return pending status if not found (might be in-flight from PayHero)
-        return res.json({
-          success: true,
-          payment: {
-            status: 'Pending',
-            message: 'Payment status not yet available. Please wait...'
-          }
-        });
       }
-
-      console.log('✅ Payment found in database:', data.status);
-      res.json({
-        success: true,
-        payment: data
-      });
-    } catch (dbError) {
-      console.warn('⚠️ Database query error, checking cache:', dbError.message);
-      
-      // Try cache as fallback when DB fails
-      const cachedPayment = paymentCache.getPayment(externalReference);
-      if (cachedPayment) {
-        console.log('✅ Payment found in cache (DB unavailable):', cachedPayment.status);
-        return res.json({
-          success: true,
-          payment: cachedPayment,
-          cached: true,
-          message: 'Retrieved from cache due to database unavailability'
-        });
-      }
-
-      // Return pending if database is unavailable and no cache
-      return res.json({
-        success: true,
-        payment: {
-          status: 'Pending',
-          message: 'Payment status pending. Please try again shortly.'
-        }
-      });
     }
+
+    // Fall back to DB/cache status
+    if (paymentRecord) {
+      return res.json({ success: true, payment: paymentRecord });
+    }
+
+    res.json({ success: true, payment: { status: 'Pending', message: 'Payment status not yet available. Please wait...' } });
 
   } catch (error) {
     console.error('❌ Status Check Error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check payment status',
-      error: error.message
-    });
+    res.status(500).json({ success: false, message: 'Failed to check payment status', error: error.message });
   }
 });
 
