@@ -1103,8 +1103,7 @@ export default function Finance() {
               ) : paymentStatus === "failed" ? (
                 <>
                   <p className="text-lg font-semibold text-red-600">Failed</p>
-                  <p className="text-sm text-red-600/80">Transaction was cancelled or failed</p>
-                  <p className="text-sm text-red-600/80">This can happen with insufficient M-Pesa funds</p>
+                  <p className="text-sm text-red-600/80">Activation failed.</p>
                 </>
               ) : (
                 <>
@@ -1121,7 +1120,7 @@ export default function Finance() {
               {paymentStatus === "success" ? (
                 <p className="text-green-600/70">Closing in a moment...</p>
               ) : paymentStatus === "failed" ? (
-                <p className="text-red-600/70">Please try activation again.</p>
+                <p className="text-red-600/70">Please try again.</p>
               ) : (
                 <p className="text-blue-600/60">Please wait while we complete your activation...</p>
               )}
