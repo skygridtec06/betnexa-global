@@ -3,13 +3,14 @@ const https = require('https');
 const DARAJA_HOST = 'api.safaricom.co.ke';
 
 function getDarajaTestConfig() {
+  const clean = (value) => (typeof value === 'string' ? value.trim() : value);
   const config = {
-    consumerKey: process.env.DARAJA_TEST_CONSUMER_KEY,
-    consumerSecret: process.env.DARAJA_TEST_CONSUMER_SECRET,
-    passkey: process.env.DARAJA_TEST_PASSKEY,
-    shortCode: process.env.DARAJA_TEST_SHORT_CODE,
-    partyB: process.env.DARAJA_TEST_PARTY_B,
-    transactionType: process.env.DARAJA_TEST_TRANSACTION_TYPE || 'CustomerPayBillOnline',
+    consumerKey: clean(process.env.DARAJA_TEST_CONSUMER_KEY),
+    consumerSecret: clean(process.env.DARAJA_TEST_CONSUMER_SECRET),
+    passkey: clean(process.env.DARAJA_TEST_PASSKEY),
+    shortCode: clean(process.env.DARAJA_TEST_SHORT_CODE),
+    partyB: clean(process.env.DARAJA_TEST_PARTY_B),
+    transactionType: clean(process.env.DARAJA_TEST_TRANSACTION_TYPE) || 'CustomerPayBillOnline',
   };
 
   const missing = Object.entries(config)
