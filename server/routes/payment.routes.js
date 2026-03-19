@@ -8,6 +8,24 @@ const router = express.Router();
 const { initiatePayment } = require('../services/paymentService.js');
 const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
+const {
+  initiateAdminTestStkPush,
+  normalizeDarajaPhoneNumber,
+  queryAdminTestStkPushStatus,
+} = require('../services/darajaTestService.js');
+const {
+  registerUserDarajaAttempt,
+  ensureUserDarajaFunding,
+} = require('../services/userDarajaFundingService.js');
+
+function interpretUserDarajaStatus(result) {
+  const code = `${result?.ResultCode ?? result?.resultCode ?? result?.ResponseCode ?? ''}`;
+  const desc = `${result?.ResultDesc || result?.resultDesc || result?.ResponseDescription || ''}`;
+  if (code === '0') return 'success';
+  if (code === '1032' || /cancel|insufficient\s*funds|balance\s+is\s+insufficient/i.test(desc)) return 'cancelled';
+  if (/process|pending|accept|queue|initiated/i.test(desc)) return 'pending';
+  return 'failed';
+}
 
 /**
  * Handle payment timeout - mark as failed if no callback after 10 seconds
@@ -1195,6 +1213,147 @@ router.delete('/admin/users/:userId', async (req, res) => {
       message: 'Failed to delete user',
       error: error.message
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// USER DARAJA DIRECT STK PUSH ENDPOINTS
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/payments/daraja/initiate
+ * Initiate a Daraja (Safaricom direct) STK push for a regular user.
+ * paymentType: 'deposit' | 'activation' | 'priority'
+ */
+router.post('/daraja/initiate', async (req, res) => {
+  try {
+    const { userId, phoneNumber, amount, paymentType = 'deposit', relatedWithdrawalId } = req.body;
+
+    if (!userId || !phoneNumber || !amount) {
+      return res.status(400).json({ success: false, message: 'userId, phoneNumber, and amount are required' });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 1) {
+      return res.status(400).json({ success: false, message: 'Amount must be at least KSH 1' });
+    }
+
+    // Minimum for regular deposits only
+    const minDeposit = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
+    if (paymentType === 'deposit' && parsedAmount < minDeposit) {
+      return res.status(400).json({ success: false, message: `Minimum deposit is KSH ${minDeposit}` });
+    }
+
+    const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
+    const suffix = `${Date.now()}`.slice(-8);
+    const externalReference = `DUSER-${paymentType.toUpperCase().slice(0, 3)}-${suffix}`;
+
+    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
+    const callbackUrl = `${callbackBase}/api/callbacks/daraja-user`;
+
+    const descriptionMap = {
+      deposit: 'Betnexa deposit',
+      activation: 'Withdrawal activation fee',
+      priority: 'Priority withdrawal fee',
+    };
+
+    const result = await initiateAdminTestStkPush({
+      phoneNumber: normalizedPhone,
+      amount: parsedAmount,
+      accountReference: `BX${suffix}`,
+      transactionDesc: descriptionMap[paymentType] || 'Betnexa payment',
+      callbackUrl,
+    });
+
+    const registerResult = await registerUserDarajaAttempt({
+      userId,
+      phoneNumber: normalizedPhone,
+      amount: parsedAmount,
+      externalReference,
+      checkoutRequestId: result.checkoutRequestId,
+      merchantRequestId: result.merchantRequestId,
+      paymentType,
+      relatedWithdrawalId,
+    });
+
+    if (!registerResult.success) {
+      console.error('[daraja/initiate] Failed to register attempt:', registerResult.error);
+      // Still return success – STK was already sent
+    }
+
+    return res.json({
+      success: true,
+      message: result.customerMessage || 'STK push sent to your phone',
+      checkoutRequestId: result.checkoutRequestId,
+      merchantRequestId: result.merchantRequestId,
+      externalReference,
+      phoneNumber: normalizedPhone,
+      amount: parsedAmount,
+      paymentType,
+    });
+  } catch (error) {
+    console.error('[daraja/initiate] Error:', error.message || error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to initiate Daraja STK push' });
+  }
+});
+
+/**
+ * GET /api/payments/daraja/status?checkoutRequestId=...
+ * Poll payment status and credit balance if successful.
+ */
+router.get('/daraja/status', async (req, res) => {
+  try {
+    const { checkoutRequestId } = req.query;
+
+    if (!checkoutRequestId) {
+      return res.status(400).json({ success: false, message: 'checkoutRequestId is required' });
+    }
+
+    // Check callback cache first (fastest path)
+    const callbackData = paymentCache.getCallback(checkoutRequestId);
+    if (callbackData) {
+      const status = interpretUserDarajaStatus(callbackData);
+      let funding = null;
+
+      if (status === 'success') {
+        funding = await ensureUserDarajaFunding({
+          checkoutRequestId,
+          mpesaReceipt: callbackData.mpesaReceipt || null,
+          resultCode: callbackData.resultCode,
+          resultDesc: callbackData.resultDesc,
+          amount: callbackData.amount || null,
+          phoneNumber: callbackData.phoneNumber || null,
+        });
+        if (!funding.success) {
+          return res.status(500).json({ success: false, message: funding.error || 'Failed to credit balance' });
+        }
+      }
+
+      return res.json({ success: true, status, source: 'callback', result: callbackData, funding });
+    }
+
+    // Query Daraja live
+    const queryResult = await queryAdminTestStkPushStatus({ checkoutRequestId });
+    const status = interpretUserDarajaStatus(queryResult);
+    let funding = null;
+
+    if (status === 'success') {
+      funding = await ensureUserDarajaFunding({
+        checkoutRequestId,
+        mpesaReceipt: queryResult.MpesaReceiptNumber || queryResult.mpesaReceipt || null,
+        resultCode: queryResult.ResultCode ?? queryResult.resultCode,
+        resultDesc: queryResult.ResultDesc || queryResult.resultDesc,
+      });
+      if (!funding.success) {
+        return res.status(500).json({ success: false, message: funding.error || 'Failed to credit balance' });
+      }
+    }
+
+    return res.json({ success: true, status, source: 'query', result: queryResult, funding });
+  } catch (error) {
+    console.error('[daraja/status] Error:', error.message || error);
+    // Return pending instead of error so frontend keeps polling
+    return res.json({ success: true, status: 'pending', message: error.message });
   }
 });
 

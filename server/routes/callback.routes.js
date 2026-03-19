@@ -8,6 +8,7 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
 const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
+const { ensureUserDarajaFunding } = require('../services/userDarajaFundingService');
 
 /**
  * POST /api/callbacks/payhero
@@ -472,6 +473,71 @@ router.post('/daraja-admin-test', async (req, res) => {
     res.json({ ResponseCode: '00000000', ResponseDesc: 'Accepted' });
   } catch (error) {
     console.error('Daraja admin test callback error:', error.message || error);
+    res.status(200).json({ ResponseCode: '00000000', ResponseDesc: 'Accepted with error' });
+  }
+});
+
+/**
+ * POST /api/callbacks/daraja-user
+ * Receive Daraja callbacks for user deposits, activation fees, and priority fees.
+ */
+router.post('/daraja-user', async (req, res) => {
+  try {
+    const stkCallback = req.body?.Body?.stkCallback || req.body?.stkCallback || req.body;
+    const checkoutRequestId = stkCallback?.CheckoutRequestID;
+    const merchantRequestId = stkCallback?.MerchantRequestID;
+    const resultCode = stkCallback?.ResultCode;
+    const resultDesc = stkCallback?.ResultDesc;
+    const metadataItems = Array.isArray(stkCallback?.CallbackMetadata?.Item)
+      ? stkCallback.CallbackMetadata.Item
+      : [];
+
+    const metadata = metadataItems.reduce((acc, item) => {
+      if (item?.Name) acc[item.Name] = item.Value;
+      return acc;
+    }, {});
+
+    console.log('\n\uD83D\uDD14 Daraja User Callback Received:', JSON.stringify(req.body, null, 2));
+
+    if (checkoutRequestId) {
+      const isCancelled = `${resultCode}` === '1032'
+        || /cancel|insufficient\s*funds|balance\s+is\s+insufficient/i.test(`${resultDesc || ''}`);
+      const normalizedStatus = `${resultCode}` === '0'
+        ? 'Success'
+        : (isCancelled ? 'Cancelled' : 'Failed');
+
+      paymentCache.storeCallback(checkoutRequestId, {
+        status: normalizedStatus,
+        resultCode,
+        resultDesc,
+        merchantRequestId,
+        mpesaReceipt: metadata.MpesaReceiptNumber || null,
+        amount: metadata.Amount || null,
+        phoneNumber: metadata.PhoneNumber || null,
+        transactionDate: metadata.TransactionDate || null,
+      });
+
+      if (normalizedStatus === 'Success') {
+        const fundingResult = await ensureUserDarajaFunding({
+          checkoutRequestId,
+          mpesaReceipt: metadata.MpesaReceiptNumber || null,
+          resultCode,
+          resultDesc,
+          amount: metadata.Amount || null,
+          phoneNumber: metadata.PhoneNumber || null,
+        });
+
+        if (!fundingResult.success) {
+          console.error('User Daraja funding error in callback:', fundingResult.error || 'Unknown error');
+        } else {
+          console.log(`\u2705 User Daraja callback: Credited KSH ${fundingResult.creditedAmount} to user ${fundingResult.userId}. New balance: ${fundingResult.newBalance}`);
+        }
+      }
+    }
+
+    res.json({ ResponseCode: '00000000', ResponseDesc: 'Accepted' });
+  } catch (error) {
+    console.error('Daraja user callback error:', error.message || error);
     res.status(200).json({ ResponseCode: '00000000', ResponseDesc: 'Accepted with error' });
   }
 });

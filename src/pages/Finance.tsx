@@ -25,6 +25,7 @@ export default function Finance() {
   const [paymentStatus, setPaymentStatus] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string>("");
   const [externalReference, setExternalReference] = useState<string>("");
+  const [darajaCheckoutId, setDarajaCheckoutId] = useState<string>("");
   const [statusCheckInterval, setStatusCheckInterval] = useState<NodeJS.Timeout | null>(null);
   const [showActivationModal, setShowActivationModal] = useState(false);
   const [showActivationWarning, setShowActivationWarning] = useState(false);
@@ -35,7 +36,7 @@ export default function Finance() {
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
   const [secondsUntilProceed, setSecondsUntilProceed] = useState(20);
   const { deposit, withdraw, balance, setBalance } = useBets();
-  const { user, updateUser } = useUser();
+  const { user, updateUser, refreshUserData } = useUser();
   const { getUserTransactions, addTransaction, fetchTransactions } = useTransactions();
   const actualUserId = user?.id || "user1";
   const userTransactions = getUserTransactions(actualUserId);
@@ -144,9 +145,8 @@ export default function Finance() {
     setPaymentStatus("initiating");
 
     try {
-      // Send STK push for activation fee
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/payments/initiate`, {
+      const response = await fetch(`${apiUrl}/api/payments/daraja/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -159,84 +159,42 @@ export default function Finance() {
 
       const data = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !data.success) {
         throw new Error(data.message || "Failed to initiate activation payment");
       }
 
-      const externalRef = data.requestId || data.externalReference;
-      setExternalReference(externalRef);
+      const ckId = data.checkoutRequestId;
+      setDarajaCheckoutId(ckId);
       setPaymentStatus("sent");
-      setStatusMessage("🔔 STK Push sent! Check your phone and enter your M-Pesa PIN to activate account... (You'll receive funds in 1-2 minutes)");
+      setStatusMessage("🔔 STK Push sent! Check your phone and enter your M-Pesa PIN to activate account...");
 
-      // Record the activation payment as a PENDING deposit transaction immediately
-      addTransaction({
-        id: `t${Date.now()}`,
-        userId: user?.id || "user1",
-        username: user?.username || "User",
-        type: "deposit" as const,
-        amount: 1000,
-        status: "pending" as const,
-        method: "Withdrawal Activation",
-        date: new Date().toLocaleString()
-      } as any);
-      const timeout = setTimeout(() => {
-        setPaymentStatus("failed");
-        setStatusMessage("❌ Activation incomplete. Payment pending - please try again or contact support.");
-        setIsActivating(false);
-        setActivationPhoneNumber("");
-        setPendingWithdrawalAmount(null);
-      }, 7000);
-
-      // Poll for activation payment status (but stop polling after 7 seconds)
+      // Poll for activation payment status
       let pollCount = 0;
-      const maxPolls = 14; // 7 seconds with 500ms intervals
+      const maxPolls = 60; // 3 minutes
       const interval = setInterval(async () => {
         pollCount++;
-
         try {
-          const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-          const statusResponse = await fetch(
-            `${apiUrl}/api/payments/status?requestId=${externalRef}`
-          );
+          const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
           const statusData = await statusResponse.json();
+          const st = statusData.status;
 
-          if (statusData.status === "completed") {
-            clearTimeout(timeout);
+          if (st === 'success') {
             clearInterval(interval);
             setStatusCheckInterval(null);
 
-            // Activation successful - add 1000 to balance and mark as activated
-            const newBalance = balance + 1000;
-            
-            // PERSIST activation to database
-            try {
-              const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-              await fetch(`${apiUrl}/api/auth/update-profile`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userId: user?.id || actualUserId,
-                  withdrawal_activated: true,
-                  withdrawal_activation_date: new Date().toISOString()
-                })
-              });
-              console.log('✅ Withdrawal activation persisted to database');
-            } catch (dbErr) {
-              console.warn('⚠️ Failed to persist activation to DB:', dbErr);
-            }
+            const newBalance = (statusData.funding?.newBalance !== undefined)
+              ? Number(statusData.funding.newBalance)
+              : balance + 1000;
 
-            // Update user with activation info
             updateUser({
               withdrawalActivated: true,
               withdrawalActivationDate: new Date().toISOString(),
               accountBalance: newBalance
             });
-            
-            // Update balance
             setBalance(newBalance);
 
-            // Refresh transactions from database
             await fetchTransactions(actualUserId);
+            await refreshUserData();
 
             setPaymentStatus("success");
             setStatusMessage(`✅ Account activated! KSH 1000 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
@@ -244,28 +202,34 @@ export default function Finance() {
             setActivationPhoneNumber("");
             setShowProcessingModal(false);
 
-            // Process pending withdrawal after activation
             if (pendingWithdrawalAmount !== null) {
               setTimeout(() => processPendingWithdrawal(pendingWithdrawalAmount), 1500);
               setPendingWithdrawalAmount(null);
             }
 
-            setTimeout(() => {
-              setStatusMessage("");
-              setPaymentStatus(null);
-            }, 4000);
+            setTimeout(() => { setStatusMessage(""); setPaymentStatus(null); }, 4000);
+          } else if (st === 'failed' || st === 'cancelled') {
+            clearInterval(interval);
+            setStatusCheckInterval(null);
+            setPaymentStatus("failed");
+            setStatusMessage("❌ Activation payment was cancelled or failed. Please try again.");
+            setIsActivating(false);
+            setShowActivationModal(true);
+            setShowProcessingModal(false);
           }
         } catch (err) {
-          console.error("Status check error:", err);
+          console.error("Activation status check error:", err);
         }
 
-        // Stop polling after max attempts
         if (pollCount >= maxPolls) {
-          clearTimeout(timeout);
           clearInterval(interval);
           setStatusCheckInterval(null);
+          setPaymentStatus("failed");
+          setStatusMessage("❌ Activation timeout. If you completed payment, your balance will update automatically.");
+          setIsActivating(false);
+          setShowProcessingModal(false);
         }
-      }, 500);
+      }, 3000);
 
       setStatusCheckInterval(interval);
     } catch (error) {
@@ -367,104 +331,78 @@ export default function Finance() {
 
     if (activeTab === "deposit") {
       try {
-        // Call backend API to initiate payment
-        setStatusMessage("🔄 Connecting to PayHero...");
-        console.log('📡 Sending payment request:', { amount: transactionAmount, phoneNumber: mpesaNumber, userId: user?.id || "user1" });
-        
+        setStatusMessage("🔄 Sending STK push via M-Pesa...");
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-        const response = await fetch(`${apiUrl}/api/payments/initiate`, {
+        const response = await fetch(`${apiUrl}/api/payments/daraja/initiate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             amount: transactionAmount,
             phoneNumber: mpesaNumber,
-            userId: user?.id || "user1"
+            userId: user?.id || "user1",
+            paymentType: 'deposit'
           })
         });
 
-        console.log('📨 Response status:', response.status);
         const data = await response.json();
-        console.log('📦 Response data:', data);
 
         if (!response.ok || !data.success) {
           setPaymentStatus("failed");
-          const errorMsg = data.message || 'Payment initiation failed';
-          console.error('❌ Payment failed:', errorMsg);
-          setStatusMessage(`❌ Failed: ${errorMsg}`);
+          setStatusMessage(`❌ Failed: ${data.message || 'Payment initiation failed'}`);
           setIsProcessing(false);
           return;
         }
 
-        const ref = data.data?.externalReference || data.externalReference;
-        console.log('✅ Got reference:', ref);
-        
-        if (!ref) {
-          console.error('❌ No external reference in response:', data);
-          setPaymentStatus("failed");
-          setStatusMessage("❌ Failed: Payment reference not received");
-          setIsProcessing(false);
-          return;
-        }
-        
-        setExternalReference(ref);
+        const ckId = data.checkoutRequestId;
+        setDarajaCheckoutId(ckId);
+        setExternalReference(data.externalReference || '');
         setPaymentStatus("sent");
-        
-        // Show STK sent message with clear instruction
         setStatusMessage("📱 STK push sent to your phone!\nEnter your M-Pesa PIN to complete the payment.");
 
-        // Refresh transactions from DB (server already created the pending deposit record)
         await fetchTransactions(actualUserId);
 
-        // Poll for payment status every 3 seconds for 5 minutes
+        // Poll for payment status every 3 seconds (up to 10 minutes)
         let pollCount = 0;
-        const maxPolls = 200; // 200 * 3 seconds = 600 seconds = 10 minutes (wait longer for real payment)
+        const maxPolls = 200;
 
         const interval = setInterval(async () => {
           pollCount++;
-          
           try {
-            const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-            const statusResponse = await fetch(
-              `${apiUrl}/api/payments/status/${ref}`
-            );
+            const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
             const statusData = await statusResponse.json();
+            const st = statusData.status;
 
-            if (statusData.success && statusData.payment) {
-              const normalizedStatus = (statusData.payment.status || '').toString().toLowerCase();
-              if (normalizedStatus === "success" || normalizedStatus === "completed") {
-                // M-Pesa payment received and balance credited automatically
-                clearInterval(interval);
-                setStatusCheckInterval(null);
-                setPaymentStatus("success");
+            if (st === 'success') {
+              clearInterval(interval);
+              setStatusCheckInterval(null);
+              setPaymentStatus("success");
 
-                // Refresh transactions and user profile after successful credit
-                await fetchTransactions(actualUserId);
-                await refreshUserData();
-
-                setStatusMessage("✅ Payment successful! Your account balance has been updated.");
-                setAmount("");
-                setMpesaNumber("");
-                
-                setTimeout(() => {
-                  setPaymentStatus(null);
-                  setStatusMessage("");
-                  setIsProcessing(false);
-                }, 4000);
-              } else if (normalizedStatus === "failed" || normalizedStatus === "cancelled" || normalizedStatus === "canceled") {
-                // Payment failed
-                clearInterval(interval);
-                setStatusCheckInterval(null);
-                setPaymentStatus("failed");
-                setStatusMessage("❌ Payment was cancelled or failed. Please try again.");
-                setIsProcessing(false);
+              const syncedBalance = statusData.funding?.newBalance !== undefined
+                ? Number(statusData.funding.newBalance)
+                : null;
+              if (syncedBalance !== null) {
+                setBalance(syncedBalance);
+                updateUser({ accountBalance: syncedBalance });
               }
-              // If still pending, keep polling without updating balance
+
+              await fetchTransactions(actualUserId);
+              await refreshUserData();
+
+              setStatusMessage("✅ Payment successful! Your account balance has been updated.");
+              setAmount("");
+              setMpesaNumber("");
+              setTimeout(() => { setPaymentStatus(null); setStatusMessage(""); setIsProcessing(false); }, 4000);
+            } else if (st === 'failed' || st === 'cancelled') {
+              clearInterval(interval);
+              setStatusCheckInterval(null);
+              setPaymentStatus("failed");
+              setStatusMessage("❌ Payment was cancelled or failed. Please try again.");
+              setIsProcessing(false);
             }
-          } catch (error) {
-            console.error("Status check error:", error);
+          } catch (err) {
+            console.error("Daraja status check error:", err);
           }
 
-          // Stop polling after max attempts
           if (pollCount >= maxPolls) {
             clearInterval(interval);
             setStatusCheckInterval(null);
@@ -476,22 +414,9 @@ export default function Finance() {
 
         setStatusCheckInterval(interval);
       } catch (error) {
-        console.error("Transaction error:", error);
-        
-        // Determine the error message based on error type
-        let errorMessage = "Connection failed. ";
-        
-        if (error instanceof TypeError) {
-          // Network error - likely server not running
-          errorMessage += "Server not responding. Make sure the backend is deployed on Vercel";
-        } else if (error instanceof Error) {
-          errorMessage += error.message;
-        } else {
-          errorMessage += "Please try again";
-        }
-        
+        console.error("Daraja deposit error:", error);
         setPaymentStatus("failed");
-        setStatusMessage(`❌ Error: ${errorMessage}`);
+        setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : 'Connection failed. Please try again'}`);
         setIsProcessing(false);
       }
     } else {

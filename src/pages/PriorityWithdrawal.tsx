@@ -7,11 +7,14 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, Shield, Clock, Zap, CheckCircle, Loader, AlertCircle, Phone } from "lucide-react";
 import { useUser } from "@/context/UserContext";
+import { useBets } from "@/context/BetContext";
+import balanceSyncService from "@/lib/balanceSyncService";
 
 export default function PriorityWithdrawal() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useUser();
+  const { user, updateUser, refreshUserData } = useUser();
+  const { setBalance } = useBets();
 
   const transactionId = searchParams.get("txId") || "";
   const withdrawalAmount = searchParams.get("amount") || "0";
@@ -46,11 +49,11 @@ export default function PriorityWithdrawal() {
 
     setIsProcessing(true);
     setPaymentStatus("initiating");
-    setStatusMessage("Initiating M-Pesa STK push for KSH 399...");
+    setStatusMessage("Sending STK push for KSH 399...");
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
-      const response = await fetch(`${apiUrl}/api/payments/initiate`, {
+      const response = await fetch(`${apiUrl}/api/payments/daraja/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -64,63 +67,73 @@ export default function PriorityWithdrawal() {
 
       const data = await response.json();
 
-      if (data.success) {
-        setPaymentStatus("sent");
-        setStatusMessage("✅ STK push sent! Check your phone and enter your M-Pesa PIN to complete payment.");
-
-        // Poll for payment status
-        const ref = data.externalReference || data.data?.externalReference;
-        if (ref) {
-          pollPaymentStatus(ref);
-        }
-      } else {
+      if (!response.ok || !data.success) {
         setPaymentStatus("failed");
         setStatusMessage(`❌ Failed: ${data.message || "Could not initiate payment"}`);
         setIsProcessing(false);
+        return;
       }
+
+      setPaymentStatus("sent");
+      setStatusMessage("✅ STK push sent! Check your phone and enter your M-Pesa PIN.");
+
+      const ckId = data.checkoutRequestId;
+      let pollCount = 0;
+      const maxPolls = 60; // 3 minutes
+
+      const poll = setInterval(async () => {
+        pollCount++;
+        if (pollCount > maxPolls) {
+          clearInterval(poll);
+          setPaymentStatus("timeout");
+          setStatusMessage("⏰ Verification timed out. If you completed payment, balance will update shortly.");
+          setIsProcessing(false);
+          return;
+        }
+
+        try {
+          const res = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
+          const statusData = await res.json();
+          const st = statusData.status;
+
+          if (st === 'success') {
+            clearInterval(poll);
+            setPaymentStatus("success");
+
+            // Credit balance
+            if (statusData.funding?.newBalance !== undefined) {
+              const newBalance = Number(statusData.funding.newBalance);
+              setBalance(newBalance);
+              updateUser({ accountBalance: newBalance });
+            } else {
+              // Sync from server
+              try {
+                const synced = await balanceSyncService.sync(user?.id || '');
+                if (synced !== null) {
+                  setBalance(synced);
+                  updateUser({ accountBalance: synced });
+                }
+              } catch { /* non-critical */ }
+            }
+
+            await refreshUserData();
+            setStatusMessage("✅ Priority payment confirmed! KSH 399 added to your balance. Your withdrawal of KSH " + withdrawalAmount + " is now being processed.");
+            setIsProcessing(false);
+          } else if (st === 'failed' || st === 'cancelled') {
+            clearInterval(poll);
+            setPaymentStatus("failed");
+            setStatusMessage("❌ Payment failed or cancelled. Please try again.");
+            setIsProcessing(false);
+          }
+        } catch {
+          // Continue polling on network errors
+        }
+      }, 3000);
     } catch (error) {
       setPaymentStatus("failed");
       setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : "Payment failed"}`);
       setIsProcessing(false);
     }
-  };
-
-  const pollPaymentStatus = async (reference: string) => {
-    const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
-    let attempts = 0;
-    const maxAttempts = 30;
-
-    const poll = setInterval(async () => {
-      attempts++;
-      if (attempts > maxAttempts) {
-        clearInterval(poll);
-        setPaymentStatus("timeout");
-        setStatusMessage("⏰ Payment verification timed out. If you completed the payment, it will be reflected shortly.");
-        setIsProcessing(false);
-        return;
-      }
-
-      try {
-        const res = await fetch(`${apiUrl}/api/payments/status/${reference}`);
-        const data = await res.json();
-
-        if (data.success && data.payment) {
-          if (data.payment.status === "Completed" || data.payment.status === "completed") {
-            clearInterval(poll);
-            setPaymentStatus("success");
-            setStatusMessage("✅ Priority payment confirmed! Your withdrawal of KSH " + withdrawalAmount + " is now being processed instantly.");
-            setIsProcessing(false);
-          } else if (data.payment.status === "Failed" || data.payment.status === "failed") {
-            clearInterval(poll);
-            setPaymentStatus("failed");
-            setStatusMessage("❌ Payment failed. Please try again.");
-            setIsProcessing(false);
-          }
-        }
-      } catch {
-        // Continue polling on network errors
-      }
-    }, 3000);
   };
 
   return (
