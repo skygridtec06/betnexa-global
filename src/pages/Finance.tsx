@@ -76,22 +76,8 @@ export default function Finance() {
       return;
     }
 
-    if (processingCountdown <= 0) {
-      setShowProcessingModal(false);
-      setIsActivating(false);
-      setPaymentStatus("failed");
-      setStatusMessage("❌ Activation incomplete. Payment pending - please try again or contact support.");
-      setActivationPhoneNumber("");
-      setPendingWithdrawalAmount(null);
-      setTimeout(() => {
-        setStatusMessage("");
-        setPaymentStatus(null);
-      }, 4000);
-      return;
-    }
-
     const interval = setInterval(() => {
-      setProcessingCountdown(prev => prev - 1);
+      setProcessingCountdown(prev => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(interval);
@@ -265,7 +251,7 @@ export default function Finance() {
           clearInterval(interval);
           setStatusCheckInterval(null);
           setPaymentStatus("failed");
-          setStatusMessage("❌ Activation timeout. If you completed payment, your balance will update automatically.");
+          setStatusMessage("❌ Activation timed out. Transaction marked as failed.");
           setIsActivating(false);
           await fetchTransactions(actualUserId);
           await refreshUserData();
