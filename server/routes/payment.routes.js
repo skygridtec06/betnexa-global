@@ -42,64 +42,9 @@ async function handlePaymentTimeout(externalReference, checkoutRequestId, paymen
         }
 
         if (currentPaymentStatus === 'PENDING') {
-          console.log(`❌ [TIMEOUT] Payment still PENDING after 10 seconds: ${externalReference}`);
-          
-          // Mark payment as FAILED
-          try {
-            const { error: updateError } = await supabase
-              .from('payments')
-              .update({
-                status: 'FAILED',
-                result_code: 'TIMEOUT',
-                result_desc: 'No callback received within 10 seconds',
-                updated_at: new Date().toISOString()
-              })
-              .eq('external_reference', externalReference);
-
-            if (updateError) {
-              console.warn('⚠️ Failed to update payment status:', updateError.message);
-            } else {
-              console.log('✅ Payment marked as FAILED in database');
-            }
-          } catch (dbError) {
-            console.warn('⚠️ Database error marking payment as failed:', dbError.message);
-          }
-
-          // Update cache
-          const cachedPayment = paymentCache.getPayment(externalReference);
-          if (cachedPayment) {
-            cachedPayment.status = 'FAILED';
-            cachedPayment.result_code = 'TIMEOUT';
-            cachedPayment.result_desc = 'No callback received within 10 seconds';
-            console.log('✅ Cache updated: Payment marked as FAILED');
-          }
-
-          // Record failed transaction
-          try {
-            const { error: transactionError } = await supabase
-              .from('transactions')
-              .insert({
-                transaction_id: `TIMEOUT-${Date.now()}-${externalReference}`,
-                user_id: paymentData.user_id,
-                type: 'deposit',
-                amount: parseFloat(paymentData.amount),
-                status: 'failed',
-                mpesa_receipt: '',
-                external_reference: externalReference,
-                description: 'Timeout - No callback received within 10 seconds',
-                created_at: new Date().toISOString()
-              });
-
-            if (transactionError) {
-              console.warn('⚠️ Failed to record transaction:', transactionError.message);
-            } else {
-              console.log('✅ Failed transaction recorded');
-            }
-          } catch (dbError) {
-            console.warn('⚠️ Database error recording failed transaction:', dbError.message);
-          }
-
-          console.log(`✅ [TIMEOUT] Timeout handling completed for: ${externalReference}\n`);
+          // Do NOT auto-fail deposits after short delays; users can take time to enter PIN.
+          // Final state should come from callback or live status polling.
+          console.log(`⏳ [TIMEOUT CHECK] Payment still pending after 10 seconds: ${externalReference}. Leaving as pending.`);
         } else {
           console.log(`✅ [TIMEOUT CHECK] Payment ${externalReference} has status: ${currentPaymentStatus} - No timeout needed\n`);
         }
@@ -586,6 +531,14 @@ router.get('/status/:externalReference', async (req, res) => {
     const { externalReference } = req.params;
     console.log('🔍 Checking payment status:', externalReference);
 
+    const normalizeStatus = (value) => {
+      const s = (value || '').toString().trim().toLowerCase();
+      if (s === 'success' || s === 'completed') return 'Success';
+      if (s === 'failed' || s === 'fail' || s === 'error') return 'Failed';
+      if (s === 'cancelled' || s === 'canceled') return 'Cancelled';
+      return 'Pending';
+    };
+
     // Get payment record (user_id, amount) from DB or cache
     let paymentRecord = null;
     try {
@@ -607,14 +560,24 @@ router.get('/status/:externalReference', async (req, res) => {
           await supabase.from('payments').update({ status: 'Success', updated_at: new Date().toISOString() }).eq('external_reference', externalReference);
           return res.json({ success: true, payment: { ...paymentRecord, status: 'Success', source: 'payhero-live' } });
         } else if (phStatus === 'failed' || phStatus === 'cancelled') {
-          return res.json({ success: true, payment: { ...paymentRecord, status: phResult.body.status, source: 'payhero-live' } });
+          const normalized = normalizeStatus(phResult.body.status || phResult.body.Status || phStatus);
+          await supabase
+            .from('payments')
+            .update({ status: normalized, updated_at: new Date().toISOString() })
+            .eq('external_reference', externalReference)
+            .neq('status', 'Success');
+          return res.json({ success: true, payment: { ...paymentRecord, status: normalized, source: 'payhero-live' } });
         }
       }
     }
 
     // Fall back to DB/cache status
     if (paymentRecord) {
-      return res.json({ success: true, payment: paymentRecord });
+      const normalized = normalizeStatus(paymentRecord.status);
+      if (normalized === 'Success') {
+        try { await creditBalanceIfNotDone(externalReference, paymentRecord.user_id, paymentRecord.amount); } catch (e) { console.warn('⚠️ Credit error on normalized success:', e.message); }
+      }
+      return res.json({ success: true, payment: { ...paymentRecord, status: normalized } });
     }
 
     res.json({ success: true, payment: { status: 'Pending', message: 'Payment status not yet available. Please wait...' } });

@@ -430,16 +430,18 @@ export default function Finance() {
             const statusData = await statusResponse.json();
 
             if (statusData.success && statusData.payment) {
-              if (statusData.payment.status === "Success") {
-                // M-Pesa payment received — deposit stays pending until admin approves
+              const normalizedStatus = (statusData.payment.status || '').toString().toLowerCase();
+              if (normalizedStatus === "success" || normalizedStatus === "completed") {
+                // M-Pesa payment received and balance credited automatically
                 clearInterval(interval);
                 setStatusCheckInterval(null);
                 setPaymentStatus("success");
 
-                // Refresh transactions from database (will show as pending)
+                // Refresh transactions and user profile after successful credit
                 await fetchTransactions(actualUserId);
+                await refreshUserData();
 
-                setStatusMessage("✅ Payment received! Your deposit is pending admin approval.");
+                setStatusMessage("✅ Payment successful! Your account balance has been updated.");
                 setAmount("");
                 setMpesaNumber("");
                 
@@ -448,12 +450,12 @@ export default function Finance() {
                   setStatusMessage("");
                   setIsProcessing(false);
                 }, 4000);
-              } else if (statusData.payment.status === "Failed") {
+              } else if (normalizedStatus === "failed" || normalizedStatus === "cancelled" || normalizedStatus === "canceled") {
                 // Payment failed
                 clearInterval(interval);
                 setStatusCheckInterval(null);
                 setPaymentStatus("failed");
-                setStatusMessage("❌ Payment failed. Please try again.");
+                setStatusMessage("❌ Payment was cancelled or failed. Please try again.");
                 setIsProcessing(false);
               }
               // If still pending, keep polling without updating balance
