@@ -30,17 +30,28 @@ async function registerAdminDarajaTestAttempt({
   if (existingTransaction) {
     transaction = existingTransaction;
   } else {
+    const { data: adminUser } = await supabase
+      .from('users')
+      .select('account_balance')
+      .eq('id', adminUserId)
+      .maybeSingle();
+
+    const currentBalance = parseFloat(adminUser?.account_balance) || 0;
+    const depositAmount = parseFloat(amount);
+
     const insertPayload = {
       transaction_id: `ADT-${Date.now()}-${externalReference}`,
       user_id: adminUserId,
       type: 'deposit',
-      amount: parseFloat(amount),
+      amount: depositAmount,
       status: 'pending',
       method: 'Daraja Admin Test',
       phone_number: phoneNumber,
       external_reference: externalReference,
       checkout_request_id: checkoutRequestId,
       description: 'Admin Daraja test deposit - pending',
+      balance_before: currentBalance,
+      balance_after: currentBalance + depositAmount,
       created_at: timestamp,
       updated_at: timestamp,
     };
