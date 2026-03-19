@@ -119,6 +119,25 @@ export default function Finance() {
     };
   }, [statusCheckInterval]);
 
+  const fetchLatestProfileState = async () => {
+    if (!user?.phone) return null;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/auth/profile/${encodeURIComponent(user.phone)}`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success || !data.user) {
+        return null;
+      }
+
+      return data.user;
+    } catch (error) {
+      console.error('Latest profile check failed:', error);
+      return null;
+    }
+  };
+
   const handleWithdrawalActivation = async () => {
     if (!activationPhoneNumber) {
       alert("Please enter your phone number");
@@ -161,15 +180,13 @@ export default function Finance() {
 
       // Poll for activation payment status
       let pollCount = 0;
-      let statusErrorCount = 0;
-      const maxPolls = 80; // 2 minutes at 1.5s
+      const maxPolls = 200; // 5 minutes at 1.5s
       const interval = setInterval(async () => {
         pollCount++;
         try {
           const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
           const statusData = await statusResponse.json();
           const st = statusData.status;
-          statusErrorCount = 0;
 
           if (st === 'success') {
             clearInterval(interval);
@@ -231,12 +248,42 @@ export default function Finance() {
           }
         } catch (err) {
           console.error("Activation status check error:", err);
-          statusErrorCount += 1;
-          if (statusErrorCount >= 3) {
-            clearInterval(interval);
-            setStatusCheckInterval(null);
+        }
+
+        if (pollCount >= maxPolls) {
+          clearInterval(interval);
+          setStatusCheckInterval(null);
+          const latestProfile = await fetchLatestProfileState();
+
+          if (latestProfile?.withdrawalActivated) {
+            const newBalance = Number(latestProfile.accountBalance || balance);
+
+            updateUser({
+              withdrawalActivated: true,
+              withdrawalActivationDate: latestProfile.withdrawalActivationDate || new Date().toISOString(),
+              accountBalance: newBalance,
+            });
+            setBalance(newBalance);
+            await fetchTransactions(actualUserId);
+
+            setPaymentStatus("success");
+            setStatusMessage(`✅ Account activated! KSH 10 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
+            setIsActivating(false);
+            setActivationPhoneNumber("");
+
+            if (pendingWithdrawalAmount !== null) {
+              setTimeout(() => processPendingWithdrawal(pendingWithdrawalAmount), 1500);
+              setPendingWithdrawalAmount(null);
+            }
+
+            setTimeout(() => {
+              setShowProcessingModal(false);
+              setStatusMessage("");
+              setPaymentStatus(null);
+            }, 4000);
+          } else {
             setPaymentStatus("failed");
-            setStatusMessage("❌ Activation verification failed. Please try again.");
+            setStatusMessage("❌ Activation timed out. Please try again.");
             setIsActivating(false);
             await fetchTransactions(actualUserId);
             await refreshUserData();
@@ -245,20 +292,6 @@ export default function Finance() {
               setShowActivationModal(true);
             }, 2500);
           }
-        }
-
-        if (pollCount >= maxPolls) {
-          clearInterval(interval);
-          setStatusCheckInterval(null);
-          setPaymentStatus("failed");
-          setStatusMessage("❌ Activation timed out. Transaction marked as failed.");
-          setIsActivating(false);
-          await fetchTransactions(actualUserId);
-          await refreshUserData();
-          setTimeout(() => {
-            setShowProcessingModal(false);
-            setShowActivationModal(true);
-          }, 2500);
         }
       }, 1500);
 
@@ -396,7 +429,6 @@ export default function Finance() {
 
         // Poll for payment status quickly for near-instant confirmation.
         let pollCount = 0;
-        let statusErrorCount = 0;
         const maxPolls = 120; // 3 minutes at 1.5s
 
         const interval = setInterval(async () => {
@@ -405,7 +437,6 @@ export default function Finance() {
             const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
             const statusData = await statusResponse.json();
             const st = statusData.status;
-            statusErrorCount = 0;
 
             if (st === 'success') {
               clearInterval(interval);
@@ -446,16 +477,6 @@ export default function Finance() {
             }
           } catch (err) {
             console.error("Daraja status check error:", err);
-            statusErrorCount += 1;
-            if (statusErrorCount >= 3) {
-              clearInterval(interval);
-              setStatusCheckInterval(null);
-              setPaymentStatus("failed");
-              setStatusMessage("❌ Transaction verification failed. Marked as failed.");
-              await fetchTransactions(actualUserId);
-              await refreshUserData();
-              setIsProcessing(false);
-            }
           }
 
           if (pollCount >= maxPolls) {

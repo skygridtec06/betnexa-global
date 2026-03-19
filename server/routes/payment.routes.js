@@ -1380,20 +1380,8 @@ router.get('/daraja/status', async (req, res) => {
     return res.json({ success: true, status, source: 'query', result: queryResult, funding, terminal });
   } catch (error) {
     console.error('[daraja/status] Error:', error.message || error);
-    // Persist as failed so transaction history does not remain pending on backend errors.
-    if (checkoutRequestId) {
-      const terminal = await persistUserDarajaTerminalStatus({
-        checkoutRequestId,
-        status: 'failed',
-        resultCode: 'SYSTEM_ERROR',
-        resultDesc: error.message || 'Status check failed',
-      });
-      if (!terminal.success) {
-        console.warn('[daraja/status] Failed to persist failed status in catch:', terminal.error);
-      }
-    }
-
-    return res.json({ success: true, status: 'failed', message: error.message || 'Status check failed' });
+    // A transient query error must not become a terminal failure. Keep polling.
+    return res.json({ success: true, status: 'pending', message: error.message || 'Status check retrying' });
   }
 });
 
