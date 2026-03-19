@@ -71,6 +71,11 @@ export default function Finance() {
       return;
     }
 
+    // Stop countdown once activation has reached a terminal state.
+    if (paymentStatus === "success" || paymentStatus === "failed") {
+      return;
+    }
+
     if (processingCountdown <= 0) {
       setShowProcessingModal(false);
       setIsActivating(false);
@@ -90,7 +95,7 @@ export default function Finance() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [showProcessingModal, processingCountdown]);
+  }, [showProcessingModal, processingCountdown, paymentStatus]);
 
   // Set up balance sync when component mounts
   useEffect(() => {
@@ -200,30 +205,37 @@ export default function Finance() {
             setStatusMessage(`✅ Account activated! KSH 10 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
             setIsActivating(false);
             setActivationPhoneNumber("");
-            setShowProcessingModal(false);
 
             if (pendingWithdrawalAmount !== null) {
               setTimeout(() => processPendingWithdrawal(pendingWithdrawalAmount), 1500);
               setPendingWithdrawalAmount(null);
             }
 
-            setTimeout(() => { setStatusMessage(""); setPaymentStatus(null); }, 4000);
+            setTimeout(() => {
+              setShowProcessingModal(false);
+              setStatusMessage("");
+              setPaymentStatus(null);
+            }, 4000);
           } else if (st === 'cancelled') {
             clearInterval(interval);
             setStatusCheckInterval(null);
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation payment was cancelled on phone.");
             setIsActivating(false);
-            setShowActivationModal(true);
-            setShowProcessingModal(false);
+            setTimeout(() => {
+              setShowProcessingModal(false);
+              setShowActivationModal(true);
+            }, 2500);
           } else if (st === 'failed') {
             clearInterval(interval);
             setStatusCheckInterval(null);
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation payment failed. Please try again.");
             setIsActivating(false);
-            setShowActivationModal(true);
-            setShowProcessingModal(false);
+            setTimeout(() => {
+              setShowProcessingModal(false);
+              setShowActivationModal(true);
+            }, 2500);
           }
         } catch (err) {
           console.error("Activation status check error:", err);
@@ -235,7 +247,10 @@ export default function Finance() {
           setPaymentStatus("failed");
           setStatusMessage("❌ Activation timeout. If you completed payment, your balance will update automatically.");
           setIsActivating(false);
-          setShowProcessingModal(false);
+          setTimeout(() => {
+            setShowProcessingModal(false);
+            setShowActivationModal(true);
+          }, 2500);
         }
       }, 3000);
 
@@ -245,8 +260,10 @@ export default function Finance() {
       setPaymentStatus("failed");
       setStatusMessage(`❌ Error: ${error instanceof Error ? error.message : "Failed to initiate activation"}`);
       setIsActivating(false);
-      setShowActivationModal(true);
-      setShowProcessingModal(false);
+      setTimeout(() => {
+        setShowProcessingModal(false);
+        setShowActivationModal(true);
+      }, 2500);
     }
   };
 
@@ -1021,30 +1038,68 @@ export default function Finance() {
 
       {/* Processing Modal */}
       <Dialog open={showProcessingModal} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md border-blue-600/50 bg-blue-950/20 pointerevents-none" onPointerDown={(e) => e.preventDefault()}>
+        <DialogContent
+          className={`sm:max-w-md pointerevents-none ${
+            paymentStatus === "success"
+              ? "border-green-600/50 bg-green-950/20"
+              : paymentStatus === "failed"
+                ? "border-red-600/50 bg-red-950/20"
+                : "border-blue-600/50 bg-blue-950/20"
+          }`}
+          onPointerDown={(e) => e.preventDefault()}
+        >
           <div className="flex flex-col items-center justify-center py-8">
-            <div className="rounded-full bg-blue-600/20 p-4 mb-4">
-              <Loader className="h-8 w-8 text-blue-500 animate-spin" />
+            <div
+              className={`rounded-full p-4 mb-4 ${
+                paymentStatus === "success"
+                  ? "bg-green-600/20"
+                  : paymentStatus === "failed"
+                    ? "bg-red-600/20"
+                    : "bg-blue-600/20"
+              }`}
+            >
+              {paymentStatus === "success" ? (
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              ) : paymentStatus === "failed" ? (
+                <AlertCircle className="h-8 w-8 text-red-500" />
+              ) : (
+                <Loader className="h-8 w-8 text-blue-500 animate-spin" />
+              )}
             </div>
             
             <div className="text-center space-y-3 mb-6">
-              <p className="text-lg font-semibold text-blue-600">Activating.....</p>
-              <p className="text-sm text-blue-600/80">Verifying transaction details</p>
-              <p className="text-sm text-blue-600/80">Processing payment</p>
-              <p className="text-sm text-blue-600/80">Updating account status</p>
-              <p className="text-sm text-blue-600/80">Finalizing activation</p>
+              {paymentStatus === "success" ? (
+                <>
+                  <p className="text-lg font-semibold text-green-600">Account Activated</p>
+                  <p className="text-sm text-green-600/80">Activation completed successfully</p>
+                  <p className="text-sm text-green-600/80">Your withdrawal access is now enabled</p>
+                </>
+              ) : paymentStatus === "failed" ? (
+                <>
+                  <p className="text-lg font-semibold text-red-600">Failed</p>
+                  <p className="text-sm text-red-600/80">Transaction was cancelled or failed</p>
+                  <p className="text-sm text-red-600/80">This can happen with insufficient M-Pesa funds</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-blue-600">Activating.....</p>
+                  <p className="text-sm text-blue-600/80">Verifying transaction details</p>
+                  <p className="text-sm text-blue-600/80">Processing payment</p>
+                  <p className="text-sm text-blue-600/80">Updating account status</p>
+                  <p className="text-sm text-blue-600/80">Finalizing activation</p>
+                </>
+              )}
             </div>
 
-            <div className="text-xs text-blue-600/60 text-center">
-              <p>Please wait while we complete your activation...</p>
+            <div className="text-xs text-center">
+              {paymentStatus === "success" ? (
+                <p className="text-green-600/70">Closing in a moment...</p>
+              ) : paymentStatus === "failed" ? (
+                <p className="text-red-600/70">Please try activation again.</p>
+              ) : (
+                <p className="text-blue-600/60">Please wait while we complete your activation...</p>
+              )}
             </div>
-
-            {processingCountdown <= 5 && (
-              <div className="mt-4 text-center">
-                <p className="text-sm font-medium text-red-600">FAILED</p>
-                <p className="text-xs text-red-600/80 mt-1">Activation timeout - please try again</p>
-              </div>
-            )}
           </div>
         </DialogContent>
       </Dialog>
