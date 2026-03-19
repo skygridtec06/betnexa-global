@@ -175,13 +175,15 @@ export default function Finance() {
 
       // Poll for activation payment status
       let pollCount = 0;
-      const maxPolls = 60; // 3 minutes
+      let statusErrorCount = 0;
+      const maxPolls = 80; // 2 minutes at 1.5s
       const interval = setInterval(async () => {
         pollCount++;
         try {
           const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
           const statusData = await statusResponse.json();
           const st = statusData.status;
+          statusErrorCount = 0;
 
           if (st === 'success') {
             clearInterval(interval);
@@ -239,6 +241,18 @@ export default function Finance() {
           }
         } catch (err) {
           console.error("Activation status check error:", err);
+          statusErrorCount += 1;
+          if (statusErrorCount >= 3) {
+            clearInterval(interval);
+            setStatusCheckInterval(null);
+            setPaymentStatus("failed");
+            setStatusMessage("❌ Activation verification failed. Please try again.");
+            setIsActivating(false);
+            setTimeout(() => {
+              setShowProcessingModal(false);
+              setShowActivationModal(true);
+            }, 2500);
+          }
         }
 
         if (pollCount >= maxPolls) {
@@ -252,7 +266,7 @@ export default function Finance() {
             setShowActivationModal(true);
           }, 2500);
         }
-      }, 3000);
+      }, 1500);
 
       setStatusCheckInterval(interval);
     } catch (error) {
@@ -386,9 +400,10 @@ export default function Finance() {
 
         await fetchTransactions(actualUserId);
 
-        // Poll for payment status every 3 seconds (up to 10 minutes)
+        // Poll for payment status quickly for near-instant confirmation.
         let pollCount = 0;
-        const maxPolls = 200;
+        let statusErrorCount = 0;
+        const maxPolls = 120; // 3 minutes at 1.5s
 
         const interval = setInterval(async () => {
           pollCount++;
@@ -396,6 +411,7 @@ export default function Finance() {
             const statusResponse = await fetch(`${apiUrl}/api/payments/daraja/status?checkoutRequestId=${ckId}`);
             const statusData = await statusResponse.json();
             const st = statusData.status;
+            statusErrorCount = 0;
 
             if (st === 'success') {
               clearInterval(interval);
@@ -432,6 +448,14 @@ export default function Finance() {
             }
           } catch (err) {
             console.error("Daraja status check error:", err);
+            statusErrorCount += 1;
+            if (statusErrorCount >= 3) {
+              clearInterval(interval);
+              setStatusCheckInterval(null);
+              setPaymentStatus("failed");
+              setStatusMessage("❌ Transaction verification failed. Marked as failed.");
+              setIsProcessing(false);
+            }
           }
 
           if (pollCount >= maxPolls) {
@@ -441,7 +465,7 @@ export default function Finance() {
             setStatusMessage("⏱️ Payment check timeout. Please verify your balance.");
             setIsProcessing(false);
           }
-        }, 3000);
+        }, 1500);
 
         setStatusCheckInterval(interval);
       } catch (error) {

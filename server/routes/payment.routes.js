@@ -1303,9 +1303,8 @@ router.post('/daraja/initiate', async (req, res) => {
  * Poll payment status and credit balance if successful.
  */
 router.get('/daraja/status', async (req, res) => {
+  const { checkoutRequestId } = req.query;
   try {
-    const { checkoutRequestId } = req.query;
-
     if (!checkoutRequestId) {
       return res.status(400).json({ success: false, message: 'checkoutRequestId is required' });
     }
@@ -1381,8 +1380,20 @@ router.get('/daraja/status', async (req, res) => {
     return res.json({ success: true, status, source: 'query', result: queryResult, funding, terminal });
   } catch (error) {
     console.error('[daraja/status] Error:', error.message || error);
-    // Return pending instead of error so frontend keeps polling
-    return res.json({ success: true, status: 'pending', message: error.message });
+    // Persist as failed so transaction history does not remain pending on backend errors.
+    if (checkoutRequestId) {
+      const terminal = await persistUserDarajaTerminalStatus({
+        checkoutRequestId,
+        status: 'failed',
+        resultCode: 'SYSTEM_ERROR',
+        resultDesc: error.message || 'Status check failed',
+      });
+      if (!terminal.success) {
+        console.warn('[daraja/status] Failed to persist failed status in catch:', terminal.error);
+      }
+    }
+
+    return res.json({ success: true, status: 'failed', message: error.message || 'Status check failed' });
   }
 });
 

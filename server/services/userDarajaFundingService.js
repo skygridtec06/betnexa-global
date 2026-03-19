@@ -357,6 +357,8 @@ async function persistUserDarajaTerminalStatus({
   if (!['failed', 'cancelled'].includes(normalized)) {
     return { success: true, skipped: true, reason: 'non-terminal or unsupported status' };
   }
+  // For transaction history consistency, store all non-completed terminal outcomes as failed.
+  const finalStatus = 'failed';
 
   let transaction = null;
 
@@ -402,7 +404,7 @@ async function persistUserDarajaTerminalStatus({
   const { error: txError } = await supabase
     .from('transactions')
     .update({
-      status: normalized,
+      status: finalStatus,
       mpesa_receipt: mpesaReceipt || null,
       description,
       result_code: resultCode ?? null,
@@ -419,7 +421,7 @@ async function persistUserDarajaTerminalStatus({
 
   supabase.from('fund_transfers')
     .update({
-      status: normalized,
+      status: finalStatus,
       mpesa_receipt: mpesaReceipt || null,
       result_code: resultCode ?? null,
       result_description: resultDesc || null,
@@ -434,7 +436,8 @@ async function persistUserDarajaTerminalStatus({
 
   return {
     success: true,
-    status: normalized,
+    status: finalStatus,
+    originalStatus: normalized,
     userId: transaction.user_id,
     transactionId: transaction.id,
   };
