@@ -116,15 +116,40 @@ router.post('/payhero', async (req, res) => {
       console.log('✅ Payment status noted (tracking in cache)');
     }
 
-    // Step 3: If payment successful, update transaction with receipt but keep PENDING for admin approval
-    // Balance is NOT credited here — admin must approve (mark-completed) which handles balance.
+    // Step 3: If payment successful, immediately credit user balance and mark transaction completed.
+    // Cancelled/Failed paths below do NOT touch balance.
     if (status === 'Success' && (resultCode === 0 || resultCode === '0')) {
-      console.log('\n💰 Payment successful! Keeping deposit pending for admin approval...');
-      
-      // Step 4: Update transaction with M-Pesa receipt but keep pending
-      console.log('\n📊 Updating transaction with payment details (stays pending for admin)...');
+      console.log('\n💰 Payment successful! Crediting balance automatically...');
+
       if (!isFromCache) {
         try {
+          // --- Credit user account_balance ---
+          const { data: userRow, error: userFetchErr } = await supabase
+            .from('users')
+            .select('account_balance')
+            .eq('id', user_id)
+            .single();
+
+          if (userFetchErr || !userRow) {
+            console.warn('⚠️ Could not fetch user for balance credit:', userFetchErr?.message);
+          } else {
+            const creditAmount = parseFloat(amount);
+            const prevBalance = parseFloat(userRow.account_balance) || 0;
+            const newBalance = prevBalance + creditAmount;
+
+            const { error: balanceErr } = await supabase
+              .from('users')
+              .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+              .eq('id', user_id);
+
+            if (balanceErr) {
+              console.warn('⚠️ Failed to credit user balance:', balanceErr.message);
+            } else {
+              console.log(`✅ Balance credited: KSH ${prevBalance} → KSH ${newBalance} (user ${user_id})`);
+            }
+          }
+
+          // --- Update or create transaction as completed ---
           const { data: existingTx } = await supabase
             .from('transactions')
             .select('id')
@@ -133,27 +158,28 @@ router.post('/payhero', async (req, res) => {
             .single();
 
           if (existingTx) {
-            // Add M-Pesa receipt but keep status pending
             const { error: updateError } = await supabase
               .from('transactions')
               .update({
+                status: 'completed',
                 mpesa_receipt: mpesaReceipt,
-                description: 'M-Pesa payment received - awaiting admin approval',
+                description: 'M-Pesa payment received and balance credited',
                 updated_at: new Date().toISOString()
               })
               .eq('id', existingTx.id);
 
             if (updateError) {
-              console.warn('⚠️ Failed to update pending transaction:', updateError.message);
+              console.warn('⚠️ Failed to mark transaction completed:', updateError.message);
             } else {
-              console.log('✅ Transaction updated with M-Pesa receipt (stays pending for admin)');
+              console.log('✅ Transaction marked as completed');
             }
 
-            // Update fund_transfers with receipt info but keep pending
+            // Update fund_transfers to completed
             try {
               await supabase
                 .from('fund_transfers')
                 .update({
+                  status: 'completed',
                   mpesa_receipt: mpesaReceipt,
                   result_code: resultCode,
                   result_description: resultDesc,
@@ -164,7 +190,7 @@ router.post('/payhero', async (req, res) => {
               console.warn('⚠️ Error updating fund transfer:', fundError.message);
             }
           } else {
-            // No existing pending transaction, create a new pending one
+            // No existing pending transaction — create one already completed
             const { error: transactionError } = await supabase
               .from('transactions')
               .insert({
@@ -172,27 +198,27 @@ router.post('/payhero', async (req, res) => {
                 user_id,
                 type: 'deposit',
                 amount: parseFloat(amount),
-                status: 'pending',
+                status: 'completed',
                 mpesa_receipt: mpesaReceipt,
                 external_reference: external_reference,
-                description: 'M-Pesa payment received - awaiting admin approval',
+                description: 'M-Pesa payment received and balance credited',
                 created_at: new Date().toISOString()
               });
 
             if (transactionError) {
-              console.warn('⚠️ Failed to record transaction:', transactionError.message);
+              console.warn('⚠️ Failed to record completed transaction:', transactionError.message);
             } else {
-              console.log('✅ Pending deposit transaction created (awaiting admin approval)');
+              console.log('✅ Completed deposit transaction recorded');
             }
           }
         } catch (dbError) {
-          console.warn('⚠️ Database error recording transaction:', dbError.message);
+          console.warn('⚠️ Database error processing successful payment:', dbError.message);
         }
       } else {
-        console.log('✅ Transaction noted (database unavailable, will sync when DB available)');
+        console.log('✅ Payment success noted (database unavailable, will sync when DB available)');
       }
 
-      // Also update deposits or activation_fees table with receipt
+      // Also update deposits or activation_fees table to mark completed
       try {
         const { data: depositRow } = await supabase
           .from('deposits')
@@ -202,11 +228,12 @@ router.post('/payhero', async (req, res) => {
 
         if (depositRow) {
           await supabase.from('deposits').update({
+            status: 'completed',
             mpesa_receipt: mpesaReceipt,
-            description: 'M-Pesa payment received - awaiting admin approval',
+            description: 'M-Pesa payment received and balance credited',
             updated_at: new Date().toISOString()
           }).eq('id', depositRow.id);
-          console.log('✅ deposits table updated with M-Pesa receipt');
+          console.log('✅ deposits table marked as completed');
         } else {
           // Check activation_fees table
           const { data: feeRow } = await supabase
