@@ -1494,15 +1494,18 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       console.log('✅ Deleted existing markets');
     }
 
-    // Insert new market entries
+    // Insert new market entries with manually_edited_at timestamp
+    const nowIso = new Date().toISOString();
     const marketEntries = Object.entries(markets).map(([marketKey, odds]) => ({
       game_id: gameUUID,
       market_type: determineMarketType(marketKey),
       market_key: marketKey,
-      odds: parseFloat(odds) || 0
+      odds: parseFloat(odds) || 0,
+      manually_edited_at: nowIso, // Mark as manually edited to prevent API sync overwriting
+      updated_at: nowIso
     }));
 
-    console.log(`📝 Preparing to insert ${marketEntries.length} market entries`);
+    console.log(`📝 Preparing to insert ${marketEntries.length} market entries with manually_edited_at timestamp`);
 
     if (marketEntries.length > 0) {
       const { error: insertError } = await supabase
@@ -1517,7 +1520,7 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
           code: insertError.code
         });
       }
-      console.log(`✅ Successfully inserted ${marketEntries.length} markets`);
+      console.log(`✅ Successfully inserted ${marketEntries.length} markets with admin edit protection (manually_edited_at set)`);
     }
 
     console.log(`✅ Markets updated successfully for game ${gameId}`);

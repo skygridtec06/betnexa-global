@@ -270,7 +270,6 @@ async function upsertScheduleGameWithMarkets(supabase, fixture, marketOdds) {
     away_team: awayTeam,
     home_odds: marketOdds.home,
     draw_odds: marketOdds.draw,
-    away_odds: marketOdds.away,
     status: 'upcoming',
     time: kickoff,
     home_score: null,
@@ -299,6 +298,7 @@ async function upsertScheduleGameWithMarkets(supabase, fixture, marketOdds) {
       market_type: marketTypeFromKey(k),
       market_key: k,
       odds: v,
+      manually_edited_at: null, // API-managed markets, not manually edited
       updated_at: new Date().toISOString()
     }));
 
@@ -581,40 +581,111 @@ router.get('/sync', async (req, res) => {
         const liveOddsRows = await apiGet('/odds/live', { fixture: String(fixtureId) }, apiKey);
         const marketOdds = chooseBestOddsSet(liveOddsRows);
 
-        // Replace previous markets for accuracy during live: keep only current API live set.
-        const { error: clearErr } = await supabase
+        // Get existing markets to preserve manually-edited ones
+        const { data: existingMarkets } = await supabase
           .from('markets')
-          .delete()
+          .select('id, market_key, manually_edited_at')
           .eq('game_id', dbGame.id)
           .in('market_type', ['1X2', 'BTTS', 'O/U', 'DC', 'HT/FT', 'CS']);
 
-        if (clearErr) {
-          errors.push({ gameId: dbGame.game_id, clearMarketsError: clearErr.message });
+        // Track which market keys were manually edited recently (within 60 seconds)
+        const manualEditThresholdMs = 60 * 1000; // 60 seconds
+        const nowMs = Date.now();
+        const manuallyEditedKeys = new Set();
+        for (const market of existingMarkets || []) {
+          if (market.manually_edited_at) {
+            const editedAtMs = new Date(market.manually_edited_at).getTime();
+            if (nowMs - editedAtMs < manualEditThresholdMs) {
+              manuallyEditedKeys.add(market.market_key);
+              console.log(`🔒 Skipping update for manually-edited market: ${market.market_key} (edited ${Math.round((nowMs - editedAtMs) / 1000)}s ago)`);
+            }
+          }
+        }
+
+        // Delete old markets ONLY if they weren't manually edited recently
+        if (existingMarkets && existingMarkets.length > 0) {
+          const marketKeysToDelete = (existingMarkets || [])
+            .filter(m => !manuallyEditedKeys.has(m.market_key))
+            .map(m => m.id);
+
+          if (marketKeysToDelete.length > 0) {
+            const { error: clearErr } = await supabase
+              .from('markets')
+              .delete()
+              .in('id', marketKeysToDelete);
+
+            if (clearErr) {
+              errors.push({ gameId: dbGame.game_id, clearMarketsError: clearErr.message });
+            } else {
+              console.log(`✅ Cleared ${marketKeysToDelete.length} API-managed markets for ${dbGame.game_id}`);
+            }
+          }
         }
 
         if (marketOdds) {
-          // Store non-1X2 markets as usual
+          // Store non-1X2 markets as usual (skip if manually edited recently)
           const marketRows = Object.entries(marketOdds)
-            .filter(([k, v]) => k !== 'home' && k !== 'draw' && k !== 'away' && v)
+            .filter(([k, v]) => {
+              // Skip if manually edited recently
+              if (manuallyEditedKeys.has(k)) {
+                console.log(`🔒 Skipping API update for manually-edited market: ${k}`);
+                return false;
+              }
+              return k !== 'home' && k !== 'draw' && k !== 'away' && v;
+            })
             .map(([k, v]) => ({
               game_id: dbGame.id,
               market_type: marketTypeFromKey(k),
               market_key: k,
               odds: v,
+              manually_edited_at: null, // API-managed, not manually edited
               updated_at: new Date().toISOString(),
             }));
 
           // Store API live 1X2 as dedicated market keys so frontend can use them.
           // We deliberately do NOT overwrite games.home_odds so that the pre-match
           // odds remain available as the Poisson model baseline.
-          if (marketOdds.home) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveHome', odds: marketOdds.home, updated_at: new Date().toISOString() });
-          if (marketOdds.draw) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveDraw', odds: marketOdds.draw, updated_at: new Date().toISOString() });
-          if (marketOdds.away) marketRows.push({ game_id: dbGame.id, market_type: '1X2', market_key: 'liveAway', odds: marketOdds.away, updated_at: new Date().toISOString() });
+          if (marketOdds.home && !manuallyEditedKeys.has('liveHome')) {
+            marketRows.push({ 
+              game_id: dbGame.id, 
+              market_type: '1X2', 
+              market_key: 'liveHome', 
+              odds: marketOdds.home, 
+              manually_edited_at: null,
+              updated_at: new Date().toISOString() 
+            });
+          }
+          if (marketOdds.draw && !manuallyEditedKeys.has('liveDraw')) {
+            marketRows.push({ 
+              game_id: dbGame.id, 
+              market_type: '1X2', 
+              market_key: 'liveDraw', 
+              odds: marketOdds.draw, 
+              manually_edited_at: null,
+              updated_at: new Date().toISOString() 
+            });
+          }
+          if (marketOdds.away && !manuallyEditedKeys.has('liveAway')) {
+            marketRows.push({ 
+              game_id: dbGame.id, 
+              market_type: '1X2', 
+              market_key: 'liveAway', 
+              odds: marketOdds.away, 
+              manually_edited_at: null,
+              updated_at: new Date().toISOString() 
+            });
+          }
 
           if (marketRows.length > 0) {
-            await supabase
+            const { error: upsertErr } = await supabase
               .from('markets')
               .upsert(marketRows, { onConflict: 'game_id,market_key' });
+
+            if (upsertErr) {
+              errors.push({ gameId: dbGame.game_id, upsertMarketsError: upsertErr.message });
+            } else {
+              console.log(`✅ Upserted ${marketRows.length} markets for ${dbGame.game_id} (preserved ${manuallyEditedKeys.size} manually-edited)`);
+            }
           }
         }
       } catch (oddsErr) {
