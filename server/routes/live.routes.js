@@ -581,18 +581,40 @@ router.get('/sync', async (req, res) => {
         const liveOddsRows = await apiGet('/odds/live', { fixture: String(fixtureId) }, apiKey);
         const marketOdds = chooseBestOddsSet(liveOddsRows);
 
-        // Get existing markets to preserve manually-edited ones
-        const { data: existingMarkets } = await supabase
+        // Get existing markets to preserve manually-edited ones.
+        // Fallback gracefully if manually_edited_at column is not yet migrated.
+        let existingMarkets = [];
+        let manualEditProtectionEnabled = true;
+        const existingWithManual = await supabase
           .from('markets')
           .select('id, market_key, manually_edited_at')
           .eq('game_id', dbGame.id)
           .in('market_type', ['1X2', 'BTTS', 'O/U', 'DC', 'HT/FT', 'CS']);
+
+        if (existingWithManual.error && /manually_edited_at|column .* does not exist/i.test(existingWithManual.error.message || '')) {
+          manualEditProtectionEnabled = false;
+          const existingFallback = await supabase
+            .from('markets')
+            .select('id, market_key')
+            .eq('game_id', dbGame.id)
+            .in('market_type', ['1X2', 'BTTS', 'O/U', 'DC', 'HT/FT', 'CS']);
+          if (existingFallback.error) {
+            errors.push({ gameId: dbGame.game_id, readMarketsError: existingFallback.error.message });
+          } else {
+            existingMarkets = existingFallback.data || [];
+          }
+        } else if (existingWithManual.error) {
+          errors.push({ gameId: dbGame.game_id, readMarketsError: existingWithManual.error.message });
+        } else {
+          existingMarkets = existingWithManual.data || [];
+        }
 
         // Track which market keys were manually edited recently (within 60 seconds)
         const manualEditThresholdMs = 60 * 1000; // 60 seconds
         const nowMs = Date.now();
         const manuallyEditedKeys = new Set();
         for (const market of existingMarkets || []) {
+          if (!manualEditProtectionEnabled) break;
           if (market.manually_edited_at) {
             const editedAtMs = new Date(market.manually_edited_at).getTime();
             if (nowMs - editedAtMs < manualEditThresholdMs) {
@@ -638,7 +660,6 @@ router.get('/sync', async (req, res) => {
               market_type: marketTypeFromKey(k),
               market_key: k,
               odds: v,
-              manually_edited_at: null, // API-managed, not manually edited
               updated_at: new Date().toISOString(),
             }));
 
@@ -651,7 +672,6 @@ router.get('/sync', async (req, res) => {
               market_type: '1X2', 
               market_key: 'liveHome', 
               odds: marketOdds.home, 
-              manually_edited_at: null,
               updated_at: new Date().toISOString() 
             });
           }
@@ -661,7 +681,6 @@ router.get('/sync', async (req, res) => {
               market_type: '1X2', 
               market_key: 'liveDraw', 
               odds: marketOdds.draw, 
-              manually_edited_at: null,
               updated_at: new Date().toISOString() 
             });
           }
@@ -671,20 +690,23 @@ router.get('/sync', async (req, res) => {
               market_type: '1X2', 
               market_key: 'liveAway', 
               odds: marketOdds.away, 
-              manually_edited_at: null,
               updated_at: new Date().toISOString() 
             });
           }
 
-          if (marketRows.length > 0) {
+          const finalMarketRows = manualEditProtectionEnabled
+            ? marketRows.map((row) => ({ ...row, manually_edited_at: null }))
+            : marketRows;
+
+          if (finalMarketRows.length > 0) {
             const { error: upsertErr } = await supabase
               .from('markets')
-              .upsert(marketRows, { onConflict: 'game_id,market_key' });
+              .upsert(finalMarketRows, { onConflict: 'game_id,market_key' });
 
             if (upsertErr) {
               errors.push({ gameId: dbGame.game_id, upsertMarketsError: upsertErr.message });
             } else {
-              console.log(`✅ Upserted ${marketRows.length} markets for ${dbGame.game_id} (preserved ${manuallyEditedKeys.size} manually-edited)`);
+              console.log(`✅ Upserted ${finalMarketRows.length} markets for ${dbGame.game_id} (preserved ${manuallyEditedKeys.size} manually-edited)`);
             }
           }
         }

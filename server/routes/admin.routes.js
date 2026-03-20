@@ -1494,23 +1494,34 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       console.log('✅ Deleted existing markets');
     }
 
-    // Insert new market entries with manually_edited_at timestamp
     const nowIso = new Date().toISOString();
-    const marketEntries = Object.entries(markets).map(([marketKey, odds]) => ({
+    const marketEntriesBase = Object.entries(markets).map(([marketKey, odds]) => ({
       game_id: gameUUID,
       market_type: determineMarketType(marketKey),
       market_key: marketKey,
       odds: parseFloat(odds) || 0,
-      manually_edited_at: nowIso, // Mark as manually edited to prevent API sync overwriting
-      updated_at: nowIso
+      updated_at: nowIso,
     }));
 
-    console.log(`📝 Preparing to insert ${marketEntries.length} market entries with manually_edited_at timestamp`);
+    console.log(`📝 Preparing to insert ${marketEntriesBase.length} market entries`);
 
-    if (marketEntries.length > 0) {
-      const { error: insertError } = await supabase
+    if (marketEntriesBase.length > 0) {
+      const marketEntriesWithManualFlag = marketEntriesBase.map((row) => ({
+        ...row,
+        manually_edited_at: nowIso,
+      }));
+
+      let { error: insertError } = await supabase
         .from('markets')
-        .insert(marketEntries);
+        .insert(marketEntriesWithManualFlag);
+
+      if (insertError && /manually_edited_at|column .* does not exist/i.test(insertError.message || '')) {
+        console.warn('⚠️ markets.manually_edited_at column missing. Falling back to insert without manual edit protection.');
+        const retry = await supabase
+          .from('markets')
+          .insert(marketEntriesBase);
+        insertError = retry.error;
+      }
 
       if (insertError) {
         console.error('❌ Error inserting markets:', insertError.message, insertError.details);
@@ -1520,12 +1531,12 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
           code: insertError.code
         });
       }
-      console.log(`✅ Successfully inserted ${marketEntries.length} markets with admin edit protection (manually_edited_at set)`);
+      console.log(`✅ Successfully inserted ${marketEntriesBase.length} markets`);
     }
 
     console.log(`✅ Markets updated successfully for game ${gameId}`);
 
-    res.json({ success: true, game, marketCount: marketEntries.length });
+    res.json({ success: true, game, marketCount: marketEntriesBase.length });
   } catch (error) {
     console.error('❌ Update markets error:', error.message);
     res.status(500).json({ error: 'Failed to update markets', details: error.message });
