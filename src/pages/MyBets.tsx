@@ -11,7 +11,6 @@ import { useOdds } from "@/context/OddsContext";
 import { useUser } from "@/context/UserContext";
 import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
 import { validateBetOutcome } from "@/lib/betOutcomeValidator";
-import { formatTimeInEAT } from "@/lib/timezoneFormatter";
 import { formatKickoffTimeEAT } from "@/lib/timeFormatter";
 import {
   Share2,
@@ -24,29 +23,56 @@ import {
 } from "lucide-react";
 
 function getPlacedDateTimeEAT(createdAt?: string, fallbackDate?: string, fallbackTime?: string) {
+  const format12h = (hours24: number, minutes: number) => {
+    const ampm = hours24 >= 12 ? 'PM' : 'AM';
+    let h = hours24 % 12;
+    h = h === 0 ? 12 : h;
+    return `${h}:${String(minutes).padStart(2, '0')} ${ampm}`;
+  };
+
+  const addThreeHoursToDate = (base: Date) => new Date(base.getTime() + 3 * 60 * 60 * 1000);
+
   try {
     if (createdAt) {
       const d = new Date(createdAt);
       if (!isNaN(d.getTime())) {
-        const date = d.toLocaleDateString('en-GB', {
-          timeZone: 'Africa/Nairobi',
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
-        });
-        const time = d.toLocaleTimeString('en-GB', {
-          timeZone: 'Africa/Nairobi',
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: false,
-        });
+        const eat = addThreeHoursToDate(d);
+        const date = `${String(eat.getUTCDate()).padStart(2, '0')}/${String(eat.getUTCMonth() + 1).padStart(2, '0')}/${eat.getUTCFullYear()}`;
+        const time = format12h(eat.getUTCHours(), eat.getUTCMinutes());
         return { date, time };
       }
     }
 
+    if (fallbackDate && fallbackTime) {
+      const dateParts = fallbackDate.split('/').map((p) => parseInt(p, 10));
+      const timeMatch = String(fallbackTime).trim().match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+
+      if (dateParts.length === 3 && timeMatch) {
+        const day = dateParts[0];
+        const month = dateParts[1];
+        const year = dateParts[2];
+
+        let hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        const meridian = (timeMatch[3] || '').toUpperCase();
+
+        if (meridian === 'PM' && hours < 12) hours += 12;
+        if (meridian === 'AM' && hours === 12) hours = 0;
+
+        const base = new Date(Date.UTC(year, month - 1, day, hours, minutes, 0));
+        if (!isNaN(base.getTime())) {
+          const eat = addThreeHoursToDate(base);
+          return {
+            date: `${String(eat.getUTCDate()).padStart(2, '0')}/${String(eat.getUTCMonth() + 1).padStart(2, '0')}/${eat.getUTCFullYear()}`,
+            time: format12h(eat.getUTCHours(), eat.getUTCMinutes()),
+          };
+        }
+      }
+    }
+
     return {
-      date: fallbackDate || new Date().toLocaleDateString('en-GB', { timeZone: 'Africa/Nairobi' }),
-      time: fallbackTime || new Date().toLocaleTimeString('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hour12: false }),
+      date: fallbackDate || new Date().toLocaleDateString('en-GB'),
+      time: fallbackTime || format12h(new Date().getHours(), new Date().getMinutes()),
     };
   } catch {
     return {
@@ -301,7 +327,7 @@ export default function MyBets() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline">#{bet.betId}</Badge>
                   <span className="text-xs text-muted-foreground">
-                    {bet.date} {formatTimeInEAT(bet.time, (bet as any).createdAt)} EAT
+                    {bet.date} {bet.time} EAT
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -399,7 +425,7 @@ export default function MyBets() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Prematch Bet placed on {bet.date} at {formatTimeInEAT(bet.time, (bet as any).createdAt)} EAT
+              Prematch Bet placed on {bet.date} at {bet.time} EAT
             </p>
           </div>
 
