@@ -23,6 +23,39 @@ import {
   AlertCircle,
 } from "lucide-react";
 
+function getPlacedDateTimeEAT(createdAt?: string, fallbackDate?: string, fallbackTime?: string) {
+  try {
+    if (createdAt) {
+      const d = new Date(createdAt);
+      if (!isNaN(d.getTime())) {
+        const date = d.toLocaleDateString('en-GB', {
+          timeZone: 'Africa/Nairobi',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+        });
+        const time = d.toLocaleTimeString('en-GB', {
+          timeZone: 'Africa/Nairobi',
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        });
+        return { date, time };
+      }
+    }
+
+    return {
+      date: fallbackDate || new Date().toLocaleDateString('en-GB', { timeZone: 'Africa/Nairobi' }),
+      time: fallbackTime || new Date().toLocaleTimeString('en-GB', { timeZone: 'Africa/Nairobi', hour: '2-digit', minute: '2-digit', hour12: false }),
+    };
+  } catch {
+    return {
+      date: fallbackDate || 'N/A',
+      time: fallbackTime || 'N/A',
+    };
+  }
+}
+
 export default function MyBets() {
   const { bets, setBets } = useBets();
   const { games } = useOdds();
@@ -80,10 +113,12 @@ export default function MyBets() {
         if (data.success && data.bets) {
           // Transform backend bets to frontend format
           const transformedBets = data.bets.map((bet: any) => ({
+            ...(() => {
+              const placed = getPlacedDateTimeEAT(bet.created_at, bet.bet_date, bet.bet_time);
+              return { date: placed.date, time: placed.time };
+            })(),
             id: bet.id,
             betId: bet.bet_id,
-            date: bet.bet_date || new Date().toLocaleDateString(),
-            time: bet.bet_time || new Date().toLocaleTimeString(),
             createdAt: bet.created_at, // Store the ISO timestamp for proper timezone conversion
             stake: parseFloat(bet.stake),
             potentialWin: parseFloat(bet.potential_win),
@@ -206,10 +241,12 @@ export default function MyBets() {
 
         if (refreshData.success && refreshData.bets) {
           const transformedBets = refreshData.bets.map((bet: any) => ({
+            ...(() => {
+              const placed = getPlacedDateTimeEAT(bet.created_at, bet.bet_date, bet.bet_time);
+              return { date: placed.date, time: placed.time };
+            })(),
             id: bet.id,
             betId: bet.bet_id,
-            date: bet.bet_date || new Date().toLocaleDateString(),
-            time: bet.bet_time || new Date().toLocaleTimeString(),
             createdAt: bet.created_at,
             stake: parseFloat(bet.stake),
             potentialWin: parseFloat(bet.potential_win),
@@ -264,7 +301,7 @@ export default function MyBets() {
                 <div className="flex items-center gap-2 mb-2">
                   <Badge variant="outline">#{bet.betId}</Badge>
                   <span className="text-xs text-muted-foreground">
-                    {bet.date}
+                    {bet.date} {formatTimeInEAT(bet.time, (bet as any).createdAt)} EAT
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -362,7 +399,7 @@ export default function MyBets() {
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Prematch Bet placed on {bet.date}
+              Prematch Bet placed on {bet.date} at {formatTimeInEAT(bet.time, (bet as any).createdAt)} EAT
             </p>
           </div>
 
