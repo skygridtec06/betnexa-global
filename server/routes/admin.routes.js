@@ -334,15 +334,27 @@ async function settleBetsForGame(gameId, game) {
       if (newBetStatus !== 'Open' && newBetStatus !== bet.status) {
         const amountWon = newBetStatus === 'Won' ? bet.potential_win : null;
 
-        const { error: betUpdateError } = await supabase
+        const betSettlementUpdate = {
+          status: newBetStatus,
+          amount_won: amountWon,
+          settled_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        let { error: betUpdateError } = await supabase
           .from('bets')
-          .update({
-            status: newBetStatus,
-            amount_won: amountWon,
-            settled_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          })
+          .update(betSettlementUpdate)
           .eq('id', betId);
+
+        if (betUpdateError && `${betUpdateError.message || ''}`.includes('amount_won')) {
+          const fallbackSettlementUpdate = { ...betSettlementUpdate };
+          delete fallbackSettlementUpdate.amount_won;
+          const fallbackResult = await supabase
+            .from('bets')
+            .update(fallbackSettlementUpdate)
+            .eq('id', betId);
+          betUpdateError = fallbackResult.error;
+        }
 
         if (betUpdateError) {
           console.error('   ❌ Error updating bet status:', betUpdateError.message);
@@ -3667,8 +3679,11 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
       // Check if any selection is lost - if so, bet is lost
       const hasLostSelection = allSelections.some(sel => sel.outcome === 'lost');
       
-      // A bet is finished only when every selection has a non-pending outcome and every game is finished
-      const allFinished = allSelections.every(sel => sel.outcome !== 'pending' && (sel.games?.status || '').toLowerCase() === 'finished');
+      // For admin manual settlement, once all selection outcomes are set we can settle the bet.
+      // Game status is still logged for visibility but does not block settlement here.
+      const allOutcomesSet = allSelections.every(sel => sel.outcome !== 'pending');
+      const allGamesFinished = allSelections.every(sel => (sel.games?.status || '').toLowerCase() === 'finished');
+      const allFinished = allOutcomesSet;
       
       // Check if all selections are won
       const allWon = allSelections.every(sel => sel.outcome === 'won');
@@ -3685,7 +3700,8 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
 
       console.log(`   Calculated new bet status: ${newBetStatus}`);
       console.log(`   - Has lost selection: ${hasLostSelection}`);
-      console.log(`   - All finished: ${allFinished}`);
+      console.log(`   - All outcomes set: ${allOutcomesSet}`);
+      console.log(`   - All games finished: ${allGamesFinished}`);
       console.log(`   - All won: ${allWon}`);
 
       // Get the bet to access its data
@@ -3702,15 +3718,27 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
         if (newBetStatus !== 'Open' && newBetStatus !== bet.status) {
           const amountWon = newBetStatus === 'Won' ? bet.potential_win : null;
           
-          const { error: betUpdateError } = await supabase
+          const betSettlementUpdate = {
+            status: newBetStatus,
+            amount_won: amountWon,
+            settled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+
+          let { error: betUpdateError } = await supabase
             .from('bets')
-            .update({ 
-              status: newBetStatus,
-              amount_won: amountWon,
-              settled_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
+            .update(betSettlementUpdate)
             .eq('id', selection.bet_id);
+
+          if (betUpdateError && `${betUpdateError.message || ''}`.includes('amount_won')) {
+            const fallbackSettlementUpdate = { ...betSettlementUpdate };
+            delete fallbackSettlementUpdate.amount_won;
+            const fallbackResult = await supabase
+              .from('bets')
+              .update(fallbackSettlementUpdate)
+              .eq('id', selection.bet_id);
+            betUpdateError = fallbackResult.error;
+          }
 
           if (betUpdateError) {
             console.warn('⚠️  Could not update bet status:', betUpdateError.message);
