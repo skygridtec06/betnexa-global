@@ -1418,6 +1418,43 @@ const AdminPortal = () => {
     }
   };
 
+  const normalizePhoneNumber = (value?: string) => {
+    const digits = String(value || '').replace(/\D/g, '');
+    if (digits.startsWith('254') && digits.length === 12) return digits;
+    if (digits.startsWith('0') && digits.length === 10) return `254${digits.slice(1)}`;
+    if ((digits.startsWith('7') || digits.startsWith('1')) && digits.length === 9) return `254${digits}`;
+    return digits || '';
+  };
+
+  const resolveUsernameFromCache = (userId?: string, phoneNumber?: string) => {
+    if (!Array.isArray(users) || users.length === 0) return '';
+
+    if (userId) {
+      const byId = users.find((u: any) => u.id === userId);
+      if (byId?.username) return byId.username;
+      if (byId?.name) return byId.name;
+    }
+
+    const normalizedPhone = normalizePhoneNumber(phoneNumber);
+    if (normalizedPhone) {
+      const byPhone = users.find((u: any) => normalizePhoneNumber(u.phone) === normalizedPhone);
+      if (byPhone?.username) return byPhone.username;
+      if (byPhone?.name) return byPhone.name;
+    }
+
+    return '';
+  };
+
+  const getTransactionAccountLabel = (transaction: any) => {
+    return (
+      transaction.username ||
+      resolveUsernameFromCache(transaction.user_id, transaction.phone_number) ||
+      transaction.phone_number ||
+      transaction.user_id?.substring(0, 8) ||
+      'User'
+    );
+  };
+
   // Fetch all payments
   const fetchAllPayments = async () => {
     setLoadingPayments(true);
@@ -2728,10 +2765,10 @@ const AdminPortal = () => {
                             </div>
                             <div>
                               <p className="font-medium text-foreground">
-                                {transaction.username || transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - Deposit
+                                {getTransactionAccountLabel(transaction)} - Deposit
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.username && transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
+                                {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
                               </p>
                             </div>
                           </div>
@@ -2851,7 +2888,7 @@ const AdminPortal = () => {
                             </div>
                             <div>
                               <p className="font-medium text-foreground">
-                                {fee.phone_number || fee.user_id?.substring(0, 8) || 'User'} - {fee.fee_type === 'activation' ? 'Activation Fee' : 'Priority Fee'}
+                                {resolveUsernameFromCache(fee.user_id, fee.phone_number) || fee.phone_number || fee.user_id?.substring(0, 8) || 'User'} - {fee.fee_type === 'activation' ? 'Activation Fee' : 'Priority Fee'}
                               </p>
                               <p className="text-xs text-muted-foreground">
                                 {formatTransactionDateInEAT(fee.created_at)} via {fee.method || 'M-Pesa'}
@@ -2924,10 +2961,10 @@ const AdminPortal = () => {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
-                          {transaction.username || transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
+                          {getTransactionAccountLabel(transaction)} - {transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.username && transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
+                          {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
                         </p>
                       </div>
                     </div>
