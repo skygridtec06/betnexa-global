@@ -4914,11 +4914,14 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
     if (bet.user_id) {
       const { data: userRow } = await supabase
         .from('users')
-        .select('phone_number, username')
+        .select('phone_number, username, account_balance')
         .eq('id', bet.user_id)
         .maybeSingle();
       phoneNumber = userRow?.phone_number || null;
       username = userRow?.username || username;
+      if (updatedBalance === null && userRow?.account_balance !== undefined && userRow?.account_balance !== null) {
+        updatedBalance = Number(userRow.account_balance || 0);
+      }
     }
 
     if (!phoneNumber && bet.user_id) {
@@ -5033,36 +5036,11 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
     const potentialWin = payoutAmount;
     const totalOdds = Number(bet.total_odds || 0);
 
-    const intro = `Congratulations ${username}! Your bet was settled as WON.`;
-
-    const maxLines = 5;
-    const selectionLines = (selections || []).slice(0, maxLines).map((sel, idx) => {
-      const fixture = `${sel.home_team || 'Home'} vs ${sel.away_team || 'Away'}`;
-      const market = `${sel.market_type || ''} ${sel.market_key || ''}`.trim();
-      const odds = Number(sel.odds || 0).toFixed(2);
-      return `${idx + 1}. ${fixture} - ${market} @ ${odds}`;
-    });
-
-    const extraCount = Math.max(0, (selections || []).length - maxLines);
-    if (extraCount > 0) {
-      selectionLines.push(`+${extraCount} more selection(s)`);
-    }
-
-    const placedDate = bet.created_at ? new Date(bet.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }) : 'N/A';
-    const smsMessage = [
-      intro,
-      `Bet ID: ${betRef}`,
-      `Previous Status: ${previousStatus}`,
-      `Current Status: ${currentStatus}`,
-      `Stake: KSH ${stake.toFixed(2)}`,
-      `Potential Win: KSH ${potentialWin.toFixed(2)}`,
-      `Credited Amount: KSH ${potentialWin.toFixed(2)}`,
-      updatedBalance !== null ? `New Balance: KSH ${Number(updatedBalance).toFixed(2)}` : null,
-      `Total Odds: ${totalOdds.toFixed(2)}`,
-      `Placed: ${placedDate}`,
-      selectionLines.length > 0 ? `Selections:\n${selectionLines.join('\n')}` : 'Selections: 1',
-      'BETNEXA'
-    ].filter(Boolean).join('\n');
+    const payoutText = Number.isInteger(potentialWin) ? String(potentialWin) : potentialWin.toFixed(2);
+    const balanceText = updatedBalance !== null
+      ? (Number.isInteger(Number(updatedBalance)) ? String(Number(updatedBalance)) : Number(updatedBalance).toFixed(2))
+      : '0';
+    const smsMessage = `Congratulations ${username}! You WON KSH${payoutText} on BETNEXA from your bet ID:${betRef}. Your new balance is KSH${balanceText}, Login at https://betnexa.vercel.app to view your account`;
 
     let sent = false;
     if (phoneNumber) {
