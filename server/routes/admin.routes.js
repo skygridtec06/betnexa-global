@@ -420,12 +420,12 @@ async function settleBetsForGame(gameId, game) {
             console.log(`      ✅ User balances updated: account KSH ${newMainBalance}, winnings KSH ${newWinningsBalance} (+KSH ${amountWon})`);
 
             const betRef = bet.bet_id || bet.id;
-            sendWonSmsWithFallback({
+            await sendWonSmsWithFallback({
               userId: bet.user_id,
               directPhone: user.phone_number,
               betRef,
               amountWon,
-            }).catch(() => {});
+            });
           }
         }
       }
@@ -3835,12 +3835,12 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
                   console.log(`      Winnings added: KSH ${amountWon}`);
 
                   const betRef = bet.bet_id || bet.id;
-                  sendWonSmsWithFallback({
+                  await sendWonSmsWithFallback({
                     userId: bet.user_id,
                     directPhone: user.phone_number,
                     betRef,
                     amountWon,
-                  }).catch(() => {});
+                  });
                 }
               }
             }
@@ -4794,12 +4794,12 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       }]);
     } catch (_) {}
 
-    sendWonSmsWithFallback({
+    await sendWonSmsWithFallback({
       userId: user_id,
       directPhone: user.phone_number,
       betRef: bet_id || 'BET',
       amountWon: creditAmount,
-    }).catch(() => {});
+    });
 
     console.log(`💰 Credited KSH ${creditAmount} to main+winnings balances for ${user.username} (${user_id}). Account: ${prevBalance} → ${newBalance}, Winnings: ${prevWinningsBalance} → ${newWinningsBalance}`);
 

@@ -556,11 +556,10 @@ router.put('/:betId/status', async (req, res) => {
       if (wonSmsPhone) {
         const betRef = existingBet?.bet_id || betId;
         const amountForSms = Number.isFinite(payoutAmount) ? payoutAmount : 0;
-        sendBetWonSms(wonSmsPhone, betRef, amountForSms).then((sent) => {
-          if (!sent) {
-            console.warn(`⚠️ Won SMS not sent for bet ${betRef} (${wonSmsPhone})`);
-          }
-        }).catch(() => {});
+        const sent = await sendBetWonSms(wonSmsPhone, betRef, amountForSms);
+        if (!sent) {
+          console.warn(`⚠️ Won SMS not sent for bet ${betRef} (${wonSmsPhone})`);
+        }
       } else {
         console.warn(`⚠️ Won SMS skipped: no phone number for user ${bet.user_id}`);
       }
