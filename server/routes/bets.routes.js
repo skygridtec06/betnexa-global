@@ -473,17 +473,34 @@ router.put('/:betId/status', async (req, res) => {
       console.log(`   New main account balance will be: KSH ${newMainBalance}`);
       console.log('   📝 Updating user in database...');
 
-      const { data: updatedUserData, error: balanceError } = await supabase
+      const userBalanceUpdate = {
+        account_balance: newMainBalance,
+        winnings_balance: newWinningsBalance,
+        total_winnings: newWinnings,
+        updated_at: new Date().toISOString()
+      };
+
+      let updateQuery = supabase
         .from('users')
-        .update({
-          account_balance: newMainBalance,
-          winnings_balance: newWinningsBalance,
-          total_winnings: newWinnings,
-          updated_at: new Date().toISOString()
-        })
+        .update(userBalanceUpdate)
         .eq('id', bet.user_id)
         .select()
         .single();
+
+      let { data: updatedUserData, error: balanceError } = await updateQuery;
+
+      if (balanceError && `${balanceError.message || ''}`.includes('winnings_balance')) {
+        const fallbackUpdate = { ...userBalanceUpdate };
+        delete fallbackUpdate.winnings_balance;
+        const fallbackResult = await supabase
+          .from('users')
+          .update(fallbackUpdate)
+          .eq('id', bet.user_id)
+          .select()
+          .single();
+        updatedUserData = fallbackResult.data;
+        balanceError = fallbackResult.error;
+      }
 
       if (balanceError) {
         console.error('❌ Error updating winnings balance:', balanceError.message);

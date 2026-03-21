@@ -381,15 +381,27 @@ async function settleBetsForGame(gameId, game) {
           const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
           const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
-          const { error: balanceError } = await supabase
+          const userBalanceUpdate = {
+            account_balance: newMainBalance,
+            winnings_balance: newWinningsBalance,
+            total_winnings: newWinnings,
+            updated_at: new Date().toISOString()
+          };
+
+          let { error: balanceError } = await supabase
             .from('users')
-            .update({
-              account_balance: newMainBalance,
-              winnings_balance: newWinningsBalance,
-              total_winnings: newWinnings,
-              updated_at: new Date().toISOString()
-            })
+            .update(userBalanceUpdate)
             .eq('id', bet.user_id);
+
+          if (balanceError && `${balanceError.message || ''}`.includes('winnings_balance')) {
+            const fallbackUpdate = { ...userBalanceUpdate };
+            delete fallbackUpdate.winnings_balance;
+            const fallbackResult = await supabase
+              .from('users')
+              .update(fallbackUpdate)
+              .eq('id', bet.user_id);
+            balanceError = fallbackResult.error;
+          }
 
           if (balanceError) {
             console.error('   ❌ Error updating user winnings:', balanceError.message);
@@ -3763,15 +3775,27 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
                 const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
                 const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
-                const { error: balanceError } = await supabase
+                const userBalanceUpdate = {
+                  account_balance: newMainBalance,
+                  winnings_balance: newBalance,
+                  total_winnings: newWinnings,
+                  updated_at: new Date().toISOString()
+                };
+
+                let { error: balanceError } = await supabase
                   .from('users')
-                  .update({
-                    account_balance: newMainBalance,
-                    winnings_balance: newBalance,
-                    total_winnings: newWinnings,
-                    updated_at: new Date().toISOString()
-                  })
+                  .update(userBalanceUpdate)
                   .eq('id', bet.user_id);
+
+                if (balanceError && `${balanceError.message || ''}`.includes('winnings_balance')) {
+                  const fallbackUpdate = { ...userBalanceUpdate };
+                  delete fallbackUpdate.winnings_balance;
+                  const fallbackResult = await supabase
+                    .from('users')
+                    .update(fallbackUpdate)
+                    .eq('id', bet.user_id);
+                  balanceError = fallbackResult.error;
+                }
 
                 if (balanceError) {
                   console.error('   ❌ Error updating user winnings balance:', balanceError.message);
@@ -4694,15 +4718,27 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
     const newTotalWinnings = prevTotalWinnings + creditAmount;
 
     // Update user main balance, winnings balance, and winnings aggregate
-    const { error: updateErr } = await supabase
+    const userBalanceUpdate = {
+      account_balance: newBalance,
+      winnings_balance: newWinningsBalance,
+      total_winnings: newTotalWinnings,
+      updated_at: new Date().toISOString()
+    };
+
+    let { error: updateErr } = await supabase
       .from('users')
-      .update({
-        account_balance: newBalance,
-        winnings_balance: newWinningsBalance,
-        total_winnings: newTotalWinnings,
-        updated_at: new Date().toISOString()
-      })
+      .update(userBalanceUpdate)
       .eq('id', user_id);
+
+    if (updateErr && `${updateErr.message || ''}`.includes('winnings_balance')) {
+      const fallbackUpdate = { ...userBalanceUpdate };
+      delete fallbackUpdate.winnings_balance;
+      const fallbackResult = await supabase
+        .from('users')
+        .update(fallbackUpdate)
+        .eq('id', user_id);
+      updateErr = fallbackResult.error;
+    }
 
     if (updateErr) {
       return res.status(500).json({ success: false, error: 'Failed to update account balance', details: updateErr.message });
