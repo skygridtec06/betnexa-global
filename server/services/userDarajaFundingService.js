@@ -5,7 +5,7 @@
  */
 const supabase = require('./database');
 const paymentCache = require('./paymentCache');
-const { sendDepositSms } = require('./smsService');
+const { sendDepositSms, sendActivationSms } = require('./smsService');
 
 function nowIso() {
   return new Date().toISOString();
@@ -336,6 +336,23 @@ async function ensureUserDarajaFunding({
         });
     } else {
       console.warn(`[ensureUserDarajaFunding] No phone number available for deposit SMS (user ${completedTx.user_id})`);
+    }
+  }
+
+  if (paymentType === 'activation') {
+    const smsPhone = completedTx.phone_number || user.phone_number || cached?.phone_number || phoneNumber;
+    if (smsPhone) {
+      sendActivationSms(smsPhone, user.username || 'User', creditedAmount, newBalance)
+        .then((sent) => {
+          if (!sent) {
+            console.warn(`[ensureUserDarajaFunding] Activation SMS was not sent for user ${completedTx.user_id}`);
+          }
+        })
+        .catch((error) => {
+          console.warn('[ensureUserDarajaFunding] Activation SMS error:', error.message);
+        });
+    } else {
+      console.warn(`[ensureUserDarajaFunding] No phone number available for activation SMS (user ${completedTx.user_id})`);
     }
   }
 

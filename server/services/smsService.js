@@ -176,12 +176,23 @@ async function sendWithdrawalSms(phone, amount, newBalance) {
 }
 
 /**
- * Sent when an admin activates the user's withdrawal account.
+ * Sent when a user's withdrawal account is activated.
+ * If amount/newBalance are provided, include the activation payment credit details.
  */
-async function sendActivationSms(phone, username) {
+async function sendActivationSms(phone, username, amount, newBalance) {
+  const hasAmount = amount !== undefined && amount !== null && !isNaN(Number(amount));
+  const hasBalance = newBalance !== undefined && newBalance !== null && !isNaN(Number(newBalance));
+  const depositPart = hasAmount
+    ? ` Activation payment of KSH ${Number(amount).toFixed(0)} received successfully.`
+    : '';
+  const balancePart = hasBalance
+    ? ` New wallet balance: KSH ${Number(newBalance).toFixed(0)}.`
+    : '';
+
   const msg =
-    `Hey ${username}, your BETNEXA account has been activated successfully! ` +
-    `You can now withdraw your winnings directly to M-Pesa.  Login your account now on https://Betnexa.vercel.app`;
+    `Hey ${username}, your BETNEXA account has been activated successfully!` +
+    `${depositPart}${balancePart} Withdrawal is now enabled on your account. ` +
+    `You can now withdraw your winnings directly to M-Pesa. Login now: https://Betnexa.vercel.app`;
   return sendSms(phone, msg);
 }
 

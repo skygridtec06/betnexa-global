@@ -2902,7 +2902,12 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
           };
 
           if (fee.fee_type === 'activation' && user.phone_number) {
-            sendActivationSms(user.phone_number, user.username || 'User').catch(() => {});
+            sendActivationSms(
+              user.phone_number,
+              user.username || 'User',
+              parseFloat(fee.amount) || 0,
+              newBalance
+            ).catch(() => {});
           }
         }
       }
