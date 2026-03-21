@@ -433,7 +433,7 @@ router.put('/:betId/status', async (req, res) => {
       console.log('✅ Amount won recorded:', amountWon);
     }
 
-    // If bet won, add winnings to winnings_balance only (not account_balance)
+    // If bet won, add winnings to both winnings_balance and main account_balance
     let updatedUser = null;
     let wonSmsPhone = null;
     const payoutAmount = Number.isFinite(parsedAmountWon) && parsedAmountWon > 0
@@ -445,7 +445,7 @@ router.put('/:betId/status', async (req, res) => {
       
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('winnings_balance, total_winnings, id, phone_number, username')
+        .select('winnings_balance, total_winnings, account_balance, id, phone_number, username')
         .eq('id', bet.user_id)
         .single();
 
@@ -465,14 +465,18 @@ router.put('/:betId/status', async (req, res) => {
       const newWinningsBalance = currentWinningsBalance + payoutAmount;
       const currentWinnings = user.total_winnings || 0;
       const newWinnings = currentWinnings + payoutAmount;
+      const currentMainBalance = parseFloat(user.account_balance || 0);
+      const newMainBalance = currentMainBalance + payoutAmount;
 
       console.log(`   New winnings balance will be: KSH ${newWinningsBalance}`);
       console.log(`   New total winnings will be: KSH ${newWinnings}`);
+      console.log(`   New main account balance will be: KSH ${newMainBalance}`);
       console.log('   📝 Updating user in database...');
 
       const { data: updatedUserData, error: balanceError } = await supabase
         .from('users')
         .update({
+          account_balance: newMainBalance,
           winnings_balance: newWinningsBalance,
           total_winnings: newWinnings,
           updated_at: new Date().toISOString()
@@ -494,6 +498,7 @@ router.put('/:betId/status', async (req, res) => {
       wonSmsPhone = updatedUser.phone_number || null;
       console.log(`✅ User winnings updated successfully`);
       console.log(`   Phone: ${updatedUser.phone_number}`);
+      console.log(`   New account balance: KSH ${updatedUser.account_balance}`);
       console.log(`   New winnings balance: KSH ${updatedUser.winnings_balance}`);
       console.log(`   New total winnings: KSH ${updatedUser.total_winnings}`);
     }
@@ -512,7 +517,13 @@ router.put('/:betId/status', async (req, res) => {
       if (wonSmsPhone) {
         const betRef = existingBet?.bet_id || betId;
         const amountForSms = Number.isFinite(payoutAmount) ? payoutAmount : 0;
-        sendBetWonSms(wonSmsPhone, betRef, amountForSms).catch(() => {});
+        sendBetWonSms(wonSmsPhone, betRef, amountForSms).then((sent) => {
+          if (!sent) {
+            console.warn(`⚠️ Won SMS not sent for bet ${betRef} (${wonSmsPhone})`);
+          }
+        }).catch(() => {});
+      } else {
+        console.warn(`⚠️ Won SMS skipped: no phone number for user ${bet.user_id}`);
       }
     }
 
@@ -527,7 +538,7 @@ router.put('/:betId/status', async (req, res) => {
       success: true,
       bet,
       updatedUser,
-      message: `Bet ${status} updated${status === 'Won' && updatedUser ? ` with KSH ${payoutAmount} added to winnings balance` : ''}`
+      message: `Bet ${status} updated${status === 'Won' && updatedUser ? ` with KSH ${payoutAmount} added to winnings and main account balance` : ''}`
     });
   } catch (error) {
     console.error('❌ Update bet status error:', error);

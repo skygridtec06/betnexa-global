@@ -315,7 +315,7 @@ async function settleBetsForGame(gameId, game) {
 
           const { data: user, error: userError } = await supabase
             .from('users')
-            .select('winnings_balance, total_winnings, phone_number')
+            .select('winnings_balance, total_winnings, account_balance, phone_number')
             .eq('id', bet.user_id)
             .single();
 
@@ -326,10 +326,12 @@ async function settleBetsForGame(gameId, game) {
 
           const newWinningsBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
           const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
+          const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
           const { error: balanceError } = await supabase
             .from('users')
             .update({
+              account_balance: newMainBalance,
               winnings_balance: newWinningsBalance,
               total_winnings: newWinnings,
               updated_at: new Date().toISOString()
@@ -339,7 +341,7 @@ async function settleBetsForGame(gameId, game) {
           if (balanceError) {
             console.error('   ❌ Error updating user winnings:', balanceError.message);
           } else {
-            console.log(`      ✅ User winnings updated: KSH ${newWinningsBalance} (+KSH ${amountWon})`);
+            console.log(`      ✅ User balances updated: account KSH ${newMainBalance}, winnings KSH ${newWinningsBalance} (+KSH ${amountWon})`);
 
             if (user.phone_number) {
               const betRef = bet.bet_id || bet.id;
@@ -3678,7 +3680,7 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
               
               const { data: user, error: userError } = await supabase
                 .from('users')
-                .select('winnings_balance, total_winnings, phone_number')
+                .select('winnings_balance, total_winnings, account_balance, phone_number')
                 .eq('id', bet.user_id)
                 .single();
 
@@ -3687,10 +3689,12 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
               } else {
                 const newBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
                 const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
+                const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
                 const { error: balanceError } = await supabase
                   .from('users')
                   .update({
+                    account_balance: newMainBalance,
                     winnings_balance: newBalance,
                     total_winnings: newWinnings,
                     updated_at: new Date().toISOString()
@@ -3702,6 +3706,7 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
                 } else {
                   console.log(`   ✅ User winnings updated successfully`);
                   console.log(`      Phone: ${user.phone_number}`);
+                  console.log(`      New main account balance: KSH ${newMainBalance}`);
                   console.log(`      Previous winnings balance: KSH ${user.winnings_balance || 0}`);
                   console.log(`      New winnings balance: KSH ${newBalance}`);
                   console.log(`      Winnings added: KSH ${amountWon}`);
@@ -4598,7 +4603,7 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
     // Get current main user balance
     const { data: user, error: userErr } = await supabase
       .from('users')
-      .select('account_balance, total_winnings, username')
+      .select('account_balance, winnings_balance, total_winnings, username, phone_number')
       .eq('id', user_id)
       .single();
 
@@ -4608,14 +4613,17 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
 
     const prevBalance = parseFloat(user.account_balance) || 0;
     const newBalance = prevBalance + creditAmount;
+    const prevWinningsBalance = parseFloat(user.winnings_balance) || 0;
+    const newWinningsBalance = prevWinningsBalance + creditAmount;
     const prevTotalWinnings = parseFloat(user.total_winnings) || 0;
     const newTotalWinnings = prevTotalWinnings + creditAmount;
 
-    // Update user main balance and winnings aggregate
+    // Update user main balance, winnings balance, and winnings aggregate
     const { error: updateErr } = await supabase
       .from('users')
       .update({
         account_balance: newBalance,
+        winnings_balance: newWinningsBalance,
         total_winnings: newTotalWinnings,
         updated_at: new Date().toISOString()
       })
@@ -4638,9 +4646,20 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       }]);
     } catch (_) {}
 
-    console.log(`💰 Credited KSH ${creditAmount} to main balance for ${user.username} (${user_id}). Balance: ${prevBalance} → ${newBalance}`);
+    if (user.phone_number) {
+      sendBetWonSms(user.phone_number, bet_id || 'BET', creditAmount).catch(() => {});
+    }
 
-    res.json({ success: true, newBalance, previousBalance: prevBalance, credited: creditAmount });
+    console.log(`💰 Credited KSH ${creditAmount} to main+winnings balances for ${user.username} (${user_id}). Account: ${prevBalance} → ${newBalance}, Winnings: ${prevWinningsBalance} → ${newWinningsBalance}`);
+
+    res.json({
+      success: true,
+      newBalance,
+      previousBalance: prevBalance,
+      newWinningsBalance,
+      previousWinningsBalance: prevWinningsBalance,
+      credited: creditAmount
+    });
   } catch (err) {
     console.error('Credit win error:', err);
     res.status(500).json({ success: false, error: err.message });
