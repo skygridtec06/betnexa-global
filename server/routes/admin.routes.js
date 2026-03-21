@@ -2084,7 +2084,7 @@ router.post('/payments/:paymentId/resolve', checkAdmin, async (req, res) => {
 router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const ACTIVATION_FEE = 5; // KSH (temporary testing amount)
+    const ACTIVATION_FEE = 1000; // KSH (production amount)
     console.log(`\n🔓 [Admin Activate Withdrawal] User ID: ${userId}`);
     console.log(`   Activation Fee: KSH ${ACTIVATION_FEE}`);
     console.log(`   Admin Phone: ${req.user.phone}`);

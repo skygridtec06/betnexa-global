@@ -261,7 +261,7 @@ const AdminPortal = () => {
         });
         
         // Show success message
-        alert(`✅ Withdrawal activated for ${userName}\n\nKSH ${data.activationFeeCharged || 5} activation fee charged.`);
+        alert(`✅ Withdrawal activated for ${userName}\n\nKSH ${data.activationFeeCharged || 1000} activation fee charged.`);
         
         // Refresh user list to reflect changes
         await fetchUsersFromBackend(loggedInUser?.phone);
@@ -2821,7 +2821,7 @@ const AdminPortal = () => {
               );
             })()}
 
-            {/* --- ACTIVATION FEES SECTION (KSH 5 + KSH 3) --- */}
+            {/* --- ACTIVATION FEES SECTION (KSH 1000 + KSH 399) --- */}
             {(() => {
               const resolved = activationFees.filter((f: any) => f.status === 'completed' || f.status === 'failed');
               const completed = resolved.filter((f: any) => f.status === 'completed');
@@ -2861,7 +2861,7 @@ const AdminPortal = () => {
                 <>
                   <div className="mt-8 mb-2">
                     <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Activation Fees</h3>
-                    <p className="text-xs text-muted-foreground mt-1">KSH 5 withdrawal activation &amp; KSH 3 priority fees</p>
+                    <p className="text-xs text-muted-foreground mt-1">KSH 1000 withdrawal activation &amp; KSH 399 priority fees</p>
                     {resolved.length > 0 && (
                       <div className="mt-2 space-y-1">
                         <div className="flex items-center gap-3">
