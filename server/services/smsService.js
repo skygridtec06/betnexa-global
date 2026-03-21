@@ -165,10 +165,13 @@ async function sendDepositSms(phone, amount, newBalance) {
 /**
  * Sent when a withdrawal is initiated.
  */
-async function sendWithdrawalSms(phone, amount) {
+async function sendWithdrawalSms(phone, amount, newBalance) {
+  const balancePart = (newBalance !== undefined && newBalance !== null && !isNaN(Number(newBalance)))
+    ? ` Your new account balance is KSH ${Number(newBalance).toFixed(0)}.`
+    : '';
   const msg =
-    `Hooray!!! Your Withdrawal of KSH ${Number(amount).toFixed(0)} is being processed. ` +
-    `Funds will arrive on your M-Pesa as soon as all .`;
+    `Hooray!!! Your Withdrawal of KSH ${Number(amount).toFixed(0)} at BETNEXA is being processed. ` +
+    `Funds will arrive on your M-Pesa as soon as our team reviews it.${balancePart} Thanks for choosing Betnexa.`;
   return sendSms(phone, msg);
 }
 
@@ -177,7 +180,7 @@ async function sendWithdrawalSms(phone, amount) {
  */
 async function sendActivationSms(phone, username) {
   const msg =
-    `BETNEXA: Hi ${username}, your withdrawal account has been activated! ` +
+    `Hey ${username}, your BETNEXA account has been activated successfully! ` +
     `You can now withdraw your winnings directly to M-Pesa.  Login your account now on https://Betnexa.vercel.app`;
   return sendSms(phone, msg);
 }

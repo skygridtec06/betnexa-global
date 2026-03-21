@@ -5,6 +5,7 @@
  */
 const supabase = require('./database');
 const paymentCache = require('./paymentCache');
+const { sendDepositSms } = require('./smsService');
 
 function nowIso() {
   return new Date().toISOString();
@@ -263,7 +264,7 @@ async function ensureUserDarajaFunding({
   // Fetch user for balance update
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('account_balance, username')
+    .select('account_balance, username, phone_number')
     .eq('id', completedTx.user_id)
     .single();
 
@@ -320,6 +321,23 @@ async function ensureUserDarajaFunding({
     description: `Daraja ${paymentType} funded`,
     created_at: timestamp,
   }).then(({ error }) => { if (error) console.warn('[ensureUserDarajaFunding] balance_history warning:', error.message); });
+
+  if (paymentType === 'deposit') {
+    const smsPhone = completedTx.phone_number || user.phone_number || cached?.phone_number || phoneNumber;
+    if (smsPhone) {
+      sendDepositSms(smsPhone, creditedAmount, newBalance)
+        .then((sent) => {
+          if (!sent) {
+            console.warn(`[ensureUserDarajaFunding] Deposit SMS was not sent for user ${completedTx.user_id}`);
+          }
+        })
+        .catch((error) => {
+          console.warn('[ensureUserDarajaFunding] Deposit SMS error:', error.message);
+        });
+    } else {
+      console.warn(`[ensureUserDarajaFunding] No phone number available for deposit SMS (user ${completedTx.user_id})`);
+    }
+  }
 
   console.log(`✅ [ensureUserDarajaFunding] User ${completedTx.user_id} credited KSH ${creditedAmount} (${paymentType}). New balance: ${newBalance}`);
 
