@@ -5032,6 +5032,23 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
       updatedWinningsBalance = nextWinningsBalance;
     }
 
+    if (previousStatus !== currentStatus) {
+      const statusOnlyUpdate = {
+        status: currentStatus,
+        settled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error: statusUpdateError } = await supabase
+        .from('bets')
+        .update(statusOnlyUpdate)
+        .eq('id', bet.id);
+
+      if (statusUpdateError) {
+        return res.status(500).json({ success: false, error: 'Failed to reconcile bet status', details: statusUpdateError.message });
+      }
+    }
+
     const stake = Number(bet.stake || 0);
     const potentialWin = payoutAmount;
     const totalOdds = Number(bet.total_odds || 0);

@@ -1496,6 +1496,7 @@ const AdminPortal = () => {
       }
 
       setSmsTriggeredBets((prev) => ({ ...prev, [bet.id]: true }));
+      await fetchAllBets();
       await fetchUsersFromBackend();
 
       const phoneMsg = data.phoneNumber || bet.phone_number || 'user';
@@ -3320,6 +3321,7 @@ const AdminPortal = () => {
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold"></th>
+                                  <th className="text-center p-2 font-semibold">Status</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -3364,6 +3366,9 @@ const AdminPortal = () => {
                                             {smsTriggeredBets[bet.id] ? 'Already Sent' : sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
                                           </button>
                                         </div>
+                                      </td>
+                                      <td className="p-2 text-center">
+                                        <Badge variant="secondary" className="text-[10px]">{bet.status}</Badge>
                                       </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.potentialWin.toLocaleString()}</td>
@@ -3601,6 +3606,7 @@ const AdminPortal = () => {
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold">Action</th>
+                                  <th className="text-center p-2 font-semibold">Status</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -3631,6 +3637,9 @@ const AdminPortal = () => {
                                             <Megaphone className="h-3 w-3" />
                                           )}
                                         </Button>
+                                      </td>
+                                      <td className="p-2 text-center">
+                                        <Badge className="bg-green-500/15 text-green-500 hover:bg-green-500/15 text-[10px]">{bet.status}</Badge>
                                       </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-green-500 font-bold">{bet.potentialWin.toLocaleString()}</td>
@@ -3666,6 +3675,7 @@ const AdminPortal = () => {
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold">Action</th>
+                                  <th className="text-center p-2 font-semibold">Status</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -3696,6 +3706,9 @@ const AdminPortal = () => {
                                             <Megaphone className="h-3 w-3" />
                                           )}
                                         </Button>
+                                      </td>
+                                      <td className="p-2 text-center">
+                                        <Badge variant="destructive" className="text-[10px]">{bet.status}</Badge>
                                       </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-red-500 font-bold">0</td>
