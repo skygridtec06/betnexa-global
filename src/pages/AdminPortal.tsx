@@ -87,29 +87,15 @@ const AdminPortal = () => {
   }>({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
-  const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
-  const [creditingBet, setCreditingBet] = useState<string | null>(null);
   const [sendingBetSmsId, setSendingBetSmsId] = useState<string | null>(null);
   const [smsTriggeredBets, setSmsTriggeredBets] = useState<Record<string, boolean>>({});
 
-  // Fetch credited and SMS-triggered bet IDs from server on load
+  // Fetch SMS-triggered bet IDs from server on load
   useEffect(() => {
     const fetchServerBetFlags = async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
         const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
-        const creditedResp = await fetch(`${apiUrl}/api/admin/bets/credited?phone=${adminPhone}`);
-        const creditedData = await creditedResp.json();
-        if (creditedData.success && creditedData.creditedBetIds) {
-          const map: Record<string, boolean> = {};
-          creditedData.creditedBetIds.forEach((betId: string) => {
-            // Match by betId - find the bet with this betId
-            const bet = bets.find((b: any) => b.betId === betId);
-            if (bet) map[bet.id] = true;
-          });
-          setCreditedBets(prev => ({ ...prev, ...map }));
-        }
-
         const smsResp = await fetch(`${apiUrl}/api/admin/bets/sms-triggered?phone=${adminPhone}`);
         const smsData = await smsResp.json();
         if (smsData.success && smsData.smsTriggeredBetIds) {
@@ -1449,32 +1435,6 @@ const AdminPortal = () => {
     const newOutcomes = { ...selectionOutcomes };
     delete newOutcomes[betId];
     setSelectionOutcomes(newOutcomes);
-  };
-
-  // Credit win amount to user balance
-  const creditWinToUser = async (bet: any) => {
-    if (creditedBets[bet.id] || creditingBet === bet.id) return;
-    setCreditingBet(bet.id);
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
-      const resp = await fetch(`${apiUrl}/api/admin/bets/credit-win`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: adminPhone, user_id: bet.user_id, amount: bet.potentialWin, bet_id: bet.betId }),
-      });
-      const data = await resp.json();
-      if (data.success) {
-        setCreditedBets(prev => ({ ...prev, [bet.id]: true }));
-        await fetchUsersFromBackend();
-      } else {
-        alert(`Failed to credit: ${data.error}`);
-      }
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
-    } finally {
-      setCreditingBet(null);
-    }
   };
 
   const sendBetDetailsSms = async (bet: any) => {
@@ -3320,7 +3280,7 @@ const AdminPortal = () => {
                                 <tr className="text-muted-foreground">
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
-                                  <th className="text-center p-2 font-semibold"></th>
+                                  <th className="text-center p-2 font-semibold">Action</th>
                                   <th className="text-center p-2 font-semibold">Status</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
@@ -3338,34 +3298,19 @@ const AdminPortal = () => {
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-center">
-                                        <div className="flex flex-col gap-1 items-center">
-                                          <button
-                                            onClick={() => creditWinToUser(bet)}
-                                            disabled={!!creditedBets[bet.id] || creditingBet === bet.id}
-                                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                              creditedBets[bet.id]
-                                                ? 'bg-red-600 text-white cursor-not-allowed'
-                                                : creditingBet === bet.id
-                                                  ? 'bg-yellow-500/50 text-yellow-200 cursor-wait'
-                                                  : 'bg-primary/80 text-white hover:bg-primary'
-                                            }`}
-                                          >
-                                            {creditingBet === bet.id ? '...' : creditedBets[bet.id] ? 'Updated' : 'Update'}
-                                          </button>
-                                          <button
-                                            onClick={() => sendBetDetailsSms(bet)}
-                                            disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
-                                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                              smsTriggeredBets[bet.id]
-                                                ? 'bg-slate-500 text-white cursor-not-allowed'
-                                                : sendingBetSmsId === bet.id
-                                                ? 'bg-blue-500/50 text-blue-100 cursor-wait'
-                                                : 'bg-blue-600 text-white hover:bg-blue-700'
-                                            }`}
-                                          >
-                                            {smsTriggeredBets[bet.id] ? 'Already Sent' : sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
-                                          </button>
-                                        </div>
+                                        <button
+                                          onClick={() => sendBetDetailsSms(bet)}
+                                          disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
+                                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                            smsTriggeredBets[bet.id]
+                                              ? 'bg-slate-500 text-white cursor-not-allowed'
+                                              : sendingBetSmsId === bet.id
+                                              ? 'bg-blue-500/50 text-blue-100 cursor-wait'
+                                              : 'bg-blue-600 text-white hover:bg-blue-700'
+                                          }`}
+                                        >
+                                          {smsTriggeredBets[bet.id] ? 'Already Sent' : sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
+                                        </button>
                                       </td>
                                       <td className="p-2 text-center">
                                         <Badge variant="secondary" className="text-[10px]">{bet.status}</Badge>
