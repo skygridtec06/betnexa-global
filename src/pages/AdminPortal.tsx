@@ -264,7 +264,7 @@ const AdminPortal = () => {
         alert(`✅ Withdrawal activated for ${userName}\n\nKSH ${data.activationFeeCharged || 1000} activation fee charged.`);
         
         // Refresh user list to reflect changes
-        await getAllUsers();
+        await fetchUsersFromBackend(loggedInUser?.phone);
       } else {
         console.error(`❌ Activation failed:`, data.error);
         alert(`Error: ${data.error || 'Failed to activate withdrawal'}`);
@@ -307,7 +307,7 @@ const AdminPortal = () => {
         alert(`✅ Withdrawal deactivated for ${userName}`);
         
         // Refresh user list to reflect changes
-        await getAllUsers();
+        await fetchUsersFromBackend(loggedInUser?.phone);
       } else {
         console.error(`❌ Deactivation failed:`, data.error);
         alert(`Error: ${data.error || 'Failed to deactivate withdrawal'}`);
@@ -2845,6 +2845,13 @@ const AdminPortal = () => {
                 const data = await response.json();
                 if (data.success) {
                   setActivationFees(prev => prev.map(f => f.id === feeId ? { ...f, status } : f));
+                  if (data.user?.id) {
+                    updateUser(data.user.id, {
+                      withdrawalActivated: data.user.withdrawal_activated === null ? undefined : !!data.user.withdrawal_activated,
+                      withdrawalActivationDate: data.user.withdrawal_activation_date ?? null,
+                    });
+                  }
+                  await fetchUsersFromBackend(loggedInUser?.phone);
                 } else {
                   throw new Error(data.message);
                 }

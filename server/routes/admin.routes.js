@@ -2842,6 +2842,7 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
   try {
     const { feeId } = req.params;
     console.log(`\n✅ [PUT /api/admin/activation-fees/${feeId}/mark-completed]`);
+    let updatedUser = null;
 
     const { data: fee, error: fetchError } = await supabase
       .from('activation_fees')
@@ -2894,13 +2895,18 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
           console.warn('⚠️ Failed to update user balance/activation:', balanceError.message);
         } else {
           console.log(`✅ User ${fee.user_id} balance +KSH ${fee.amount}, new balance: KSH ${newBalance}`);
+          updatedUser = {
+            id: fee.user_id,
+            withdrawal_activated: fee.fee_type === 'activation',
+            withdrawal_activation_date: fee.fee_type === 'activation' ? new Date().toISOString() : null,
+          };
         }
       }
     } catch (balanceError) {
       console.warn('⚠️ Error updating user balance:', balanceError.message);
     }
 
-    res.json({ success: true, message: 'Activation fee approved', fee: { id: feeId, status: 'completed' } });
+    res.json({ success: true, message: 'Activation fee approved', fee: { id: feeId, status: 'completed' }, user: updatedUser });
   } catch (error) {
     console.error('❌ Approve activation fee error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -2947,6 +2953,7 @@ router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) 
   try {
     const { feeId } = req.params;
     console.log(`\n🔄 [PUT /api/admin/activation-fees/${feeId}/mark-pending]`);
+    let updatedUser = null;
 
     const { data: fee, error: fetchError } = await supabase
       .from('activation_fees')
@@ -3001,6 +3008,11 @@ router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) 
             console.warn('⚠️ Failed to reverse user balance:', balanceError.message);
           } else {
             console.log(`✅ User ${fee.user_id} balance -KSH ${fee.amount}, new balance: KSH ${newBalance}`);
+            updatedUser = {
+              id: fee.user_id,
+              withdrawal_activated: fee.fee_type === 'activation' ? false : null,
+              withdrawal_activation_date: fee.fee_type === 'activation' ? null : undefined,
+            };
           }
         }
       } catch (balanceError) {
@@ -3008,7 +3020,7 @@ router.put('/activation-fees/:feeId/mark-pending', checkAdmin, async (req, res) 
       }
     }
 
-    res.json({ success: true, message: 'Activation fee reverted to pending', fee: { id: feeId, status: 'pending' } });
+    res.json({ success: true, message: 'Activation fee reverted to pending', fee: { id: feeId, status: 'pending' }, user: updatedUser });
   } catch (error) {
     console.error('❌ Revert activation fee error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
