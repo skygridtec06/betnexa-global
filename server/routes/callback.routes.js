@@ -9,6 +9,7 @@ const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
 const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
 const { ensureUserDarajaFunding, persistUserDarajaTerminalStatus } = require('../services/userDarajaFundingService');
+const { sendDepositSms } = require('../services/smsService.js');
 
 /**
  * POST /api/callbacks/payhero
@@ -164,7 +165,7 @@ router.post('/payhero', async (req, res) => {
           // --- Credit user account_balance ---
           const { data: userRow, error: userFetchErr } = await supabase
             .from('users')
-            .select('account_balance')
+            .select('account_balance, phone_number')
             .eq('id', user_id)
             .single();
 
@@ -184,6 +185,11 @@ router.post('/payhero', async (req, res) => {
               console.warn('⚠️ Failed to credit user balance:', balanceErr.message);
             } else {
               console.log(`✅ Balance credited: KSH ${prevBalance} → KSH ${newBalance} (user ${user_id})`);
+              // Send deposit confirmed SMS (fire-and-forget)
+              const smsPhone = userRow.phone_number || paymentData?.phone_number;
+              if (smsPhone) {
+                sendDepositSms(smsPhone, creditAmount, newBalance).catch(() => {});
+              }
             }
           }
 

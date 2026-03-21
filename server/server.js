@@ -8,6 +8,7 @@ const AuthRoutes = require('./routes/auth.routes.js');
 const AdminRoutes = require('./routes/admin.routes.js');
 const BetsRoutes = require('./routes/bets.routes.js');
 const LiveRoutes = require('./routes/live.routes.js');
+const CronRoutes = require('./routes/cron.routes.js');
 // const PresenceRoutes = require('./routes/presence.routes.js');
 
 const app = express();
@@ -34,6 +35,7 @@ app.use('/api/callbacks', CallbackRoutes);
 app.use('/api/admin', AdminRoutes);
 app.use('/api/bets', BetsRoutes);
 app.use('/api/live', LiveRoutes);
+app.use('/api/cron', CronRoutes);
 // app.use('/api/presence', PresenceRoutes);
 
 // Health check

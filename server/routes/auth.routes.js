@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
+const { sendWelcomeSms } = require('../services/smsService.js');
 
 /**
  * POST /api/auth/login
@@ -52,6 +53,13 @@ router.post('/login', async (req, res) => {
     console.log(`   Balance from DB: KSH ${user.account_balance}`);
     console.log(`   Total Winnings from DB: KSH ${user.total_winnings}`);
     console.log(`   Total Bets: ${user.total_bets}`);
+
+    // Track last login time for inactivity reminders (fire-and-forget)
+    supabase.from('users')
+      .update({ last_login_at: new Date().toISOString() })
+      .eq('id', user.id)
+      .then(() => {})
+      .catch(() => {});
 
     // Return user data
     return res.json({
@@ -142,6 +150,9 @@ router.post('/signup', async (req, res) => {
         error: createError?.message
       });
     }
+
+    // Send welcome SMS (fire-and-forget — never blocks the response)
+    sendWelcomeSms(newUser.phone_number, newUser.username).catch(() => {});
 
     return res.status(201).json({
       success: true,

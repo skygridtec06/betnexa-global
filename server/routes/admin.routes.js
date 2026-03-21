@@ -10,6 +10,7 @@ const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
 } = require('../services/adminDarajaTestFundingService');
+const { sendActivationSms } = require('../services/smsService.js');
 
 const router = express.Router();
 
@@ -2190,6 +2191,12 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
     }
 
     console.log(`\n✅ Withdrawal activation completed successfully for user ${userId}`);
+
+    // Send activation SMS (fire-and-forget)
+    if (user.phone_number) {
+      sendActivationSms(user.phone_number, user.username || 'User').catch(() => {});
+    }
+
     res.json({ 
       success: true, 
       user,

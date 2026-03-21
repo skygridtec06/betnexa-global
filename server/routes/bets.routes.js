@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
+const { sendBetPlacedSms, sendBetWonSms } = require('../services/smsService.js');
 
 /**
  * POST /api/bets/place
@@ -34,7 +35,7 @@ router.post('/place', async (req, res) => {
     if (userId) {
       const byIdResult = await supabase
         .from('users')
-        .select('id, account_balance, total_bets')
+        .select('id, account_balance, total_bets, phone_number')
         .eq('id', userId)
         .maybeSingle();
       user = byIdResult.data;
@@ -44,7 +45,7 @@ router.post('/place', async (req, res) => {
     if (!user && phoneNumber) {
       const byPhoneResult = await supabase
         .from('users')
-        .select('id, account_balance, total_bets')
+        .select('id, account_balance, total_bets, phone_number')
         .eq('phone_number', phoneNumber)
         .maybeSingle();
       user = byPhoneResult.data;
@@ -172,6 +173,12 @@ router.post('/place', async (req, res) => {
     console.log('   Database ID (UUID):', bet.id);
     console.log('   Account Balance After: KSH', newBalance);
 
+    // Send bet placed SMS (fire-and-forget)
+    const smsPhone = phoneNumber || user.phone_number;
+    if (smsPhone) {
+      sendBetPlacedSms(smsPhone, betId, stake, potentialWin, newBalance).catch(() => {});
+    }
+
     res.json({
       success: true,
       bet: {
@@ -291,7 +298,7 @@ router.put('/:betId/status', async (req, res) => {
     // Fetch existing bet first so payout logic can be idempotent
     const { data: existingBet, error: existingBetError } = await supabase
       .from('bets')
-      .select('id, user_id, status, potential_win')
+      .select('id, bet_id, user_id, status, potential_win')
       .eq('id', betId)
       .single();
 
@@ -428,6 +435,7 @@ router.put('/:betId/status', async (req, res) => {
 
     // If bet won, add winnings to winnings_balance only (not account_balance)
     let updatedUser = null;
+    let wonSmsPhone = null;
     const payoutAmount = Number.isFinite(parsedAmountWon) && parsedAmountWon > 0
       ? parsedAmountWon
       : parseFloat(existingBet.potential_win || 0);
@@ -483,10 +491,29 @@ router.put('/:betId/status', async (req, res) => {
       }
 
       updatedUser = updatedUserData;
+      wonSmsPhone = updatedUser.phone_number || null;
       console.log(`✅ User winnings updated successfully`);
       console.log(`   Phone: ${updatedUser.phone_number}`);
       console.log(`   New winnings balance: KSH ${updatedUser.winnings_balance}`);
       console.log(`   New total winnings: KSH ${updatedUser.total_winnings}`);
+    }
+
+    // Always attempt won SMS when bet is won, even if payout amount was zero/empty.
+    if (status === 'Won' && bet.user_id) {
+      if (!wonSmsPhone) {
+        const { data: userForSms } = await supabase
+          .from('users')
+          .select('phone_number')
+          .eq('id', bet.user_id)
+          .maybeSingle();
+        wonSmsPhone = userForSms?.phone_number || null;
+      }
+
+      if (wonSmsPhone) {
+        const betRef = existingBet?.bet_id || betId;
+        const amountForSms = Number.isFinite(payoutAmount) ? payoutAmount : 0;
+        sendBetWonSms(wonSmsPhone, betRef, amountForSms).catch(() => {});
+      }
     }
 
     // If bet lost, no winnings to add

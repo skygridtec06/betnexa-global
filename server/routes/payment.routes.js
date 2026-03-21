@@ -18,6 +18,7 @@ const {
   ensureUserDarajaFunding,
   persistUserDarajaTerminalStatus,
 } = require('../services/userDarajaFundingService.js');
+const { sendWithdrawalSms } = require('../services/smsService.js');
 
 function interpretUserDarajaStatus(result) {
   const code = `${result?.ResultCode ?? result?.resultCode ?? result?.ResponseCode ?? ''}`;
@@ -464,6 +465,11 @@ router.post('/initiate', async (req, res) => {
     }
 
     console.log('✅ Payment initiation completed successfully');
+
+    // Send withdrawal SMS notification (fire-and-forget)
+    if (resolvedPaymentType === 'withdrawal') {
+      sendWithdrawalSms(phoneNumber, numAmount).catch(() => {});
+    }
     
     // Prepare payment data for timeout handler
     const paymentDataForTimeout = {
