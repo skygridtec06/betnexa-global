@@ -472,8 +472,15 @@ router.post('/initiate', async (req, res) => {
 
     // Send withdrawal SMS notification (fire-and-forget)
     if (resolvedPaymentType === 'withdrawal') {
-      sendWithdrawalSms(phoneNumber, numAmount).catch(() => {});
-    }
+        supabase.from('users').select('account_balance').eq('id', userId).maybeSingle()
+          .then(({ data: u }) => {
+            const newBal = Math.max(0, (parseFloat(u?.account_balance) || 0) - numAmount);
+            sendWithdrawalSms(phoneNumber, numAmount, newBal).catch(() => {});
+          })
+          .catch(() => {
+            sendWithdrawalSms(phoneNumber, numAmount).catch(() => {});
+          });
+      }
     
     // Prepare payment data for timeout handler
     const paymentDataForTimeout = {

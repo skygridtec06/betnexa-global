@@ -3411,7 +3411,7 @@ router.post('/transactions/withdrawal', async (req, res) => {
 
       const smsPhone = phoneNumber || user.phone_number;
       if (smsPhone) {
-        sendWithdrawalSms(smsPhone, amount).catch(() => {});
+          sendWithdrawalSms(smsPhone, amount, newBalance).catch(() => {});
       }
     }
 
