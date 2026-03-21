@@ -20,6 +20,10 @@ const {
 } = require('../services/userDarajaFundingService.js');
 const { sendWithdrawalSms } = require('../services/smsService.js');
 
+const TEST_MIN_DEPOSIT_AMOUNT = 1;
+const TEST_ACTIVATION_FEE = 5;
+const TEST_PRIORITY_FEE = 3;
+
 function interpretUserDarajaStatus(result) {
   const code = `${result?.ResultCode ?? result?.resultCode ?? result?.ResponseCode ?? ''}`;
   const desc = `${result?.ResultDesc || result?.resultDesc || result?.ResponseDescription || ''}`;
@@ -99,7 +103,7 @@ router.post('/initiate', async (req, res) => {
 
     const numAmount = parseFloat(amount);
     const resolvedPaymentType = paymentType || 'deposit';
-    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
+    const minDepositAmount = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || `${TEST_MIN_DEPOSIT_AMOUNT}`);
     // Enforce configurable minimum for regular deposits; activation/priority fees are exempt
     if (resolvedPaymentType === 'deposit' && numAmount < minDepositAmount) {
       console.log('❌ Validation failed: Deposit amount too low');
@@ -402,8 +406,8 @@ router.post('/initiate', async (req, res) => {
               related_withdrawal_id: relatedWithdrawalId || null,
               method: 'M-Pesa STK Push',
               description: resolvedType === 'activation'
-                ? 'Withdrawal activation fee - KSH 1000'
-                : `Priority withdrawal fee - KSH 399`,
+                ? `Withdrawal activation fee - KSH ${TEST_ACTIVATION_FEE}`
+                : `Priority withdrawal fee - KSH ${TEST_PRIORITY_FEE}`,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString()
             });
@@ -1246,7 +1250,7 @@ router.post('/daraja/initiate', async (req, res) => {
     }
 
     // Minimum for regular deposits only
-    const minDeposit = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || '500');
+    const minDeposit = parseFloat(process.env.MIN_DEPOSIT_AMOUNT || `${TEST_MIN_DEPOSIT_AMOUNT}`);
     if (paymentType === 'deposit' && parsedAmount < minDeposit) {
       return res.status(400).json({ success: false, message: `Minimum deposit is KSH ${minDeposit}` });
     }

@@ -15,6 +15,9 @@ import { useTransactions, type Transaction } from "@/context/TransactionContext"
 import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT } from "@/lib/timezoneFormatter";
 
+const TEST_MIN_DEPOSIT_AMOUNT = 1;
+const TEST_ACTIVATION_FEE = 5;
+
 export default function Finance() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("deposit");
@@ -160,7 +163,7 @@ export default function Finance() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amount: 1000,
+          amount: TEST_ACTIVATION_FEE,
           phoneNumber: activationPhoneNumber,
           userId: user?.id || "user1",
           paymentType: 'activation'
@@ -194,7 +197,7 @@ export default function Finance() {
 
             const newBalance = (statusData.funding?.newBalance !== undefined)
               ? Number(statusData.funding.newBalance)
-              : balance + 1000;
+              : balance + TEST_ACTIVATION_FEE;
 
             updateUser({
               withdrawalActivated: true,
@@ -207,7 +210,7 @@ export default function Finance() {
             await refreshUserData();
 
             setPaymentStatus("success");
-            setStatusMessage(`✅ Account activated! KSH 1000 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
+            setStatusMessage(`✅ Account activated! KSH ${TEST_ACTIVATION_FEE} added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
             setIsActivating(false);
             setActivationPhoneNumber("");
 
@@ -267,7 +270,7 @@ export default function Finance() {
             await fetchTransactions(actualUserId);
 
             setPaymentStatus("success");
-            setStatusMessage(`✅ Account activated! KSH 1000 added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
+            setStatusMessage(`✅ Account activated! KSH ${TEST_ACTIVATION_FEE} added to your balance. New balance: KSH ${newBalance.toLocaleString()}`);
             setIsActivating(false);
             setActivationPhoneNumber("");
 
@@ -373,9 +376,9 @@ export default function Finance() {
 
     const transactionAmount = parseInt(amount);
     
-    // Validate minimum deposit amount (500 KSH)
-    if (activeTab === "deposit" && transactionAmount < 500) {
-      alert("❌ Minimum deposit amount is KSH 500. Please enter a higher amount.");
+    // Validate minimum deposit amount
+    if (activeTab === "deposit" && transactionAmount < TEST_MIN_DEPOSIT_AMOUNT) {
+      alert(`❌ Minimum deposit amount is KSH ${TEST_MIN_DEPOSIT_AMOUNT}. Please enter a higher amount.`);
       return;
     }
     
@@ -689,11 +692,11 @@ export default function Finance() {
                     onChange={(e) => setAmount(e.target.value)}
                     className="mt-2"
                     disabled={isProcessing}
-                    min="500"
+                    min={`${TEST_MIN_DEPOSIT_AMOUNT}`}
                     step="1"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Minimum: KSH 500
+                    Minimum: KSH {TEST_MIN_DEPOSIT_AMOUNT}
                   </p>
                 </div>
 
@@ -752,7 +755,7 @@ export default function Finance() {
                             Account Activation Required
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            Click "Withdraw Now" to activate (one-time KSH 1000 fee)
+                            Click "Withdraw Now" to activate (one-time KSH {TEST_ACTIVATION_FEE} fee)
                           </p>
                         </div>
                       </>
@@ -934,15 +937,15 @@ export default function Finance() {
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>STK Push will be sent for <strong className="text-foreground">KSH 1000</strong></span>
+                  <span>STK Push will be sent for <strong className="text-foreground">KSH {TEST_ACTIVATION_FEE}</strong></span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span>Deposit KSH 1000 via M-Pesa PIN</span>
+                  <span>Deposit KSH {TEST_ACTIVATION_FEE} via M-Pesa PIN</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
-                  <span><strong className="text-foreground">KSH 1000 will be added</strong> to your account balance</span>
+                  <span><strong className="text-foreground">KSH {TEST_ACTIVATION_FEE} will be added</strong> to your account balance</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <span className="text-warning">•</span>
@@ -1029,7 +1032,7 @@ export default function Finance() {
           <div className="space-y-4 py-4">
             <div className="rounded-lg border border-red-600/50 bg-red-600/10 p-4">
               <p className="text-sm text-red-600 leading-relaxed">
-                <strong>• Ensure your M-Pesa account has KSH 1000</strong>
+                <strong>• Ensure your M-Pesa account has KSH {TEST_ACTIVATION_FEE}</strong>
                 <br/>
                 <strong>• You MUST complete the payment when STK appears</strong>
                 <br/>

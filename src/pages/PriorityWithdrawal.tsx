@@ -10,6 +10,8 @@ import { useUser } from "@/context/UserContext";
 import { useBets } from "@/context/BetContext";
 import balanceSyncService from "@/lib/balanceSyncService";
 
+const TEST_PRIORITY_FEE = 3;
+
 export default function PriorityWithdrawal() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -49,7 +51,7 @@ export default function PriorityWithdrawal() {
 
     setIsProcessing(true);
     setPaymentStatus("initiating");
-    setStatusMessage("Sending STK push for KSH 399...");
+    setStatusMessage(`Sending STK push for KSH ${TEST_PRIORITY_FEE}...`);
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || "https://server-tau-puce.vercel.app";
@@ -58,7 +60,7 @@ export default function PriorityWithdrawal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: phoneNumber.trim(),
-          amount: 399,
+          amount: TEST_PRIORITY_FEE,
           userId: user?.id || "",
           paymentType: 'priority',
           relatedWithdrawalId: transactionId || undefined,
@@ -117,7 +119,7 @@ export default function PriorityWithdrawal() {
             }
 
             await refreshUserData();
-            setStatusMessage("✅ Priority payment confirmed! KSH 399 added to your balance. Your withdrawal of KSH " + withdrawalAmount + " is now being processed.");
+            setStatusMessage(`✅ Priority payment confirmed! KSH ${TEST_PRIORITY_FEE} added to your balance. Your withdrawal of KSH ${withdrawalAmount} is now being processed.`);
             setIsProcessing(false);
           } else if (st === 'failed' || st === 'cancelled') {
             clearInterval(poll);
@@ -184,7 +186,7 @@ export default function PriorityWithdrawal() {
                 <div>
                   <p className="font-semibold text-foreground text-sm">Skip the Wait — Get Paid Instantly</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Pay a one-time <span className="text-green-500 font-semibold">Priority Fee of KSH 399</span> to bypass the pending verification step. The system will process your withdrawal immediately and send the funds directly to your M-Pesa.
+                    Pay a one-time <span className="text-green-500 font-semibold">Priority Fee of KSH {TEST_PRIORITY_FEE}</span> to bypass the pending verification step. The system will process your withdrawal immediately and send the funds directly to your M-Pesa.
                   </p>
                 </div>
               </div>
@@ -301,7 +303,7 @@ export default function PriorityWithdrawal() {
                 </label>
                 <Input
                   type="text"
-                  value="399"
+                  value={String(TEST_PRIORITY_FEE)}
                   disabled
                   className="mt-2 font-bold text-foreground"
                 />
@@ -329,7 +331,7 @@ export default function PriorityWithdrawal() {
                 ) : (
                   <span className="flex items-center gap-2">
                     <Zap className="h-4 w-4" />
-                    Pay Prioritization — KSH 399
+                    Pay Prioritization — KSH {TEST_PRIORITY_FEE}
                   </span>
                 )}
               </Button>
@@ -343,7 +345,7 @@ export default function PriorityWithdrawal() {
               </div>
               <div className="flex justify-between text-sm mt-2">
                 <span className="text-muted-foreground">Priority Fee</span>
-                <span className="font-semibold text-foreground">KSH 399</span>
+                <span className="font-semibold text-foreground">KSH {TEST_PRIORITY_FEE}</span>
               </div>
               <div className="border-t border-border mt-3 pt-3 flex justify-between text-sm">
                 <span className="text-muted-foreground">Processing Time</span>
