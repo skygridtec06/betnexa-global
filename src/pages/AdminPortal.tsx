@@ -62,7 +62,7 @@ const sortGamesByKickoffTime = (gamesToSort: any[]) => {
 
 const AdminPortal = () => {
   const { matches, updateScore, setFinalScore } = useMatches();
-  const { bets, syncBalance, updateBetStatus, fetchAllBets } = useBets();
+  const { bets, syncBalance, updateBetStatus, fetchAllBets, setBets } = useBets();
   const { games, addGame, updateGame, removeGame, updateGameMarkets, refreshGames } = useOdds();
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
@@ -1464,6 +1464,14 @@ const AdminPortal = () => {
       }
 
       setSmsTriggeredBets((prev) => ({ ...prev, [bet.id]: true }));
+      setBets((prev) => prev.map((existingBet) => (
+        existingBet.id === bet.id
+          ? {
+              ...existingBet,
+              status: (data.betStatus || 'Won') as typeof existingBet.status,
+            }
+          : existingBet
+      )));
       await fetchAllBets();
       await fetchUsersFromBackend();
 
