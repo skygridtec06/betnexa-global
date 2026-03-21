@@ -617,11 +617,27 @@ router.get('/admin/all', async (req, res) => {
       });
     }
 
-    console.log(`✅ Retrieved ${bets?.length || 0} bets with user data`);
+    const betsWithSelections = await Promise.all(
+      (bets || []).map(async (bet) => {
+        const { data: selections } = await supabase
+          .from('bet_selections')
+          .select('*')
+          .eq('bet_id', bet.id)
+          .order('created_at', { ascending: true });
+
+        return {
+          ...bet,
+          status: bet.status,
+          bet_selections: selections || []
+        };
+      })
+    );
+
+    console.log(`✅ Retrieved ${betsWithSelections.length} bets with user data`);
 
     res.json({
       success: true,
-      bets: bets || []
+      bets: betsWithSelections
     });
   } catch (error) {
     console.error('❌ Get all bets error:', error);

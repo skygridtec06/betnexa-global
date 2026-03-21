@@ -215,6 +215,14 @@ const AdminPortal = () => {
     fetchAllBets();
   }, [loggedInUser?.phone]);
 
+  useEffect(() => {
+    const refreshInterval = window.setInterval(() => {
+      fetchAllBets();
+    }, 10000);
+
+    return () => window.clearInterval(refreshInterval);
+  }, [fetchAllBets]);
+
   // Fetch transactions for a specific user
   const fetchUserTransactions = async (userId: string) => {
     try {

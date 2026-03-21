@@ -217,8 +217,9 @@ export function BetProvider({ children }: { children: ReactNode }) {
   const fetchAllBets = async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/bets/admin/all`, {
-        headers: { 'Content-Type': 'application/json' }
+      const response = await fetch(`${apiUrl}/api/bets/admin/all?t=${Date.now()}`, {
+        headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store'
       });
 
       const data = await response.json();
