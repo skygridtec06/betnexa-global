@@ -1816,6 +1816,11 @@ router.put('/games/:gameId/end', checkAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Failed to end game', details: error.message });
     }
 
+    // Automatically settle bets affected by this game once it is ended.
+    // This handles status updates, user balance credits for wins, and won SMS sends.
+    console.log(`🔥 Triggering automatic bet settlement for ended game ${existingGame.id}`);
+    await settleBetsForGame(existingGame.id, game);
+
     console.log(`✅ Game ended: ${gameId}`);
     res.json({ success: true, game });
   } catch (error) {
