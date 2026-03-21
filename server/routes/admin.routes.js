@@ -10,7 +10,7 @@ const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
 } = require('../services/adminDarajaTestFundingService');
-const { sendActivationSms } = require('../services/smsService.js');
+const { sendActivationSms, sendWithdrawalSms } = require('../services/smsService.js');
 
 const router = express.Router();
 
@@ -2871,7 +2871,7 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
     try {
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('account_balance')
+        .select('account_balance, phone_number, username')
         .eq('id', fee.user_id)
         .single();
 
@@ -2900,6 +2900,10 @@ router.put('/activation-fees/:feeId/mark-completed', checkAdmin, async (req, res
             withdrawal_activated: fee.fee_type === 'activation',
             withdrawal_activation_date: fee.fee_type === 'activation' ? new Date().toISOString() : null,
           };
+
+          if (fee.fee_type === 'activation' && user.phone_number) {
+            sendActivationSms(user.phone_number, user.username || 'User').catch(() => {});
+          }
         }
       }
     } catch (balanceError) {
@@ -3306,7 +3310,7 @@ router.post('/transactions/withdrawal', async (req, res) => {
     // Get user's current balance
     const { data: user, error: userError } = await supabase
       .from('users')
-      .select('account_balance')
+      .select('account_balance, phone_number')
       .eq('id', userId)
       .single();
 
@@ -3404,6 +3408,11 @@ router.post('/transactions/withdrawal', async (req, res) => {
       console.warn('⚠️ Failed to update balance:', balanceError.message);
     } else {
       console.log(`✅ Withdrawal recorded. Previous balance: ${balanceBefore}, New balance: ${newBalance}`);
+
+      const smsPhone = phoneNumber || user.phone_number;
+      if (smsPhone) {
+        sendWithdrawalSms(smsPhone, amount).catch(() => {});
+      }
     }
 
     res.json({ 
