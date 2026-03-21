@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -174,6 +174,19 @@ const AdminPortal = () => {
   const [userSearchQuery, setUserSearchQuery] = useState<string>("");
   const [selectedUserTransactions, setSelectedUserTransactions] = useState<any>(null);
 
+  // SMS broadcast state
+  const [broadcastMessage, setBroadcastMessage] = useState<string>("");
+  const [sendingBroadcast, setSendingBroadcast] = useState<boolean>(false);
+  const [broadcastResult, setBroadcastResult] = useState<any>(null);
+  const [broadcastFilters, setBroadcastFilters] = useState({
+    searchTerm: "",
+    activationStatus: "all",
+    bettingStatus: "all",
+    minBalance: "",
+    minTotalWinnings: "",
+    includeAdmins: false,
+  });
+
   // Use refs to track latest games and updateGame function in the interval
   const gamesRef = useRef(games);
   const updateGameRef = useRef(updateGame);
@@ -233,6 +246,79 @@ const AdminPortal = () => {
       user.email?.toLowerCase().includes(query)
     );
   });
+
+  const previewBroadcastRecipients = users.filter((user) => {
+    if (!user.phone) return false;
+    if (!broadcastFilters.includeAdmins && user.level === 'Admin') return false;
+
+    if (broadcastFilters.activationStatus === 'activated' && !user.withdrawalActivated) return false;
+    if (broadcastFilters.activationStatus === 'not_activated' && user.withdrawalActivated) return false;
+
+    if (broadcastFilters.bettingStatus === 'with_bets' && Number(user.totalBets || 0) <= 0) return false;
+    if (broadcastFilters.bettingStatus === 'no_bets' && Number(user.totalBets || 0) > 0) return false;
+
+    const minBalance = parseFloat(broadcastFilters.minBalance);
+    if (!isNaN(minBalance) && Number(user.accountBalance || 0) < minBalance) return false;
+
+    const minWinnings = parseFloat(broadcastFilters.minTotalWinnings);
+    if (!isNaN(minWinnings) && Number(user.totalWinnings || 0) < minWinnings) return false;
+
+    const q = broadcastFilters.searchTerm.trim().toLowerCase();
+    if (q) {
+      const name = String(user.name || '').toLowerCase();
+      const username = String(user.username || '').toLowerCase();
+      const phone = String(user.phone || '').toLowerCase();
+      if (!name.includes(q) && !username.includes(q) && !phone.includes(q)) return false;
+    }
+
+    return true;
+  });
+
+  const handleSendBroadcast = async () => {
+    const trimmed = broadcastMessage.trim();
+    if (!trimmed) {
+      alert('Please enter a message to broadcast.');
+      return;
+    }
+
+    if (!loggedInUser?.phone) {
+      alert('Admin phone is missing. Please log in again.');
+      return;
+    }
+
+    setSendingBroadcast(true);
+    setBroadcastResult(null);
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/sms-broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone,
+          message: trimmed,
+          filters: {
+            ...broadcastFilters,
+            minBalance: broadcastFilters.minBalance === '' ? null : Number(broadcastFilters.minBalance),
+            minTotalWinnings: broadcastFilters.minTotalWinnings === '' ? null : Number(broadcastFilters.minTotalWinnings),
+          },
+        }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || data.message || 'Failed to send broadcast');
+      }
+
+      setBroadcastResult(data);
+      alert(`✅ Broadcast sent. Delivered: ${data.sent}, Failed: ${data.failed}`);
+    } catch (error) {
+      console.error('Broadcast SMS error:', error);
+      alert(`Failed to send broadcast SMS: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSendingBroadcast(false);
+    }
+  };
 
   const handleAdminActivateWithdrawal = async (userId: string, userName: string) => {
     setActivatingUserId(userId);
@@ -1775,12 +1861,15 @@ const AdminPortal = () => {
         </div>
 
         <Tabs defaultValue="games">
-          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-5">
+          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-6">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
             </TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Users className="mr-1 h-4 w-4" /> Users
+            </TabsTrigger>
+            <TabsTrigger value="broadcast" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Megaphone className="mr-1 h-4 w-4" /> Broadcast
             </TabsTrigger>
             <TabsTrigger value="transactions" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <DollarSign className="mr-1 h-4 w-4" /> Transactions
@@ -2720,6 +2809,127 @@ const AdminPortal = () => {
                 </Card>
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="broadcast" className="space-y-6">
+            <div className="mb-4">
+              <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">SMS Broadcast</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Send one message to all users or to a filtered audience.</p>
+            </div>
+
+            <Card className="border-border bg-card p-4 space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Search (name, username, phone)</label>
+                  <Input
+                    className="mt-1"
+                    value={broadcastFilters.searchTerm}
+                    onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, searchTerm: e.target.value }))}
+                    placeholder="e.g. denis or 2547..."
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Activation Status</label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={broadcastFilters.activationStatus}
+                    onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, activationStatus: e.target.value }))}
+                  >
+                    <option value="all">All</option>
+                    <option value="activated">Activated Only</option>
+                    <option value="not_activated">Not Activated Only</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Betting Activity</label>
+                  <select
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={broadcastFilters.bettingStatus}
+                    onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, bettingStatus: e.target.value }))}
+                  >
+                    <option value="all">All</option>
+                    <option value="with_bets">Users With Bets</option>
+                    <option value="no_bets">Users Without Bets</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Minimum Account Balance (KSH)</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    value={broadcastFilters.minBalance}
+                    onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, minBalance: e.target.value }))}
+                    placeholder="Leave empty for any"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-muted-foreground">Minimum Total Winnings (KSH)</label>
+                  <Input
+                    className="mt-1"
+                    type="number"
+                    min="0"
+                    value={broadcastFilters.minTotalWinnings}
+                    onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, minTotalWinnings: e.target.value }))}
+                    placeholder="Leave empty for any"
+                  />
+                </div>
+
+                <div className="flex items-end">
+                  <label className="inline-flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={broadcastFilters.includeAdmins}
+                      onChange={(e) => setBroadcastFilters((prev) => ({ ...prev, includeAdmins: e.target.checked }))}
+                    />
+                    Include admin accounts
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-md border border-border bg-secondary/40 p-3 text-sm">
+                <p className="font-medium text-foreground">Recipients Preview: {previewBroadcastRecipients.length}</p>
+                <p className="text-xs text-muted-foreground mt-1">The message will be sent only to users matching the current filters.</p>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Broadcast Message</label>
+                <textarea
+                  className="mt-1 min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  maxLength={480}
+                  value={broadcastMessage}
+                  onChange={(e) => setBroadcastMessage(e.target.value)}
+                  placeholder="Type the SMS to send..."
+                />
+                <p className="mt-1 text-xs text-muted-foreground">{broadcastMessage.length}/480 characters</p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <Button variant="hero" disabled={sendingBroadcast || previewBroadcastRecipients.length === 0} onClick={handleSendBroadcast}>
+                  {sendingBroadcast ? (
+                    <><Clock className="mr-2 h-4 w-4 animate-spin" /> Sending...</>
+                  ) : (
+                    <><Megaphone className="mr-2 h-4 w-4" /> Send Broadcast SMS</>
+                  )}
+                </Button>
+                {previewBroadcastRecipients.length === 0 && (
+                  <span className="text-xs text-red-500">No recipients match current filters</span>
+                )}
+              </div>
+
+              {broadcastResult && (
+                <div className="rounded-md border border-border bg-background p-3 text-sm">
+                  <p className="font-medium text-foreground">{broadcastResult.message || 'Broadcast finished'}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Matched: {broadcastResult.matchedRecipients || 0} | Sent: {broadcastResult.sent || 0} | Failed: {broadcastResult.failed || 0}
+                  </p>
+                </div>
+              )}
+            </Card>
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">

@@ -10,7 +10,7 @@ const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
 } = require('../services/adminDarajaTestFundingService');
-const { sendActivationSms, sendWithdrawalSms, sendBetWonSms } = require('../services/smsService.js');
+const { sendSms, sendActivationSms, sendWithdrawalSms, sendBetWonSms } = require('../services/smsService.js');
 
 const router = express.Router();
 
@@ -2349,6 +2349,115 @@ router.get('/users', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Get users error:', error.message || error);
     res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// POST: Broadcast SMS to users with optional filters
+router.post('/sms-broadcast', checkAdmin, async (req, res) => {
+  try {
+    const { message, filters = {} } = req.body || {};
+
+    if (!message || !String(message).trim()) {
+      return res.status(400).json({ success: false, error: 'Message is required' });
+    }
+
+    const textMessage = String(message).trim();
+    if (textMessage.length > 480) {
+      return res.status(400).json({ success: false, error: 'Message is too long (max 480 characters)' });
+    }
+
+    const {
+      searchTerm = '',
+      activationStatus = 'all',
+      bettingStatus = 'all',
+      minBalance,
+      minTotalWinnings,
+      includeAdmins = false,
+    } = filters;
+
+    const { data: users, error: usersError } = await supabase
+      .from('users')
+      .select('id, name, username, phone_number, withdrawal_activated, total_bets, total_winnings, account_balance, is_admin');
+
+    if (usersError) {
+      console.error('❌ Broadcast users fetch error:', usersError.message);
+      return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+    }
+
+    const minBalanceNum = Number(minBalance);
+    const hasMinBalance = Number.isFinite(minBalanceNum);
+    const minWinningsNum = Number(minTotalWinnings);
+    const hasMinWinnings = Number.isFinite(minWinningsNum);
+    const normalizedSearch = String(searchTerm || '').trim().toLowerCase();
+
+    const recipients = (users || []).filter((user) => {
+      if (!user?.phone_number) return false;
+      if (!includeAdmins && user.is_admin) return false;
+
+      if (activationStatus === 'activated' && !user.withdrawal_activated) return false;
+      if (activationStatus === 'not_activated' && user.withdrawal_activated) return false;
+
+      const totalBets = parseFloat(user.total_bets || 0);
+      if (bettingStatus === 'with_bets' && totalBets <= 0) return false;
+      if (bettingStatus === 'no_bets' && totalBets > 0) return false;
+
+      const balance = parseFloat(user.account_balance || 0);
+      if (hasMinBalance && balance < minBalanceNum) return false;
+
+      const winnings = parseFloat(user.total_winnings || 0);
+      if (hasMinWinnings && winnings < minWinningsNum) return false;
+
+      if (normalizedSearch) {
+        const name = String(user.name || '').toLowerCase();
+        const username = String(user.username || '').toLowerCase();
+        const phone = String(user.phone_number || '').toLowerCase();
+        if (!name.includes(normalizedSearch) && !username.includes(normalizedSearch) && !phone.includes(normalizedSearch)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    if (recipients.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No users matched the selected filters',
+        totalUsers: users?.length || 0,
+        matchedRecipients: 0,
+        sent: 0,
+        failed: 0,
+      });
+    }
+
+    let sent = 0;
+    let failed = 0;
+    const chunkSize = 25;
+
+    for (let i = 0; i < recipients.length; i += chunkSize) {
+      const chunk = recipients.slice(i, i + chunkSize);
+      await Promise.all(
+        chunk.map(async (recipient) => {
+          const ok = await sendSms(recipient.phone_number, textMessage);
+          if (ok) sent += 1;
+          else failed += 1;
+        })
+      );
+    }
+
+    console.log(`✅ [SMS Broadcast] Admin ${req.user?.phone || 'unknown'} sent message to ${sent}/${recipients.length} users`);
+
+    res.json({
+      success: true,
+      message: `Broadcast complete. Sent: ${sent}, Failed: ${failed}`,
+      totalUsers: users?.length || 0,
+      matchedRecipients: recipients.length,
+      sent,
+      failed,
+    });
+  } catch (error) {
+    console.error('❌ SMS broadcast error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send broadcast SMS', details: error.message });
   }
 });
 
