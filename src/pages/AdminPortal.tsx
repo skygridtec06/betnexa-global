@@ -2728,10 +2728,10 @@ const AdminPortal = () => {
                             </div>
                             <div>
                               <p className="font-medium text-foreground">
-                                {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - Deposit
+                                {transaction.username || transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - Deposit
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}
+                                {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.username && transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
                               </p>
                             </div>
                           </div>
@@ -2924,10 +2924,10 @@ const AdminPortal = () => {
                       </div>
                       <div>
                         <p className="font-medium text-foreground">
-                          {transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
+                          {transaction.username || transaction.phone_number || transaction.user_id?.substring(0, 8) || 'User'} - {transaction.type === "withdrawal" ? "Withdrawal" : transaction.type}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}
+                          {formatTransactionDateInEAT(transaction.created_at)} via {transaction.method || 'M-Pesa'}{transaction.username && transaction.phone_number ? ` • ${transaction.phone_number}` : ''}
                         </p>
                       </div>
                     </div>

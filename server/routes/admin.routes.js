@@ -2559,6 +2559,34 @@ router.get('/transactions', checkAdmin, async (req, res) => {
 
     console.log(`✅ Retrieved ${allTransactions.length} total transactions`);
 
+    // Enrich transactions with account username for admin cards
+    try {
+      const userIds = Array.from(new Set(
+        allTransactions
+          .map((tx) => tx.user_id)
+          .filter((id) => !!id)
+      ));
+
+      if (userIds.length > 0) {
+        const { data: users, error: usersError } = await supabase
+          .from('users')
+          .select('id, username')
+          .in('id', userIds);
+
+        if (usersError) {
+          console.warn('⚠️ Could not enrich transaction usernames:', usersError.message);
+        } else {
+          const usernameById = new Map((users || []).map((u) => [u.id, u.username]));
+          allTransactions = allTransactions.map((tx) => ({
+            ...tx,
+            username: tx.username || (tx.user_id ? usernameById.get(tx.user_id) || null : null)
+          }));
+        }
+      }
+    } catch (enrichErr) {
+      console.warn('⚠️ Username enrichment failed:', enrichErr.message);
+    }
+
     // Also fetch activation_fees table
     let activationFees = [];
     try {
