@@ -4840,4 +4840,124 @@ router.get('/bets/credited', checkAdmin, async (req, res) => {
   }
 });
 
+// 📩 POST: Send a bet-details SMS for a specific bet
+router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
+  try {
+    const { betId } = req.params;
+
+    if (!betId) {
+      return res.status(400).json({ success: false, error: 'betId is required' });
+    }
+
+    const { data: bet, error: betError } = await supabase
+      .from('bets')
+      .select('id, bet_id, user_id, stake, potential_win, total_odds, status, created_at')
+      .eq('id', betId)
+      .single();
+
+    if (betError || !bet) {
+      return res.status(404).json({ success: false, error: 'Bet not found' });
+    }
+
+    const { data: selections, error: selectionsError } = await supabase
+      .from('bet_selections')
+      .select('home_team, away_team, market_type, market_key, odds')
+      .eq('bet_id', bet.id)
+      .order('created_at', { ascending: true });
+
+    if (selectionsError) {
+      return res.status(500).json({ success: false, error: 'Failed to load bet selections', details: selectionsError.message });
+    }
+
+    let phoneNumber = null;
+    let username = 'Customer';
+
+    if (bet.user_id) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('phone_number, username')
+        .eq('id', bet.user_id)
+        .maybeSingle();
+      phoneNumber = userRow?.phone_number || null;
+      username = userRow?.username || username;
+    }
+
+    if (!phoneNumber && bet.user_id) {
+      const { data: txWithPhone } = await supabase
+        .from('transactions')
+        .select('phone_number')
+        .eq('user_id', bet.user_id)
+        .not('phone_number', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      phoneNumber = txWithPhone?.phone_number || null;
+    }
+
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, error: 'No phone number found for this bet user' });
+    }
+
+    const stake = Number(bet.stake || 0);
+    const potentialWin = Number(bet.potential_win || 0);
+    const totalOdds = Number(bet.total_odds || 0);
+    const betRef = bet.bet_id || bet.id;
+    const status = String(bet.status || 'Open');
+
+    const intro = status === 'Won'
+      ? `Congratulations ${username}! Your bet was WON.`
+      : status === 'Lost'
+        ? `Hi ${username}, your bet was settled as LOST.`
+        : `Hi ${username}, here are your bet details.`;
+
+    const maxLines = 5;
+    const selectionLines = (selections || []).slice(0, maxLines).map((sel, idx) => {
+      const fixture = `${sel.home_team || 'Home'} vs ${sel.away_team || 'Away'}`;
+      const market = `${sel.market_type || ''} ${sel.market_key || ''}`.trim();
+      const odds = Number(sel.odds || 0).toFixed(2);
+      return `${idx + 1}. ${fixture} - ${market} @ ${odds}`;
+    });
+
+    const extraCount = Math.max(0, (selections || []).length - maxLines);
+    if (extraCount > 0) {
+      selectionLines.push(`+${extraCount} more selection(s)`);
+    }
+
+    const placedDate = bet.created_at ? new Date(bet.created_at).toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' }) : 'N/A';
+    const smsMessage = [
+      intro,
+      `Bet ID: ${betRef}`,
+      `Status: ${status}`,
+      `Stake: KSH ${stake.toFixed(2)}`,
+      `Potential Win: KSH ${potentialWin.toFixed(2)}`,
+      `Total Odds: ${totalOdds.toFixed(2)}`,
+      `Placed: ${placedDate}`,
+      selectionLines.length > 0 ? `Selections:\n${selectionLines.join('\n')}` : 'Selections: N/A',
+      'BETNEXA'
+    ].join('\n');
+
+    const sent = await sendSms(phoneNumber, smsMessage);
+
+    if (!sent) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to send SMS',
+        phoneNumber,
+        draftedMessage: smsMessage,
+      });
+    }
+
+    return res.json({
+      success: true,
+      phoneNumber,
+      betId: betRef,
+      draftedMessage: smsMessage,
+      sent: true,
+    });
+  } catch (error) {
+    console.error('Send bet SMS error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

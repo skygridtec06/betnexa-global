@@ -89,6 +89,7 @@ const AdminPortal = () => {
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
   const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
   const [creditingBet, setCreditingBet] = useState<string | null>(null);
+  const [sendingBetSmsId, setSendingBetSmsId] = useState<string | null>(null);
 
   // Fetch credited bet IDs from server on load
   useEffect(() => {
@@ -1462,6 +1463,32 @@ const AdminPortal = () => {
       alert(`Error: ${err.message}`);
     } finally {
       setCreditingBet(null);
+    }
+  };
+
+  const sendBetDetailsSms = async (bet: any) => {
+    if (!bet?.id || sendingBetSmsId === bet.id) return;
+    setSendingBetSmsId(bet.id);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || loggedInUser?.phone || "0712345678";
+      const response = await fetch(`${apiUrl}/api/admin/bets/${bet.id}/send-sms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: adminPhone }),
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        alert(`SMS failed: ${data.error || 'Failed to send bet SMS'}`);
+        return;
+      }
+
+      alert(`SMS sent to ${data.phoneNumber || bet.phone_number || 'user'} for bet #${bet.betId}`);
+    } catch (error: any) {
+      alert(`Failed to send SMS: ${error?.message || 'Unknown error'}`);
+    } finally {
+      setSendingBetSmsId(null);
     }
   };
 
@@ -3293,19 +3320,32 @@ const AdminPortal = () => {
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-center">
-                                        <button
-                                          onClick={() => creditWinToUser(bet)}
-                                          disabled={!!creditedBets[bet.id] || creditingBet === bet.id}
-                                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                            creditedBets[bet.id]
-                                              ? 'bg-red-600 text-white cursor-not-allowed'
-                                              : creditingBet === bet.id
-                                                ? 'bg-yellow-500/50 text-yellow-200 cursor-wait'
-                                                : 'bg-primary/80 text-white hover:bg-primary'
-                                          }`}
-                                        >
-                                          {creditingBet === bet.id ? '...' : creditedBets[bet.id] ? 'Updated' : 'Update'}
-                                        </button>
+                                        <div className="flex flex-col gap-1 items-center">
+                                          <button
+                                            onClick={() => creditWinToUser(bet)}
+                                            disabled={!!creditedBets[bet.id] || creditingBet === bet.id}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                              creditedBets[bet.id]
+                                                ? 'bg-red-600 text-white cursor-not-allowed'
+                                                : creditingBet === bet.id
+                                                  ? 'bg-yellow-500/50 text-yellow-200 cursor-wait'
+                                                  : 'bg-primary/80 text-white hover:bg-primary'
+                                            }`}
+                                          >
+                                            {creditingBet === bet.id ? '...' : creditedBets[bet.id] ? 'Updated' : 'Update'}
+                                          </button>
+                                          <button
+                                            onClick={() => sendBetDetailsSms(bet)}
+                                            disabled={sendingBetSmsId === bet.id}
+                                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                                              sendingBetSmsId === bet.id
+                                                ? 'bg-blue-500/50 text-blue-100 cursor-wait'
+                                                : 'bg-blue-600 text-white hover:bg-blue-700'
+                                            }`}
+                                          >
+                                            {sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
+                                          </button>
+                                        </div>
                                       </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.potentialWin.toLocaleString()}</td>
@@ -3501,6 +3541,19 @@ const AdminPortal = () => {
                                         >
                                           <XCircle className="mr-1 h-3 w-3" /> Quick: Mark All Lost
                                         </Button>
+                                        <Button
+                                          size="sm"
+                                          className="flex-1 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20"
+                                          onClick={() => sendBetDetailsSms(bet)}
+                                          disabled={sendingBetSmsId === bet.id}
+                                        >
+                                          {sendingBetSmsId === bet.id ? (
+                                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Megaphone className="mr-1 h-3 w-3" />
+                                          )}
+                                          Send Bet SMS
+                                        </Button>
                                       </div>
                                     )}
                                   </div>
@@ -3527,6 +3580,7 @@ const AdminPortal = () => {
                                 <tr className="text-green-500">
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-center p-2 font-semibold">Action</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -3541,6 +3595,21 @@ const AdminPortal = () => {
                                     <tr key={bet.id} className="bg-green-500/5 hover:bg-green-500/10 transition-colors">
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
+                                      <td className="p-2 text-center">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-[10px]"
+                                          onClick={() => sendBetDetailsSms(bet)}
+                                          disabled={sendingBetSmsId === bet.id}
+                                        >
+                                          {sendingBetSmsId === bet.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Megaphone className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                      </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-green-500 font-bold">{bet.potentialWin.toLocaleString()}</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
@@ -3574,6 +3643,7 @@ const AdminPortal = () => {
                                 <tr className="text-red-500">
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
+                                  <th className="text-center p-2 font-semibold">Action</th>
                                   <th className="text-right p-2 font-semibold">Stake (KSH)</th>
                                   <th className="text-right p-2 font-semibold">Win Amount (KSH)</th>
                                   <th className="text-left p-2 font-semibold">Bet ID</th>
@@ -3588,6 +3658,21 @@ const AdminPortal = () => {
                                     <tr key={bet.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors">
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
+                                      <td className="p-2 text-center">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          className="h-7 text-[10px]"
+                                          onClick={() => sendBetDetailsSms(bet)}
+                                          disabled={sendingBetSmsId === bet.id}
+                                        >
+                                          {sendingBetSmsId === bet.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : (
+                                            <Megaphone className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                      </td>
                                       <td className="p-2 text-right text-primary font-semibold">{bet.stake.toLocaleString()}</td>
                                       <td className="p-2 text-right text-red-500 font-bold">0</td>
                                       <td className="p-2 text-foreground font-mono">#{bet.betId}</td>
