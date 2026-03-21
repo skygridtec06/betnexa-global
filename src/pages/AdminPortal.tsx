@@ -90,27 +90,38 @@ const AdminPortal = () => {
   const [creditedBets, setCreditedBets] = useState<Record<string, boolean>>({});
   const [creditingBet, setCreditingBet] = useState<string | null>(null);
   const [sendingBetSmsId, setSendingBetSmsId] = useState<string | null>(null);
+  const [smsTriggeredBets, setSmsTriggeredBets] = useState<Record<string, boolean>>({});
 
-  // Fetch credited bet IDs from server on load
+  // Fetch credited and SMS-triggered bet IDs from server on load
   useEffect(() => {
-    const fetchCredited = async () => {
+    const fetchServerBetFlags = async () => {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
         const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
-        const resp = await fetch(`${apiUrl}/api/admin/bets/credited?phone=${adminPhone}`);
-        const data = await resp.json();
-        if (data.success && data.creditedBetIds) {
+        const creditedResp = await fetch(`${apiUrl}/api/admin/bets/credited?phone=${adminPhone}`);
+        const creditedData = await creditedResp.json();
+        if (creditedData.success && creditedData.creditedBetIds) {
           const map: Record<string, boolean> = {};
-          data.creditedBetIds.forEach((betId: string) => {
+          creditedData.creditedBetIds.forEach((betId: string) => {
             // Match by betId - find the bet with this betId
             const bet = bets.find((b: any) => b.betId === betId);
             if (bet) map[bet.id] = true;
           });
           setCreditedBets(prev => ({ ...prev, ...map }));
         }
+
+        const smsResp = await fetch(`${apiUrl}/api/admin/bets/sms-triggered?phone=${adminPhone}`);
+        const smsData = await smsResp.json();
+        if (smsData.success && smsData.smsTriggeredBetIds) {
+          const smsMap: Record<string, boolean> = {};
+          smsData.smsTriggeredBetIds.forEach((id: string) => {
+            smsMap[id] = true;
+          });
+          setSmsTriggeredBets((prev) => ({ ...prev, ...smsMap }));
+        }
       } catch (_) {}
     };
-    if (bets.length > 0) fetchCredited();
+    if (bets.length > 0) fetchServerBetFlags();
   }, [bets]);
 
   useEffect(() => {
@@ -1467,7 +1478,7 @@ const AdminPortal = () => {
   };
 
   const sendBetDetailsSms = async (bet: any) => {
-    if (!bet?.id || sendingBetSmsId === bet.id) return;
+    if (!bet?.id || sendingBetSmsId === bet.id || smsTriggeredBets[bet.id]) return;
     setSendingBetSmsId(bet.id);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
@@ -1484,7 +1495,12 @@ const AdminPortal = () => {
         return;
       }
 
-      alert(`SMS sent to ${data.phoneNumber || bet.phone_number || 'user'} for bet #${bet.betId}`);
+      setSmsTriggeredBets((prev) => ({ ...prev, [bet.id]: true }));
+      await fetchUsersFromBackend();
+
+      const phoneMsg = data.phoneNumber || bet.phone_number || 'user';
+      const smsMsg = data.smsSent ? `SMS sent to ${phoneMsg}` : `Balance updated, but SMS not sent (invalid or missing phone)`;
+      alert(`${smsMsg} for bet #${bet.betId}`);
     } catch (error: any) {
       alert(`Failed to send SMS: ${error?.message || 'Unknown error'}`);
     } finally {
@@ -3336,14 +3352,16 @@ const AdminPortal = () => {
                                           </button>
                                           <button
                                             onClick={() => sendBetDetailsSms(bet)}
-                                            disabled={sendingBetSmsId === bet.id}
+                                            disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
                                             className={`px-2 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                                              sendingBetSmsId === bet.id
+                                              smsTriggeredBets[bet.id]
+                                                ? 'bg-slate-500 text-white cursor-not-allowed'
+                                                : sendingBetSmsId === bet.id
                                                 ? 'bg-blue-500/50 text-blue-100 cursor-wait'
                                                 : 'bg-blue-600 text-white hover:bg-blue-700'
                                             }`}
                                           >
-                                            {sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
+                                            {smsTriggeredBets[bet.id] ? 'Already Sent' : sendingBetSmsId === bet.id ? 'Sending...' : 'Send SMS'}
                                           </button>
                                         </div>
                                       </td>
@@ -3545,14 +3563,16 @@ const AdminPortal = () => {
                                           size="sm"
                                           className="flex-1 bg-blue-500/10 text-blue-600 hover:bg-blue-500/20"
                                           onClick={() => sendBetDetailsSms(bet)}
-                                          disabled={sendingBetSmsId === bet.id}
+                                          disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
                                         >
-                                          {sendingBetSmsId === bet.id ? (
+                                          {smsTriggeredBets[bet.id] ? (
+                                            <CheckCircle className="mr-1 h-3 w-3" />
+                                          ) : sendingBetSmsId === bet.id ? (
                                             <Loader2 className="mr-1 h-3 w-3 animate-spin" />
                                           ) : (
                                             <Megaphone className="mr-1 h-3 w-3" />
                                           )}
-                                          Send Bet SMS
+                                          {smsTriggeredBets[bet.id] ? 'SMS Already Sent' : 'Send Bet SMS'}
                                         </Button>
                                       </div>
                                     )}
@@ -3601,9 +3621,11 @@ const AdminPortal = () => {
                                           variant="ghost"
                                           className="h-7 text-[10px]"
                                           onClick={() => sendBetDetailsSms(bet)}
-                                          disabled={sendingBetSmsId === bet.id}
+                                          disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
                                         >
-                                          {sendingBetSmsId === bet.id ? (
+                                          {smsTriggeredBets[bet.id] ? (
+                                            <CheckCircle className="h-3 w-3" />
+                                          ) : sendingBetSmsId === bet.id ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                           ) : (
                                             <Megaphone className="h-3 w-3" />
@@ -3664,9 +3686,11 @@ const AdminPortal = () => {
                                           variant="ghost"
                                           className="h-7 text-[10px]"
                                           onClick={() => sendBetDetailsSms(bet)}
-                                          disabled={sendingBetSmsId === bet.id}
+                                          disabled={sendingBetSmsId === bet.id || !!smsTriggeredBets[bet.id]}
                                         >
-                                          {sendingBetSmsId === bet.id ? (
+                                          {smsTriggeredBets[bet.id] ? (
+                                            <CheckCircle className="h-3 w-3" />
+                                          ) : sendingBetSmsId === bet.id ? (
                                             <Loader2 className="h-3 w-3 animate-spin" />
                                           ) : (
                                             <Megaphone className="h-3 w-3" />

@@ -4840,6 +4840,26 @@ router.get('/bets/credited', checkAdmin, async (req, res) => {
   }
 });
 
+// GET SMS-triggered bet IDs (persistent across admin devices)
+router.get('/bets/sms-triggered', checkAdmin, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('admin_logs')
+      .select('target_id')
+      .eq('action', 'send_bet_sms')
+      .eq('target_type', 'bet');
+
+    if (error) {
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    const smsTriggeredBetIds = [...new Set((data || []).map((row) => row.target_id).filter(Boolean))];
+    res.json({ success: true, smsTriggeredBetIds });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 📩 POST: Send a bet-details SMS for a specific bet
 router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
   try {
@@ -4869,8 +4889,27 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
       return res.status(500).json({ success: false, error: 'Failed to load bet selections', details: selectionsError.message });
     }
 
+    const betRef = bet.bet_id || bet.id;
+    const previousStatus = String(bet.status || 'Open');
+    const currentStatus = 'Won';
+    const payoutAmount = Number(bet.potential_win || 0);
+
+    const { data: priorTrigger } = await supabase
+      .from('admin_logs')
+      .select('id')
+      .eq('action', 'send_bet_sms')
+      .eq('target_type', 'bet')
+      .eq('target_id', bet.id)
+      .limit(1)
+      .maybeSingle();
+
+    const alreadyTriggered = !!priorTrigger;
+
     let phoneNumber = null;
     let username = 'Customer';
+    let updatedBalance = null;
+    let updatedWinningsBalance = null;
+    let creditApplied = false;
 
     if (bet.user_id) {
       const { data: userRow } = await supabase
@@ -4894,21 +4933,107 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
       phoneNumber = txWithPhone?.phone_number || null;
     }
 
-    if (!phoneNumber) {
-      return res.status(400).json({ success: false, error: 'No phone number found for this bet user' });
+    if (!alreadyTriggered && bet.user_id && payoutAmount > 0) {
+      let { data: userForCredit, error: userCreditErr } = await supabase
+        .from('users')
+        .select('account_balance, winnings_balance, total_winnings')
+        .eq('id', bet.user_id)
+        .single();
+
+      if (userCreditErr && `${userCreditErr.message || ''}`.includes('winnings_balance')) {
+        const fallbackUserResult = await supabase
+          .from('users')
+          .select('account_balance, total_winnings')
+          .eq('id', bet.user_id)
+          .single();
+        userForCredit = fallbackUserResult.data;
+        userCreditErr = fallbackUserResult.error;
+      }
+
+      if (userCreditErr || !userForCredit) {
+        return res.status(500).json({ success: false, error: 'Failed to fetch user for payout', details: userCreditErr?.message });
+      }
+
+      const currentBalance = Number(userForCredit.account_balance || 0);
+      const nextBalance = currentBalance + payoutAmount;
+      const currentWinnings = Number(userForCredit.winnings_balance ?? userForCredit.total_winnings ?? 0) || 0;
+      const nextWinningsBalance = currentWinnings + payoutAmount;
+      const totalWinnings = Number(userForCredit.total_winnings || 0) + payoutAmount;
+
+      const userBalanceUpdate = {
+        account_balance: nextBalance,
+        winnings_balance: nextWinningsBalance,
+        total_winnings: totalWinnings,
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error: balanceError } = await supabase
+        .from('users')
+        .update(userBalanceUpdate)
+        .eq('id', bet.user_id);
+
+      if (balanceError && `${balanceError.message || ''}`.includes('winnings_balance')) {
+        const fallbackUpdate = { ...userBalanceUpdate };
+        delete fallbackUpdate.winnings_balance;
+        const fallbackResult = await supabase
+          .from('users')
+          .update(fallbackUpdate)
+          .eq('id', bet.user_id);
+        balanceError = fallbackResult.error;
+      }
+
+      if (balanceError) {
+        return res.status(500).json({ success: false, error: 'Failed to apply payout', details: balanceError.message });
+      }
+
+      const betSettlementUpdate = {
+        status: currentStatus,
+        amount_won: payoutAmount,
+        settled_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      let { error: betUpdateError } = await supabase
+        .from('bets')
+        .update(betSettlementUpdate)
+        .eq('id', bet.id);
+
+      if (betUpdateError && `${betUpdateError.message || ''}`.includes('amount_won')) {
+        const fallbackSettlementUpdate = { ...betSettlementUpdate };
+        delete fallbackSettlementUpdate.amount_won;
+        const fallbackResult = await supabase
+          .from('bets')
+          .update(fallbackSettlementUpdate)
+          .eq('id', bet.id);
+        betUpdateError = fallbackResult.error;
+      }
+
+      if (betUpdateError) {
+        return res.status(500).json({ success: false, error: 'Failed to update bet status', details: betUpdateError.message });
+      }
+
+      try {
+        await supabase.from('balance_history').insert([{
+          user_id: bet.user_id,
+          balance_before: currentBalance,
+          balance_after: nextBalance,
+          change: payoutAmount,
+          reason: `Admin SMS trigger payout: bet ${betRef}`,
+          created_by: req.user?.phone || 'admin',
+          created_at: new Date().toISOString(),
+        }]);
+      } catch (_) {}
+
+      creditApplied = true;
+      updatedBalance = nextBalance;
+      updatedWinningsBalance = nextWinningsBalance;
     }
 
     const stake = Number(bet.stake || 0);
-    const potentialWin = Number(bet.potential_win || 0);
+    const potentialWin = payoutAmount;
     const totalOdds = Number(bet.total_odds || 0);
-    const betRef = bet.bet_id || bet.id;
-    const status = String(bet.status || 'Open');
 
-    const intro = status === 'Won'
-      ? `Congratulations ${username}! Your bet was WON.`
-      : status === 'Lost'
-        ? `Hi ${username}, your bet was settled as LOST.`
-        : `Hi ${username}, here are your bet details.`;
+    const intro = `Congratulations ${username}! Your bet was settled as WON.`;
 
     const maxLines = 5;
     const selectionLines = (selections || []).slice(0, maxLines).map((sel, idx) => {
@@ -4927,32 +5052,55 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
     const smsMessage = [
       intro,
       `Bet ID: ${betRef}`,
-      `Status: ${status}`,
+      `Previous Status: ${previousStatus}`,
+      `Current Status: ${currentStatus}`,
       `Stake: KSH ${stake.toFixed(2)}`,
       `Potential Win: KSH ${potentialWin.toFixed(2)}`,
+      `Credited Amount: KSH ${potentialWin.toFixed(2)}`,
+      updatedBalance !== null ? `New Balance: KSH ${Number(updatedBalance).toFixed(2)}` : null,
       `Total Odds: ${totalOdds.toFixed(2)}`,
       `Placed: ${placedDate}`,
-      selectionLines.length > 0 ? `Selections:\n${selectionLines.join('\n')}` : 'Selections: N/A',
+      selectionLines.length > 0 ? `Selections:\n${selectionLines.join('\n')}` : 'Selections: 1',
       'BETNEXA'
-    ].join('\n');
+    ].filter(Boolean).join('\n');
 
-    const sent = await sendSms(phoneNumber, smsMessage);
+    let sent = false;
+    if (phoneNumber) {
+      sent = await sendSms(phoneNumber, smsMessage);
+    }
 
-    if (!sent) {
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to send SMS',
-        phoneNumber,
-        draftedMessage: smsMessage,
-      });
+    if (!alreadyTriggered) {
+      try {
+        await supabase.from('admin_logs').insert([{
+          admin_id: req.user?.id && req.user.id !== 'unknown' ? req.user.id : null,
+          action: 'send_bet_sms',
+          target_type: 'bet',
+          target_id: bet.id,
+          changes: {
+            previous_status: previousStatus,
+            current_status: currentStatus,
+            payout_amount: payoutAmount,
+            sms_sent: sent,
+            phone_number: phoneNumber || null,
+          },
+          description: `Manual bet SMS trigger for bet ${betRef}`,
+          created_at: new Date().toISOString(),
+        }]);
+      } catch (_) {}
     }
 
     return res.json({
       success: true,
+      alreadyTriggered,
+      creditApplied,
       phoneNumber,
       betId: betRef,
+      betStatus: currentStatus,
+      smsSent: sent,
+      updatedBalance,
+      updatedWinningsBalance,
       draftedMessage: smsMessage,
-      sent: true,
+      sent,
     });
   } catch (error) {
     console.error('Send bet SMS error:', error);
