@@ -2561,25 +2561,30 @@ router.get('/transactions', checkAdmin, async (req, res) => {
 
     // Enrich transactions with account username for admin cards
     try {
-      const userIds = Array.from(new Set(
-        allTransactions
-          .map((tx) => tx.user_id)
-          .filter((id) => !!id)
-      ));
+      const normalizePhone = (value) => {
+        const digits = `${value || ''}`.replace(/\D/g, '');
+        if (digits.startsWith('254') && digits.length === 12) return digits;
+        if (digits.startsWith('0') && digits.length === 10) return `254${digits.slice(1)}`;
+        if ((digits.startsWith('7') || digits.startsWith('1')) && digits.length === 9) return `254${digits}`;
+        return digits || null;
+      };
 
-      if (userIds.length > 0) {
+      if (allTransactions.length > 0) {
         const { data: users, error: usersError } = await supabase
           .from('users')
-          .select('id, username')
-          .in('id', userIds);
+          .select('id, username, phone_number');
 
         if (usersError) {
           console.warn('⚠️ Could not enrich transaction usernames:', usersError.message);
         } else {
           const usernameById = new Map((users || []).map((u) => [u.id, u.username]));
+          const usernameByPhone = new Map((users || []).map((u) => [normalizePhone(u.phone_number), u.username]));
           allTransactions = allTransactions.map((tx) => ({
             ...tx,
-            username: tx.username || (tx.user_id ? usernameById.get(tx.user_id) || null : null)
+            username:
+              tx.username ||
+              (tx.user_id ? usernameById.get(tx.user_id) || null : null) ||
+              (tx.phone_number ? usernameByPhone.get(normalizePhone(tx.phone_number)) || null : null)
           }));
         }
       }
