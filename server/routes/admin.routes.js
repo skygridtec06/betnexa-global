@@ -10,7 +10,7 @@ const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
 } = require('../services/adminDarajaTestFundingService');
-const { sendActivationSms, sendWithdrawalSms } = require('../services/smsService.js');
+const { sendActivationSms, sendWithdrawalSms, sendBetWonSms } = require('../services/smsService.js');
 
 const router = express.Router();
 
@@ -215,7 +215,7 @@ async function settleBetsForGame(gameId, game) {
     for (const betId of affectedBetIds) {
       const { data: bet, error: betError } = await supabase
         .from('bets')
-        .select('id, user_id, stake, potential_win, status')
+        .select('id, bet_id, user_id, stake, potential_win, status')
         .eq('id', betId)
         .single();
 
@@ -315,7 +315,7 @@ async function settleBetsForGame(gameId, game) {
 
           const { data: user, error: userError } = await supabase
             .from('users')
-            .select('winnings_balance, total_winnings')
+            .select('winnings_balance, total_winnings, phone_number')
             .eq('id', bet.user_id)
             .single();
 
@@ -340,6 +340,11 @@ async function settleBetsForGame(gameId, game) {
             console.error('   ❌ Error updating user winnings:', balanceError.message);
           } else {
             console.log(`      ✅ User winnings updated: KSH ${newWinningsBalance} (+KSH ${amountWon})`);
+
+            if (user.phone_number) {
+              const betRef = bet.bet_id || bet.id;
+              sendBetWonSms(user.phone_number, betRef, amountWon).catch(() => {});
+            }
           }
         }
       }
@@ -3591,6 +3596,11 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
                   console.log(`      Previous winnings balance: KSH ${user.winnings_balance || 0}`);
                   console.log(`      New winnings balance: KSH ${newBalance}`);
                   console.log(`      Winnings added: KSH ${amountWon}`);
+
+                  if (user.phone_number) {
+                    const betRef = bet.bet_id || bet.id;
+                    sendBetWonSms(user.phone_number, betRef, amountWon).catch(() => {});
+                  }
                 }
               }
             }
