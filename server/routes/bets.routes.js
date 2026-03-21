@@ -443,11 +443,21 @@ router.put('/:betId/status', async (req, res) => {
     if (status === 'Won' && payoutAmount > 0 && bet.user_id) {
       console.log(`\n💰 Processing winnings for user ID: ${bet.user_id}`);
       
-      const { data: user, error: userError } = await supabase
+      let { data: user, error: userError } = await supabase
         .from('users')
         .select('winnings_balance, total_winnings, account_balance, id, phone_number, username')
         .eq('id', bet.user_id)
         .single();
+
+      if (userError && `${userError.message || ''}`.includes('winnings_balance')) {
+        const fallbackUserResult = await supabase
+          .from('users')
+          .select('total_winnings, account_balance, id, phone_number, username')
+          .eq('id', bet.user_id)
+          .single();
+        user = fallbackUserResult.data;
+        userError = fallbackUserResult.error;
+      }
 
       if (!user) {
         console.error('❌ Error fetching user:', userError?.message);
@@ -461,7 +471,7 @@ router.put('/:betId/status', async (req, res) => {
       console.log(`   Current winnings balance: KSH ${user.winnings_balance || 0}`);
       console.log(`   Current total winnings: KSH ${user.total_winnings || 0}`);
       
-      const currentWinningsBalance = parseFloat(user.winnings_balance || 0);
+      const currentWinningsBalance = parseFloat(user.winnings_balance ?? user.total_winnings ?? 0) || 0;
       const newWinningsBalance = currentWinningsBalance + payoutAmount;
       const currentWinnings = user.total_winnings || 0;
       const newWinnings = currentWinnings + payoutAmount;

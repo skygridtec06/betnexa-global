@@ -366,18 +366,29 @@ async function settleBetsForGame(gameId, game) {
         if (newBetStatus === 'Won' && amountWon && bet.user_id) {
           console.log(`      💰 Processing winnings: KSH ${amountWon}`);
 
-          const { data: user, error: userError } = await supabase
+          let { data: user, error: userError } = await supabase
             .from('users')
             .select('winnings_balance, total_winnings, account_balance, phone_number')
             .eq('id', bet.user_id)
             .single();
+
+          if (userError && `${userError.message || ''}`.includes('winnings_balance')) {
+            const fallbackUserResult = await supabase
+              .from('users')
+              .select('total_winnings, account_balance, phone_number')
+              .eq('id', bet.user_id)
+              .single();
+            user = fallbackUserResult.data;
+            userError = fallbackUserResult.error;
+          }
 
           if (!user || userError) {
             console.error('   ❌ Error fetching user:', userError?.message);
             continue;
           }
 
-          const newWinningsBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
+          const currentWinningsBalance = parseFloat(user.winnings_balance ?? user.total_winnings ?? 0) || 0;
+          const newWinningsBalance = currentWinningsBalance + parseFloat(amountWon);
           const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
           const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
@@ -3762,16 +3773,27 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
             if (newBetStatus === 'Won' && amountWon && bet.user_id) {
               console.log(`\n💰 [BALANCE UPDATE] Processing winnings for user ID: ${bet.user_id}`);
               
-              const { data: user, error: userError } = await supabase
+              let { data: user, error: userError } = await supabase
                 .from('users')
                 .select('winnings_balance, total_winnings, account_balance, phone_number')
                 .eq('id', bet.user_id)
                 .single();
 
+              if (userError && `${userError.message || ''}`.includes('winnings_balance')) {
+                const fallbackUserResult = await supabase
+                  .from('users')
+                  .select('total_winnings, account_balance, phone_number')
+                  .eq('id', bet.user_id)
+                  .single();
+                user = fallbackUserResult.data;
+                userError = fallbackUserResult.error;
+              }
+
               if (!user || userError) {
                 console.error('   ❌ Error fetching user:', userError?.message);
               } else {
-                const newBalance = (parseFloat(user.winnings_balance) || 0) + parseFloat(amountWon);
+                const currentWinningsBalance = parseFloat(user.winnings_balance ?? user.total_winnings ?? 0) || 0;
+                const newBalance = currentWinningsBalance + parseFloat(amountWon);
                 const newWinnings = (parseFloat(user.total_winnings) || 0) + parseFloat(amountWon);
                 const newMainBalance = (parseFloat(user.account_balance) || 0) + parseFloat(amountWon);
 
@@ -4700,11 +4722,21 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
     }
 
     // Get current main user balance
-    const { data: user, error: userErr } = await supabase
+    let { data: user, error: userErr } = await supabase
       .from('users')
       .select('account_balance, winnings_balance, total_winnings, username, phone_number')
       .eq('id', user_id)
       .single();
+
+    if (userErr && `${userErr.message || ''}`.includes('winnings_balance')) {
+      const fallbackUserResult = await supabase
+        .from('users')
+        .select('account_balance, total_winnings, username, phone_number')
+        .eq('id', user_id)
+        .single();
+      user = fallbackUserResult.data;
+      userErr = fallbackUserResult.error;
+    }
 
     if (userErr || !user) {
       return res.status(404).json({ success: false, error: 'User not found' });
@@ -4712,7 +4744,7 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
 
     const prevBalance = parseFloat(user.account_balance) || 0;
     const newBalance = prevBalance + creditAmount;
-    const prevWinningsBalance = parseFloat(user.winnings_balance) || 0;
+    const prevWinningsBalance = parseFloat(user.winnings_balance ?? user.total_winnings ?? 0) || 0;
     const newWinningsBalance = prevWinningsBalance + creditAmount;
     const prevTotalWinnings = parseFloat(user.total_winnings) || 0;
     const newTotalWinnings = prevTotalWinnings + creditAmount;
