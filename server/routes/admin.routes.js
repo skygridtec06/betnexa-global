@@ -88,6 +88,47 @@ function isApiManagedGameId(gameId) {
   return /^af-\d+$/i.test(String(gameId || ''));
 }
 
+async function sendWonSmsWithFallback({ userId, directPhone, betRef, amountWon }) {
+  try {
+    let smsPhone = directPhone || null;
+
+    if (!smsPhone && userId) {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('phone_number')
+        .eq('id', userId)
+        .maybeSingle();
+      smsPhone = userRow?.phone_number || null;
+    }
+
+    if (!smsPhone && userId) {
+      const { data: txWithPhone } = await supabase
+        .from('transactions')
+        .select('phone_number')
+        .eq('user_id', userId)
+        .not('phone_number', 'is', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      smsPhone = txWithPhone?.phone_number || null;
+    }
+
+    if (!smsPhone) {
+      console.warn(`⚠️ Won SMS skipped: no phone number found for user ${userId || 'unknown'}`);
+      return false;
+    }
+
+    const ok = await sendBetWonSms(smsPhone, betRef, Number(amountWon) || 0);
+    if (!ok) {
+      console.warn(`⚠️ Won SMS failed for ${smsPhone} bet ${betRef}`);
+    }
+    return ok;
+  } catch (error) {
+    console.warn('⚠️ Won SMS fallback error:', error.message);
+    return false;
+  }
+}
+
 function interpretDarajaTestStatus(result) {
   const resultCode = `${result?.resultCode ?? result?.ResultCode ?? ''}`;
   const resultDesc = `${result?.resultDesc || result?.ResultDesc || result?.ResponseDescription || ''}`;
@@ -343,10 +384,13 @@ async function settleBetsForGame(gameId, game) {
           } else {
             console.log(`      ✅ User balances updated: account KSH ${newMainBalance}, winnings KSH ${newWinningsBalance} (+KSH ${amountWon})`);
 
-            if (user.phone_number) {
-              const betRef = bet.bet_id || bet.id;
-              sendBetWonSms(user.phone_number, betRef, amountWon).catch(() => {});
-            }
+            const betRef = bet.bet_id || bet.id;
+            sendWonSmsWithFallback({
+              userId: bet.user_id,
+              directPhone: user.phone_number,
+              betRef,
+              amountWon,
+            }).catch(() => {});
           }
         }
       }
@@ -3711,10 +3755,13 @@ router.put('/bets/:betId/selections/:selectionId/outcome', checkAdmin, async (re
                   console.log(`      New winnings balance: KSH ${newBalance}`);
                   console.log(`      Winnings added: KSH ${amountWon}`);
 
-                  if (user.phone_number) {
-                    const betRef = bet.bet_id || bet.id;
-                    sendBetWonSms(user.phone_number, betRef, amountWon).catch(() => {});
-                  }
+                  const betRef = bet.bet_id || bet.id;
+                  sendWonSmsWithFallback({
+                    userId: bet.user_id,
+                    directPhone: user.phone_number,
+                    betRef,
+                    amountWon,
+                  }).catch(() => {});
                 }
               }
             }
@@ -4646,9 +4693,12 @@ router.post('/bets/credit-win', checkAdmin, async (req, res) => {
       }]);
     } catch (_) {}
 
-    if (user.phone_number) {
-      sendBetWonSms(user.phone_number, bet_id || 'BET', creditAmount).catch(() => {});
-    }
+    sendWonSmsWithFallback({
+      userId: user_id,
+      directPhone: user.phone_number,
+      betRef: bet_id || 'BET',
+      amountWon: creditAmount,
+    }).catch(() => {});
 
     console.log(`💰 Credited KSH ${creditAmount} to main+winnings balances for ${user.username} (${user_id}). Account: ${prevBalance} → ${newBalance}, Winnings: ${prevWinningsBalance} → ${newWinningsBalance}`);
 

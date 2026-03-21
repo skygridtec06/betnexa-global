@@ -514,6 +514,18 @@ router.put('/:betId/status', async (req, res) => {
         wonSmsPhone = userForSms?.phone_number || null;
       }
 
+      if (!wonSmsPhone) {
+        const { data: txWithPhone } = await supabase
+          .from('transactions')
+          .select('phone_number')
+          .eq('user_id', bet.user_id)
+          .not('phone_number', 'is', null)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        wonSmsPhone = txWithPhone?.phone_number || null;
+      }
+
       if (wonSmsPhone) {
         const betRef = existingBet?.bet_id || betId;
         const amountForSms = Number.isFinite(payoutAmount) ? payoutAmount : 0;
