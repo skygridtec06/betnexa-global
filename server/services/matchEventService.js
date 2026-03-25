@@ -9,6 +9,27 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Resolve a game identifier to its UUID primary key.
+ * The frontend stores game.id as the TEXT game_id column (e.g. "g1774435801687"),
+ * while the DB match_events.game_id FK references games.id (UUID).
+ */
+async function resolveGameUuid(gameId) {
+  if (UUID_REGEX.test(gameId)) return gameId; // Already a UUID
+  const { data, error } = await supabase
+    .from('games')
+    .select('id')
+    .eq('game_id', gameId)
+    .single();
+  if (error || !data) {
+    console.error(`❌ Could not resolve game UUID for game_id "${gameId}": ${error?.message}`);
+    return null;
+  }
+  return data.id;
+}
+
 /**
  * Create automated events for a match
  * @param {string} gameId - UUID of the game
@@ -21,10 +42,16 @@ async function createMatchEvents(gameId, events) {
       return { success: true, eventsCreated: 0 };
     }
 
-    console.log(`📅 Creating ${events.length} automated events for game ${gameId}`);
+    // Resolve TEXT game_id to UUID if needed
+    const gameUuid = await resolveGameUuid(gameId);
+    if (!gameUuid) {
+      return { success: false, error: `Game not found for id: ${gameId}` };
+    }
+
+    console.log(`📅 Creating ${events.length} automated events for game ${gameUuid} (resolved from ${gameId})`);
 
     const eventRecords = events.map((evt) => ({
-      game_id: gameId,
+      game_id: gameUuid,
       event_type: evt.eventType,
       scheduled_at: evt.scheduledAt,
       event_data: evt.eventData || null,
@@ -268,10 +295,16 @@ async function checkAndExecutePendingEvents(gameId) {
  */
 async function getMatchEvents(gameId) {
   try {
+    // Resolve TEXT game_id to UUID if needed
+    const gameUuid = await resolveGameUuid(gameId);
+    if (!gameUuid) {
+      return { success: false, error: `Game not found for id: ${gameId}` };
+    }
+
     const { data, error } = await supabase
       .from('match_events')
       .select('*')
-      .eq('game_id', gameId)
+      .eq('game_id', gameUuid)
       .order('scheduled_at', { ascending: true });
 
     if (error) {
