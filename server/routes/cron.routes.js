@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendInactivityReminderSms } = require('../services/smsService.js');
+const { runPendingMatchEventsCycle } = require('../services/matchScheduler');
 
 /**
  * Verify the incoming cron request is authorized.
@@ -121,6 +122,31 @@ router.get('/remind-inactive', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ [CRON] remind-inactive error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/cron/match-events-tick
+ *
+ * Executes all due scheduled match events. This is the production-safe
+ * scheduler path for Vercel serverless deployments.
+ */
+router.get('/match-events-tick', async (req, res) => {
+  if (!authorizeCron(req, res)) return;
+
+  try {
+    console.log('\n⏰ [CRON] Match events tick started');
+    const result = await runPendingMatchEventsCycle();
+
+    if (!result.success) {
+      return res.status(500).json(result);
+    }
+
+    console.log(`✅ [CRON] Match events tick completed: ${result.processedGames} games, ${result.dueEvents} due events`);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ [CRON] match-events-tick error:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 });

@@ -87,7 +87,7 @@ async function getPendingEvents(gameId) {
   try {
     const { data: game, error: gameError } = await supabase
       .from('games')
-      .select('kickoff_start_time, is_kickoff_started')
+      .select('kickoff_start_time, is_kickoff_started, status')
       .eq('id', gameId)
       .single();
 
@@ -96,7 +96,7 @@ async function getPendingEvents(gameId) {
       return [];
     }
 
-    if (!game.is_kickoff_started) {
+    if (game.status === 'finished') {
       return [];
     }
 
@@ -118,15 +118,18 @@ async function getPendingEvents(gameId) {
       return [];
     }
 
-    // Filter to only events that should execute now
-    const kickoffMs = new Date(game.kickoff_start_time).getTime();
+    // Filter to only events that should execute now.
     const nowMs = Date.now();
     const pendingEvents = [];
 
     for (const event of events) {
       const scheduledMs = new Date(event.scheduled_at).getTime();
+      const canRunBeforeKickoff = event.event_type === 'kickoff';
+      if (!game.is_kickoff_started && !canRunBeforeKickoff) {
+        continue;
+      }
+
       if (scheduledMs <= nowMs) {
-        // This event should have executed by now
         pendingEvents.push(event);
       }
     }
@@ -167,6 +170,10 @@ async function executeEvent(event, gameId) {
         console.log('🎯 Executing KICKOFF event');
         updatePayload.is_kickoff_started = true;
         updatePayload.status = 'live';
+        updatePayload.game_paused = false;
+        updatePayload.is_halftime = false;
+        updatePayload.kickoff_paused_at = null;
+        updatePayload.minute = 0;
         if (!game.kickoff_start_time) {
           updatePayload.kickoff_start_time = nowIso();
         }

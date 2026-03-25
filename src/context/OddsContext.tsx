@@ -259,6 +259,16 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(liveDataInterval);
   }, []); // No dependencies - uses ref for current games
 
+  // Refresh the full game list periodically so DB-driven status changes
+  // (such as scheduled kickoff events) appear for all users without a manual reload.
+  useEffect(() => {
+    const refreshInterval = setInterval(() => {
+      refreshGames();
+    }, 15000);
+
+    return () => clearInterval(refreshInterval);
+  }, []);
+
   // Daily schedule maintenance: DB-only check most of the time, API fetch only when stale
   // (e.g., after midnight) to keep exactly today + tomorrow available.
   useEffect(() => {

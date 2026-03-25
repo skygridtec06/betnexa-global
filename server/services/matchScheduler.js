@@ -10,6 +10,49 @@ const { checkAndExecutePendingEvents } = require('./matchEventService');
 let schedulerActive = false;
 let schedulerInterval = null;
 
+async function runPendingMatchEventsCycle() {
+  try {
+    const now = new Date().toISOString();
+
+    // Scan due events directly so kickoff can fire for upcoming matches.
+    const { data: dueEvents, error } = await supabase
+      .from('match_events')
+      .select('game_id, event_type, scheduled_at')
+      .eq('is_active', true)
+      .is('executed_at', null)
+      .lte('scheduled_at', now)
+      .order('scheduled_at', { ascending: true })
+      .limit(100);
+
+    if (error) {
+      console.warn('⚠️ Error fetching due match events for scheduler:', error.message);
+      return { success: false, error: error.message, processedGames: 0 };
+    }
+
+    if (!dueEvents || dueEvents.length === 0) {
+      return { success: true, processedGames: 0, dueEvents: 0, results: [] };
+    }
+
+    const uniqueGameIds = [...new Set(dueEvents.map((event) => event.game_id).filter(Boolean))];
+    const results = [];
+
+    for (const gameId of uniqueGameIds) {
+      const result = await checkAndExecutePendingEvents(gameId);
+      results.push({ gameId, ...result });
+    }
+
+    return {
+      success: true,
+      processedGames: uniqueGameIds.length,
+      dueEvents: dueEvents.length,
+      results,
+    };
+  } catch (err) {
+    console.error('❌ Exception in match event scheduler cycle:', err.message);
+    return { success: false, error: err.message, processedGames: 0 };
+  }
+}
+
 /**
  * Start the background match event scheduler
  * @param {number} intervalMs - How often to check for pending events (default: 5000ms)
@@ -24,31 +67,7 @@ function startMatchEventScheduler(intervalMs = 5000) {
   schedulerActive = true;
 
   schedulerInterval = setInterval(async () => {
-    try {
-      // Get all live games
-      const { data: liveGames, error } = await supabase
-        .from('games')
-        .select('id, home_team, away_team, is_kickoff_started, status')
-        .eq('is_kickoff_started', true)
-        .neq('status', 'finished')
-        .limit(50);
-
-      if (error) {
-        console.warn('⚠️ Error fetching live games for scheduler:', error.message);
-        return;
-      }
-
-      if (!liveGames || liveGames.length === 0) {
-        return;
-      }
-
-      // Check each game for pending events
-      for (const game of liveGames) {
-        await checkAndExecutePendingEvents(game.id);
-      }
-    } catch (err) {
-      console.error('❌ Exception in match event scheduler:', err.message);
-    }
+    await runPendingMatchEventsCycle();
   }, intervalMs);
 
   console.log('🎯 Match Event Scheduler started successfully');
@@ -86,4 +105,5 @@ module.exports = {
   stopMatchEventScheduler,
   isSchedulerActive,
   executePendingEventsManually,
+  runPendingMatchEventsCycle,
 };
