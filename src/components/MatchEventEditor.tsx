@@ -21,9 +21,10 @@ interface MatchEventEditorProps {
   gameName: string;
   kickoffTime: string;
   onClose: () => void;
+  adminPhone: string; // Admin's phone number for API calls
 }
 
-export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: MatchEventEditorProps) {
+export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, adminPhone }: MatchEventEditorProps) {
   const EAT_OFFSET_MS = 3 * 60 * 60 * 1000;
 
   const toEATDate = (isoOrDate: string | Date) => {
@@ -100,27 +101,20 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
 
   // Load events on mount
   useEffect(() => {
+    console.log('🔄 [MatchEventEditor] Component mounted, adminPhone:', adminPhone ? adminPhone.substring(0, 5) + '...' : 'MISSING');
     loadEvents();
-  }, [gameId]);
+  }, [gameId, adminPhone]);
 
-  const getAdminPhone = () => {
-    return (
-      localStorage.getItem("adminPhone") ||
-      localStorage.getItem("userPhone") ||
-      localStorage.getItem("phone") ||
-      ""
-    );
-  };
+  // Admin phone is passed as prop from AdminPortal
 
   const loadEvents = async () => {
     try {
       setLoading(true);
       setErrorMessage(null);
-      const adminPhone = getAdminPhone();
       
       if (!adminPhone) {
-        // Don't error, just skip loading - user might not be authenticated yet
-        setEvents([]);
+        console.error("❌ Admin phone not provided to MatchEventEditor");
+        setErrorMessage("Admin phone is missing. Please ensure you're logged in as admin.");
         setLoading(false);
         return;
       }
@@ -164,9 +158,10 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
     try {
       setSubmitting(true);
       setErrorMessage(null);
-      const adminPhone = getAdminPhone();
+      
       if (!adminPhone) {
-        setErrorMessage("Admin phone is missing. Please log in again.");
+        console.error("❌ Admin phone not provided");
+        setErrorMessage("Admin phone is missing. Please ensure you're logged in as admin.");
         setSubmitting(false);
         return;
       }
@@ -228,7 +223,6 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
-      const adminPhone = getAdminPhone();
       const response = await fetch(`/api/admin/match-events/${eventId}?phone=${encodeURIComponent(adminPhone)}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },

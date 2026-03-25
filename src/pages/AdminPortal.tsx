@@ -2606,6 +2606,7 @@ const AdminPortal = () => {
                   gameName={selectedGameForEvents.name}
                   kickoffTime={selectedGameForEvents.kickoffTime}
                   onClose={() => setSelectedGameForEvents(null)}
+                  adminPhone={loggedInUser?.phone || ""}
                 />
               </div>
             ) : (
