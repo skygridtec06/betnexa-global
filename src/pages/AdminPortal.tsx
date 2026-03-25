@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
 import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT, formatTimeInEAT } from "@/lib/timezoneFormatter";
+import { MatchEventEditor } from "@/components/MatchEventEditor";
 
 const marketLabels: Record<string, string> = {
   bttsYes: "BTTS Yes", bttsNo: "BTTS No",
@@ -72,6 +73,11 @@ const AdminPortal = () => {
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
   const [editingGame, setEditingGame] = useState<string | null>(null);
   const [editMarkets, setEditMarkets] = useState<Record<string, number> | null>(null);
+  const [selectedGameForEvents, setSelectedGameForEvents] = useState<{
+    id: string;
+    name: string;
+    kickoffTime: string;
+  } | null>(null);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingUserData, setEditingUserData] = useState<Record<string, any>>({});
   const [newGame, setNewGame] = useState<{
@@ -1881,9 +1887,12 @@ const AdminPortal = () => {
         </div>
 
         <Tabs defaultValue="games">
-          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-6">
+          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-7">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
+            </TabsTrigger>
+            <TabsTrigger value="events" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Calendar className="mr-1 h-4 w-4" /> Events
             </TabsTrigger>
             <TabsTrigger value="users" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Users className="mr-1 h-4 w-4" /> Users
@@ -2502,6 +2511,26 @@ const AdminPortal = () => {
                           Mark Live
                         </Button>
                       )}
+                      <Button 
+                        variant="outline" 
+                        size="icon"
+                        onClick={() => {
+                          setSelectedGameForEvents({
+                            id: game.id,
+                            name: `${game.homeTeam} vs ${game.awayTeam}`,
+                            kickoffTime: game.time,
+                          });
+                          // Switch to Events tab
+                          const eventsTab = document.querySelector('[value="events"]');
+                          if (eventsTab) {
+                            (eventsTab as HTMLElement).click();
+                          }
+                        }}
+                        title="Configure automated match events"
+                        className="border-primary/50 hover:bg-primary/10"
+                      >
+                        <Zap className="h-4 w-4 text-primary" />
+                      </Button>
                       <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => regenerateOdds(game.id)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Regenerate all market odds"}>
                         <RefreshCw className="h-4 w-4 text-primary" />
                       </Button>
@@ -2563,6 +2592,79 @@ const AdminPortal = () => {
                 </div>
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="events" className="space-y-6">
+            {selectedGameForEvents ? (
+              <div className="space-y-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedGameForEvents(null)}
+                  className="mb-4"
+                >
+                  ← Back to Games
+                </Button>
+                <MatchEventEditor
+                  gameId={selectedGameForEvents.id}
+                  gameName={selectedGameForEvents.name}
+                  kickoffTime={selectedGameForEvents.kickoffTime}
+                  onClose={() => setSelectedGameForEvents(null)}
+                />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">
+                  Match Event Scheduler
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Select a game to configure automated match events for the fixture.
+                </p>
+
+                {games && games.length > 0 ? (
+                  <div className="grid gap-3">
+                    {games.map((game) => (
+                      <Card
+                        key={game.id}
+                        className="border-primary/20 bg-card/50 p-4 hover:border-primary/50 transition cursor-pointer"
+                        onClick={() =>
+                          setSelectedGameForEvents({
+                            id: game.id,
+                            name: `${game.home_team} vs ${game.away_team}`,
+                            kickoffTime: game.time,
+                          })
+                        }
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-semibold">
+                              {game.home_team} vs {game.away_team}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatTimeInEAT(game.time)}
+                            </p>
+                          </div>
+                          <Badge variant="outline">
+                            {game.status === "live" && (
+                              <span className="text-green-400">LIVE</span>
+                            )}
+                            {game.status === "upcoming" && (
+                              <span className="text-blue-400">UPCOMING</span>
+                            )}
+                            {game.status === "finished" && (
+                              <span className="text-gray-400">FINISHED</span>
+                            )}
+                          </Badge>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-border/50 bg-card p-8 text-center text-muted-foreground">
+                    No games available. Create a game first in the Games tab.
+                  </div>
+                )}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="users" className="space-y-6">

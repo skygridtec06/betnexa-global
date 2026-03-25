@@ -1,5 +1,10 @@
 const https = require('https');
 
+const darajaHttpsAgent = new https.Agent({ keepAlive: true });
+let cachedAccessToken = null;
+let cachedAccessTokenExpiry = 0;
+let accessTokenPromise = null;
+
 const DARAJA_HOST = 'api.safaricom.co.ke';
 
 function getDarajaTestConfig() {
@@ -75,6 +80,7 @@ function performJsonRequest({ method, path, headers }, payload) {
             : {}),
           ...headers,
         },
+        agent: darajaHttpsAgent,
         timeout: 30000,
       },
       (res) => {
@@ -119,22 +125,43 @@ function performJsonRequest({ method, path, headers }, payload) {
 }
 
 async function getAccessToken() {
+  const now = Date.now();
+  if (cachedAccessToken && cachedAccessTokenExpiry > now + 30000) {
+    return cachedAccessToken;
+  }
+
+  if (accessTokenPromise) {
+    return accessTokenPromise;
+  }
+
   const { consumerKey, consumerSecret } = getDarajaTestConfig();
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
 
-  const response = await performJsonRequest({
+  accessTokenPromise = performJsonRequest({
     method: 'GET',
     path: '/oauth/v1/generate?grant_type=client_credentials',
     headers: {
       Authorization: `Basic ${auth}`,
     },
-  });
+  })
+    .then((response) => {
+      if (!response.access_token) {
+        throw new Error('Daraja access token was not returned');
+      }
 
-  if (!response.access_token) {
-    throw new Error('Daraja access token was not returned');
-  }
+      const expiresInSeconds = Number.parseInt(response.expires_in, 10);
+      const ttlMs = Number.isFinite(expiresInSeconds) ? expiresInSeconds * 1000 : 55 * 60 * 1000;
 
-  return response.access_token;
+      cachedAccessToken = response.access_token;
+      cachedAccessTokenExpiry = Date.now() + ttlMs;
+
+      return cachedAccessToken;
+    })
+    .finally(() => {
+      accessTokenPromise = null;
+    });
+
+  return accessTokenPromise;
 }
 
 async function callDaraja(path, payload) {

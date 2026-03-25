@@ -9,6 +9,7 @@ const AdminRoutes = require('./routes/admin.routes.js');
 const BetsRoutes = require('./routes/bets.routes.js');
 const LiveRoutes = require('./routes/live.routes.js');
 const CronRoutes = require('./routes/cron.routes.js');
+const { startMatchEventScheduler } = require('./services/matchScheduler');
 // const PresenceRoutes = require('./routes/presence.routes.js');
 
 const app = express();
@@ -75,6 +76,9 @@ app.listen(PORT, () => {
   console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`\n💳 Ready to process M-Pesa payments!\n`);
+
+  // Start match event scheduler
+  startMatchEventScheduler(5000); // Check every 5 seconds
 });
 
 module.exports = app;

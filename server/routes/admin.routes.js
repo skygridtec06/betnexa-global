@@ -2,6 +2,13 @@ const express = require('express');
 const supabase = require('../services/database');
 const paymentCache = require('../services/paymentCache');
 const {
+  createMatchEvents,
+  getMatchEvents,
+  deleteMatchEvent,
+  updateMatchEvent,
+  checkAndExecutePendingEvents,
+} = require('../services/matchEventService');
+const {
   initiateAdminTestStkPush,
   normalizeDarajaPhoneNumber,
   queryAdminTestStkPushStatus,
@@ -5100,6 +5107,162 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('Send bet SMS error:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============================================
+// MATCH EVENT SCHEDULER ROUTES
+// ============================================
+
+/**
+ * POST: Create match events
+ * Body: { gameId, events: [{eventType, scheduledAt, eventData}, ...] }
+ */
+router.post('/match-events', checkAdmin, async (req, res) => {
+  try {
+    const { gameId, events } = req.body;
+
+    if (!gameId) {
+      return res.status(400).json({ success: false, error: 'gameId is required' });
+    }
+
+    if (!Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ success: false, error: 'events array is required and must not be empty' });
+    }
+
+    console.log(`📅 Creating match events for game ${gameId}`);
+
+    const result = await createMatchEvents(gameId, events);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: `Created ${result.eventsCreated} match events`,
+      eventsCreated: result.eventsCreated,
+      events: result.events,
+    });
+  } catch (error) {
+    console.error('❌ Error creating match events:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET: List all events for a game
+ */
+router.get('/match-events/:gameId', checkAdmin, async (req, res) => {
+  try {
+    const { gameId } = req.params;
+
+    console.log(`📋 Fetching match events for game ${gameId}`);
+
+    const result = await getMatchEvents(gameId);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      events: result.events,
+      totalEvents: result.events.length,
+      executedEvents: result.events.filter((e) => e.executed_at).length,
+      pendingEvents: result.events.filter((e) => !e.executed_at && e.is_active).length,
+    });
+  } catch (error) {
+    console.error('❌ Error fetching match events:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * PUT: Update a match event
+ */
+router.put('/match-events/:eventId', checkAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { scheduled_at, event_data, is_active } = req.body;
+
+    const updates = {};
+    if (scheduled_at) updates.scheduled_at = scheduled_at;
+    if (event_data) updates.event_data = event_data;
+    if (is_active !== undefined) updates.is_active = is_active;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ success: false, error: 'No valid updates provided' });
+    }
+
+    console.log(`📝 Updating match event ${eventId}`);
+
+    const result = await updateMatchEvent(eventId, updates);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: 'Event updated successfully',
+      event: result.event,
+    });
+  } catch (error) {
+    console.error('❌ Error updating match event:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * DELETE: Remove a match event
+ */
+router.delete('/match-events/:eventId', checkAdmin, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    console.log(`🗑️  Deleting match event ${eventId}`);
+
+    const result = await deleteMatchEvent(eventId);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: 'Event deleted successfully',
+    });
+  } catch (error) {
+    console.error('❌ Error deleting match event:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST: Manually trigger execution of pending events
+ */
+router.post('/match-events/:gameId/execute-pending', checkAdmin, async (req, res) => {
+  try {
+    const { gameId } = req.params;
+
+    console.log(`⚡ Triggering execution of pending events for game ${gameId}`);
+
+    const result = await checkAndExecutePendingEvents(gameId);
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.json({
+      success: true,
+      message: `Executed ${result.eventsExecuted} events`,
+      eventsExecuted: result.eventsExecuted,
+      results: result.results,
+    });
+  } catch (error) {
+    console.error('❌ Error executing pending events:', error.message);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

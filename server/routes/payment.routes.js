@@ -1283,7 +1283,7 @@ router.post('/daraja/initiate', async (req, res) => {
       callbackUrl,
     });
 
-    const registerResult = await registerUserDarajaAttempt({
+    registerUserDarajaAttempt({
       userId,
       phoneNumber: normalizedPhone,
       amount: parsedAmount,
@@ -1292,12 +1292,13 @@ router.post('/daraja/initiate', async (req, res) => {
       merchantRequestId: result.merchantRequestId,
       paymentType,
       relatedWithdrawalId,
+    }).then((registerResult) => {
+      if (!registerResult.success) {
+        console.error('[daraja/initiate] Failed to register attempt:', registerResult.error);
+      }
+    }).catch((registerError) => {
+      console.error('[daraja/initiate] Unexpected register attempt error:', registerError.message || registerError);
     });
-
-    if (!registerResult.success) {
-      console.error('[daraja/initiate] Failed to register attempt:', registerResult.error);
-      // Still return success – STK was already sent
-    }
 
     return res.json({
       success: true,

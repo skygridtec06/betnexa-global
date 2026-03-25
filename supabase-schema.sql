@@ -60,6 +60,21 @@ CREATE TABLE IF NOT EXISTS games (
   finished_at TIMESTAMP NULL
 );
 
+-- ==================== MATCH EVENTS TABLE ====================
+-- Automated events for live matches (kickoff, halftime, resume, score updates, end)
+CREATE TABLE IF NOT EXISTS match_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id UUID NOT NULL REFERENCES games(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL, -- 'kickoff' | 'halftime' | 'resume' | 'score_update' | 'end'
+  scheduled_at TIMESTAMP NOT NULL, -- When this event should trigger (relative to kickoff)
+  executed_at TIMESTAMP NULL, -- When event actually executed
+  event_data JSONB, -- Event-specific data (e.g., {"homeScore": 1, "awayScore": 0} for score updates)
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(game_id, event_type, scheduled_at)
+);
+
 -- ==================== MARKETS TABLE ====================
 CREATE TABLE IF NOT EXISTS markets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
