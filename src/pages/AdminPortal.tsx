@@ -71,6 +71,7 @@ const AdminPortal = () => {
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
+  const [adminTab, setAdminTab] = useState("games");
   const [editingGame, setEditingGame] = useState<string | null>(null);
   const [editMarkets, setEditMarkets] = useState<Record<string, number> | null>(null);
   const [selectedGameForEvents, setSelectedGameForEvents] = useState<{
@@ -1886,7 +1887,7 @@ const AdminPortal = () => {
           ))}
         </div>
 
-        <Tabs defaultValue="games">
+        <Tabs value={adminTab} onValueChange={setAdminTab}>
           <TabsList className="mb-6 bg-secondary grid w-full grid-cols-7">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
@@ -2520,11 +2521,7 @@ const AdminPortal = () => {
                             name: `${game.homeTeam} vs ${game.awayTeam}`,
                             kickoffTime: game.time,
                           });
-                          // Switch to Events tab
-                          const eventsTab = document.querySelector('[value="events"]');
-                          if (eventsTab) {
-                            (eventsTab as HTMLElement).click();
-                          }
+                          setAdminTab("events");
                         }}
                         title="Configure automated match events"
                         className="border-primary/50 hover:bg-primary/10"
