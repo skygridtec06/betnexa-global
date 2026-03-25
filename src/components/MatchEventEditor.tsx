@@ -117,24 +117,44 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
       setLoading(true);
       setErrorMessage(null);
       const adminPhone = getAdminPhone();
-      const response = await fetch(
-        `/api/admin/match-events/${gameId}?phone=${encodeURIComponent(adminPhone)}`,
-        {
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-        }
-      );
+      
+      if (!adminPhone) {
+        // Don't error, just skip loading - user might not be authenticated yet
+        setEvents([]);
+        setLoading(false);
+        return;
+      }
+
+      const url = `/api/admin/match-events/${gameId}?phone=${encodeURIComponent(adminPhone)}`;
+      console.log("📋 Fetching events from:", url);
+      
+      const response = await fetch(url, {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      console.log("Response status:", response.status);
+
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        // Not JSON - likely HTML error page
+        const text = await response.text();
+        console.error("Non-JSON response:", text.substring(0, 200));
+        setErrorMessage(`API Error (${response.status}): Expected JSON but got ${contentType || "HTML"}`);
+        return;
+      }
+
+      const data = await response.json();
+      console.log("Events loaded:", data);
 
       if (response.ok) {
-        const data = await response.json();
         setEvents(data.events || []);
       } else {
-        const data = await response.json().catch(() => ({}));
-        setErrorMessage(data?.error || "Failed to load match events");
+        setErrorMessage(data?.error || `Failed to load match events (${response.status})`);
       }
     } catch (error) {
       console.error("Error loading events:", error);
-      setErrorMessage("Network error while loading match events");
+      setErrorMessage(`Error loading events: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setLoading(false);
     }
@@ -147,15 +167,18 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
       const adminPhone = getAdminPhone();
       if (!adminPhone) {
         setErrorMessage("Admin phone is missing. Please log in again.");
+        setSubmitting(false);
         return;
       }
 
       if (!formData.eventTime || !/^\d{2}:\d{2}$/.test(formData.eventTime)) {
-        setErrorMessage("Please select a valid EAT event time");
+        setErrorMessage("Please select a valid EAT event time (HH:MM format)");
+        setSubmitting(false);
         return;
       }
 
       const eventUtcIso = buildUtcIsoFromEatTime(formData.eventTime);
+      console.log("🎯 Creating event:", { eventType: formData.eventType, eatTime: formData.eventTime, utcIso: eventUtcIso });
 
       const eventData: any = {
         eventType: formData.eventType,
