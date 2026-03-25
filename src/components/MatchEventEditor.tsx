@@ -24,6 +24,66 @@ interface MatchEventEditorProps {
 }
 
 export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: MatchEventEditorProps) {
+  const EAT_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+  const toEATDate = (isoOrDate: string | Date) => {
+    const base = isoOrDate instanceof Date ? isoOrDate : new Date(isoOrDate);
+    return new Date(base.getTime() + EAT_OFFSET_MS);
+  };
+
+  const getEatDateParts = (isoOrDate: string | Date) => {
+    const eatDate = toEATDate(isoOrDate);
+    return {
+      year: eatDate.getUTCFullYear(),
+      month: eatDate.getUTCMonth() + 1,
+      day: eatDate.getUTCDate(),
+      hour: eatDate.getUTCHours(),
+      minute: eatDate.getUTCMinutes(),
+    };
+  };
+
+  const pad2 = (value: number) => String(value).padStart(2, "0");
+
+  const getEatTimeFromIso = (isoOrDate: string | Date) => {
+    const parts = getEatDateParts(isoOrDate);
+    return `${pad2(parts.hour)}:${pad2(parts.minute)}`;
+  };
+
+  const getEatDateLabelFromIso = (isoOrDate: string | Date) => {
+    const parts = getEatDateParts(isoOrDate);
+    return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+  };
+
+  const getDefaultEventTime = () => {
+    const kickoff = new Date(kickoffTime);
+    const defaultTime = new Date(kickoff.getTime() + 46 * 60 * 1000);
+    return getEatTimeFromIso(defaultTime);
+  };
+
+  const buildUtcIsoFromEatTime = (eatTime: string) => {
+    const kickoffEat = getEatDateParts(kickoffTime);
+    const [hourStr, minuteStr] = eatTime.split(":");
+    const eatHour = Number(hourStr);
+    const eatMinute = Number(minuteStr);
+
+    const baseUtcMs = Date.UTC(
+      kickoffEat.year,
+      kickoffEat.month - 1,
+      kickoffEat.day,
+      eatHour - 3,
+      eatMinute,
+      0,
+      0
+    );
+
+    // If selected EAT clock time is earlier than kickoff clock time, assume next EAT day.
+    const selectedClock = eatHour * 60 + eatMinute;
+    const kickoffClock = kickoffEat.hour * 60 + kickoffEat.minute;
+    const finalUtcMs = selectedClock < kickoffClock ? baseUtcMs + 24 * 60 * 60 * 1000 : baseUtcMs;
+
+    return new Date(finalUtcMs).toISOString();
+  };
+
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -35,7 +95,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
     minute: 45,
     homeScore: 0,
     awayScore: 0,
-    timeOffset: 46, // minutes after kickoff
+    eventTime: getDefaultEventTime(),
   });
 
   // Load events on mount
@@ -90,12 +150,16 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
         return;
       }
 
-      const kickoffDate = new Date(kickoffTime);
-      const eventTime = new Date(kickoffDate.getTime() + formData.timeOffset * 60 * 1000);
+      if (!formData.eventTime || !/^\d{2}:\d{2}$/.test(formData.eventTime)) {
+        setErrorMessage("Please select a valid EAT event time");
+        return;
+      }
+
+      const eventUtcIso = buildUtcIsoFromEatTime(formData.eventTime);
 
       const eventData: any = {
         eventType: formData.eventType,
-        scheduledAt: eventTime.toISOString(),
+        scheduledAt: eventUtcIso,
         eventData: null,
       };
 
@@ -125,7 +189,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
           minute: 45,
           homeScore: 0,
           awayScore: 0,
-          timeOffset: 46,
+          eventTime: getDefaultEventTime(),
         });
       } else {
         const data = await response.json().catch(() => ({}));
@@ -308,22 +372,17 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
 
             {/* Time Offset */}
             <div>
-              <label className="text-sm font-medium">Minutes After Kickoff</label>
+              <label className="text-sm font-medium">Event Time (EAT)</label>
               <Input
-                type="number"
-                min="0"
-                max="120"
-                value={formData.timeOffset}
+                type="time"
+                value={formData.eventTime}
                 onChange={(e) =>
-                  setFormData({ ...formData, timeOffset: parseInt(e.target.value) || 0 })
+                  setFormData({ ...formData, eventTime: e.target.value })
                 }
                 className="mt-1 bg-background/50 border-primary/30"
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Event will trigger at{" "}
-                {new Date(
-                  new Date(kickoffTime).getTime() + formData.timeOffset * 60 * 1000
-                ).toLocaleTimeString()}
+                Event will trigger at {formData.eventTime || "--:--"} EAT on {getEatDateLabelFromIso(kickoffTime)}
               </p>
             </div>
 
