@@ -26,6 +26,8 @@ interface MatchEventEditorProps {
 export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: MatchEventEditorProps) {
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<MatchEvent | null>(null);
   const [formData, setFormData] = useState({
@@ -41,21 +43,38 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
     loadEvents();
   }, [gameId]);
 
+  const getAdminPhone = () => {
+    return (
+      localStorage.getItem("adminPhone") ||
+      localStorage.getItem("userPhone") ||
+      localStorage.getItem("phone") ||
+      ""
+    );
+  };
+
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/admin/match-events/${gameId}`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: localStorage.getItem("phone") }),
-      });
+      setErrorMessage(null);
+      const adminPhone = getAdminPhone();
+      const response = await fetch(
+        `/api/admin/match-events/${gameId}?phone=${encodeURIComponent(adminPhone)}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
 
       if (response.ok) {
         const data = await response.json();
         setEvents(data.events || []);
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setErrorMessage(data?.error || "Failed to load match events");
       }
     } catch (error) {
       console.error("Error loading events:", error);
+      setErrorMessage("Network error while loading match events");
     } finally {
       setLoading(false);
     }
@@ -63,6 +82,14 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
 
   const handleAddEvent = async () => {
     try {
+      setSubmitting(true);
+      setErrorMessage(null);
+      const adminPhone = getAdminPhone();
+      if (!adminPhone) {
+        setErrorMessage("Admin phone is missing. Please log in again.");
+        return;
+      }
+
       const kickoffDate = new Date(kickoffTime);
       const eventTime = new Date(kickoffDate.getTime() + formData.timeOffset * 60 * 1000);
 
@@ -84,7 +111,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: localStorage.getItem("phone"),
+          phone: adminPhone,
           gameId,
           events: [eventData],
         }),
@@ -100,25 +127,35 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
           awayScore: 0,
           timeOffset: 46,
         });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setErrorMessage(data?.error || "Failed to add event");
       }
     } catch (error) {
       console.error("Error adding event:", error);
+      setErrorMessage("Network error while adding event");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
-      const response = await fetch(`/api/admin/match-events/${eventId}`, {
+      const adminPhone = getAdminPhone();
+      const response = await fetch(`/api/admin/match-events/${eventId}?phone=${encodeURIComponent(adminPhone)}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone: localStorage.getItem("phone") }),
       });
 
       if (response.ok) {
         await loadEvents();
+      } else {
+        const data = await response.json().catch(() => ({}));
+        setErrorMessage(data?.error || "Failed to delete event");
       }
     } catch (error) {
       console.error("Error deleting event:", error);
+      setErrorMessage("Network error while deleting event");
     }
   };
 
@@ -231,6 +268,12 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
             </Card>
           ))}
         </div>
+      )}
+
+      {errorMessage && (
+        <Card className="border-red-500/40 bg-red-500/10 p-3">
+          <p className="text-sm text-red-300">{errorMessage}</p>
+        </Card>
       )}
 
       {/* Add Event Dialog */}
@@ -349,10 +392,11 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose }: Mat
               <Button
                 variant="hero"
                 onClick={handleAddEvent}
+                disabled={submitting}
                 className="flex-1"
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Add Event
+                {submitting ? "Adding..." : "Add Event"}
               </Button>
             </div>
           </div>
