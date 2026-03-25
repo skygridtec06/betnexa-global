@@ -106,6 +106,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
   }, [gameId, adminPhone]);
 
   // Admin phone is passed as prop from AdminPortal
+  const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
 
   const loadEvents = async () => {
     try {
@@ -119,7 +120,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
         return;
       }
 
-      const url = `/api/admin/match-events/${gameId}?phone=${encodeURIComponent(adminPhone)}`;
+      const url = `${apiUrl}/api/admin/match-events/${gameId}?phone=${encodeURIComponent(adminPhone)}`;
       console.log("📋 Fetching events from:", url);
       
       const response = await fetch(url, {
@@ -189,7 +190,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
         };
       }
 
-      const response = await fetch("/api/admin/match-events", {
+      const response = await fetch(`${apiUrl}/api/admin/match-events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -223,7 +224,7 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
 
   const handleDeleteEvent = async (eventId: string) => {
     try {
-      const response = await fetch(`/api/admin/match-events/${eventId}?phone=${encodeURIComponent(adminPhone)}`, {
+      const response = await fetch(`${apiUrl}/api/admin/match-events/${eventId}?phone=${encodeURIComponent(adminPhone)}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
       });
