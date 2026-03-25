@@ -85,10 +85,16 @@ async function createMatchEvents(gameId, events) {
  */
 async function getPendingEvents(gameId) {
   try {
+    const gameUuid = await resolveGameUuid(gameId);
+    if (!gameUuid) {
+      console.warn(`⚠️ Game not found for pending events: ${gameId}`);
+      return [];
+    }
+
     const { data: game, error: gameError } = await supabase
       .from('games')
       .select('kickoff_start_time, is_kickoff_started, status')
-      .eq('id', gameId)
+      .eq('id', gameUuid)
       .single();
 
     if (gameError || !game) {
@@ -104,7 +110,7 @@ async function getPendingEvents(gameId) {
     const { data: events, error: eventsError } = await supabase
       .from('match_events')
       .select('*')
-      .eq('game_id', gameId)
+      .eq('game_id', gameUuid)
       .eq('is_active', true)
       .is('executed_at', null)
       .order('scheduled_at', { ascending: true });
@@ -280,7 +286,7 @@ async function checkAndExecutePendingEvents(gameId) {
     const results = [];
 
     for (const event of pendingEvents) {
-      const result = await executeEvent(event, gameId);
+      const result = await executeEvent(event, event.game_id || gameId);
       if (result.success) {
         executedCount++;
         results.push({ eventType: event.event_type, executed: true });
