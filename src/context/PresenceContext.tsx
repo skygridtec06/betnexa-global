@@ -23,7 +23,7 @@ interface PresenceContextType {
   activeUsers: UserPresence[];
   activeCount: number;
   isTracking: boolean;
-  startTracking: (userId: string) => Promise<void>;
+  startTracking: (user: { id: string; username?: string; phone?: string }) => Promise<void>;
   stopTracking: () => Promise<void>;
   subscribeToPresence: () => void;
 }
@@ -43,16 +43,18 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
 
   // Start presence tracking (called on login)
-  const startTracking = useCallback(async (userId: string) => {
+  const startTracking = useCallback(async (user: { id: string; username?: string; phone?: string }) => {
     try {
-      console.log('\n🟢 [PresenceContext] Starting presence tracking for user:', userId);
+      console.log('\n🟢 [PresenceContext] Starting presence tracking for user:', user.id);
 
       const userAgent = navigator.userAgent;
       const response = await fetch(`${apiUrl}/api/presence/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId,
+          userId: user.id,
+          username: user.username || '',
+          phoneNumber: user.phone || '',
           userAgent,
           ipAddress: ''
         })

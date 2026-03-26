@@ -13,7 +13,11 @@ export function usePresenceTracking() {
     if (user && user.id && !isTracking) {
       // User is logged in, start tracking
       console.log('📍 User logged in, starting presence tracking');
-      startTracking(user.id);
+      startTracking({
+        id: user.id,
+        username: user.username,
+        phone: user.phone,
+      });
     }
   }, [user?.id, user, isTracking, startTracking]);
 

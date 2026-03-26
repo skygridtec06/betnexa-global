@@ -17,7 +17,7 @@ const toIso = (value) => {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 };
 
-const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivity, loginTime, userAgent = '', ipAddress = '' }) => {
+const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivity, loginTime, userAgent = '', ipAddress = '', username = '', phoneNumber = '' }) => {
   if (!sessionId) return;
 
   const existing = memoryPresence.get(sessionId);
@@ -30,7 +30,42 @@ const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivi
     status,
     user_agent: userAgent || existing?.user_agent || '',
     ip_address: ipAddress || existing?.ip_address || '',
+    users: {
+      id: userId || existing?.users?.id || '',
+      username: username || existing?.users?.username || '',
+      phone_number: phoneNumber || existing?.users?.phone_number || '',
+      email: existing?.users?.email || '',
+      total_bets: existing?.users?.total_bets || 0,
+      total_winnings: existing?.users?.total_winnings || 0,
+      account_balance: existing?.users?.account_balance || 0,
+    },
   });
+};
+
+const attachUsersById = async (sessions) => {
+  if (!Array.isArray(sessions) || sessions.length === 0 || !canUseDatabase()) {
+    return sessions || [];
+  }
+
+  const userIds = [...new Set(sessions.map((row) => row.user_id).filter(Boolean))];
+  if (userIds.length === 0) {
+    return sessions;
+  }
+
+  const usersResult = await supabase
+    .from('users')
+    .select('id, username, phone_number, email, total_bets, total_winnings, account_balance')
+    .in('id', userIds);
+
+  if (usersResult.error || !Array.isArray(usersResult.data)) {
+    return sessions;
+  }
+
+  const usersById = new Map(usersResult.data.map((user) => [user.id, user]));
+  return sessions.map((session) => ({
+    ...session,
+    users: usersById.get(session.user_id) || session.users || undefined,
+  }));
 };
 
 const getActiveMemorySessions = () => {
@@ -55,7 +90,7 @@ const getActiveMemorySessions = () => {
  */
 router.post('/login', async (req, res) => {
   try {
-    const { userId, phoneNumber, userAgent, ipAddress } = req.body;
+    const { userId, username, phoneNumber, userAgent, ipAddress } = req.body;
     
     console.log('\n👤 [POST /api/presence/login] User login');
     console.log('   User ID:', userId);
@@ -106,6 +141,8 @@ router.post('/login', async (req, res) => {
         loginTime: nowIso,
         userAgent,
         ipAddress,
+        username,
+        phoneNumber,
       });
       data = memoryPresence.get(sessionId);
     }
@@ -128,6 +165,8 @@ router.post('/login', async (req, res) => {
       loginTime: new Date(),
       userAgent: req.body?.userAgent || '',
       ipAddress: req.body?.ipAddress || '',
+      username: req.body?.username || '',
+      phoneNumber: req.body?.phoneNumber || '',
     });
 
     res.json({
@@ -291,10 +330,7 @@ router.get('/active', async (req, res) => {
     }
 
     if (source === 'memory') {
-      activeSessions = getActiveMemorySessions().map((row) => ({
-        ...row,
-        users: undefined,
-      }));
+      activeSessions = await attachUsersById(getActiveMemorySessions());
     }
 
     const uniqueUserCount = new Set((activeSessions || []).map((s) => s.user_id)).size;
@@ -308,10 +344,7 @@ router.get('/active', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Get active users error:', error);
-    const activeSessions = getActiveMemorySessions().map((row) => ({
-      ...row,
-      users: undefined,
-    }));
+    const activeSessions = await attachUsersById(getActiveMemorySessions());
     const uniqueUserCount = new Set((activeSessions || []).map((s) => s.user_id)).size;
 
     res.json({
