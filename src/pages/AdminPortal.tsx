@@ -177,6 +177,7 @@ const AdminPortal = () => {
   
   // Search and transaction state
   const [userSearchQuery, setUserSearchQuery] = useState<string>("");
+  const [transactionSearchQuery, setTransactionSearchQuery] = useState<string>("");
   const [selectedUserTransactions, setSelectedUserTransactions] = useState<any>(null);
 
   // SMS broadcast state
@@ -1567,6 +1568,29 @@ const AdminPortal = () => {
       'User'
     );
   };
+
+  const transactionQuery = transactionSearchQuery.trim().toLowerCase();
+
+  const filteredTransactions = allTransactions.filter((transaction: any) => {
+    if (!transactionQuery) return true;
+
+    const accountLabel = String(getTransactionAccountLabel(transaction) || '').toLowerCase();
+    const phone = String(transaction.phone_number || '').toLowerCase();
+    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery);
+  });
+
+  const filteredActivationFees = activationFees.filter((fee: any) => {
+    if (!transactionQuery) return true;
+
+    const accountLabel = String(
+      resolveUsernameFromCache(fee.user_id, fee.phone_number) ||
+      fee.phone_number ||
+      fee.user_id?.substring(0, 8) ||
+      'User'
+    ).toLowerCase();
+    const phone = String(fee.phone_number || '').toLowerCase();
+    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery);
+  });
 
   // Fetch all payments
   const fetchAllPayments = async () => {
@@ -3053,9 +3077,19 @@ const AdminPortal = () => {
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">
+            <Card className="border-border bg-card p-4">
+              <label className="text-xs font-medium text-muted-foreground">Search Transactions</label>
+              <Input
+                value={transactionSearchQuery}
+                onChange={(e) => setTransactionSearchQuery(e.target.value)}
+                placeholder="Search by username or phone number"
+                className="mt-2"
+              />
+            </Card>
+
             {/* --- DEPOSITS SECTION --- */}
             {(() => {
-              const deposits = allTransactions.filter((t: any) => t.type === 'deposit');
+              const deposits = filteredTransactions.filter((t: any) => t.type === 'deposit');
               const resolved = deposits.filter((t: any) => t.status === 'completed' || t.status === 'failed');
               const completed = resolved.filter((t: any) => t.status === 'completed');
               const failed = resolved.filter((t: any) => t.status === 'failed');
@@ -3084,7 +3118,9 @@ const AdminPortal = () => {
                   </div>
                   <div className="space-y-3">
                     {deposits.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">No deposits found</p>
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {transactionQuery ? 'No deposits found for this search' : 'No deposits found'}
+                      </p>
                     )}
                     {deposits.map((transaction: any) => (
                       <Card key={transaction.id} className="border-border bg-card p-4">
@@ -3153,7 +3189,7 @@ const AdminPortal = () => {
 
             {/* --- ACTIVATION FEES SECTION (KSH 1000 + KSH 399) --- */}
             {(() => {
-              const resolved = activationFees.filter((f: any) => f.status === 'completed' || f.status === 'failed');
+              const resolved = filteredActivationFees.filter((f: any) => f.status === 'completed' || f.status === 'failed');
               const completed = resolved.filter((f: any) => f.status === 'completed');
               const failed = resolved.filter((f: any) => f.status === 'failed');
               const successRate = resolved.length > 0 ? Math.round((completed.length / resolved.length) * 100) : 0;
@@ -3203,16 +3239,18 @@ const AdminPortal = () => {
                         <div className="flex justify-between text-xs font-medium">
                           <span className="text-green-500">{successRate}% Success ({completed.length})</span>
                           <span className="text-red-500">{failRate}% Failed ({failed.length})</span>
-                          <span className="text-muted-foreground">{activationFees.length - resolved.length} Pending</span>
+                          <span className="text-muted-foreground">{filteredActivationFees.length - resolved.length} Pending</span>
                         </div>
                       </div>
                     )}
                   </div>
                   <div className="space-y-3">
-                    {activationFees.length === 0 && (
-                      <p className="text-sm text-muted-foreground text-center py-4">No activation fees found</p>
+                    {filteredActivationFees.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        {transactionQuery ? 'No activation fees found for this search' : 'No activation fees found'}
+                      </p>
                     )}
-                    {activationFees.map((fee: any) => (
+                    {filteredActivationFees.map((fee: any) => (
                       <Card key={fee.id} className="border-border bg-card p-4">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3 flex-1">
@@ -3286,10 +3324,12 @@ const AdminPortal = () => {
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Withdrawals</h3>
             </div>
             <div className="space-y-3">
-              {allTransactions.filter((t: any) => t.type !== 'deposit').length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">No withdrawals found</p>
+              {filteredTransactions.filter((t: any) => t.type !== 'deposit').length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  {transactionQuery ? 'No withdrawals found for this search' : 'No withdrawals found'}
+                </p>
               )}
-              {allTransactions.filter((t: any) => t.type !== 'deposit').map((transaction: any) => (
+              {filteredTransactions.filter((t: any) => t.type !== 'deposit').map((transaction: any) => (
                 <Card key={transaction.id} className="border-border bg-card p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 flex-1">

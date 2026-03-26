@@ -167,14 +167,22 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
         return;
       }
 
-      if (!formData.eventTime || !/^\d{2}:\d{2}$/.test(formData.eventTime)) {
-        setErrorMessage("Please select a valid EAT event time (HH:MM format)");
-        setSubmitting(false);
-        return;
-      }
+      let eventUtcIso: string;
 
-      const eventUtcIso = buildUtcIsoFromEatTime(formData.eventTime);
-      console.log("🎯 Creating event:", { eventType: formData.eventType, eatTime: formData.eventTime, utcIso: eventUtcIso });
+      if (formData.eventType === "score_update") {
+        // Schedule based on kickoff time + match minute
+        const kickoffMs = new Date(kickoffTime).getTime();
+        eventUtcIso = new Date(kickoffMs + formData.minute * 60 * 1000).toISOString();
+        console.log("🎯 Creating score_update event at minute", formData.minute, "→ UTC:", eventUtcIso);
+      } else {
+        if (!formData.eventTime || !/^\d{2}:\d{2}$/.test(formData.eventTime)) {
+          setErrorMessage("Please select a valid EAT event time (HH:MM format)");
+          setSubmitting(false);
+          return;
+        }
+        eventUtcIso = buildUtcIsoFromEatTime(formData.eventTime);
+        console.log("🎯 Creating event:", { eventType: formData.eventType, eatTime: formData.eventTime, utcIso: eventUtcIso });
+      }
 
       const eventData: any = {
         eventType: formData.eventType,
@@ -388,39 +396,42 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
               </select>
             </div>
 
-            {/* Time Offset */}
-            <div>
-              <label className="text-sm font-medium">Event Time (EAT)</label>
-              <Input
-                type="time"
-                value={formData.eventTime}
-                onChange={(e) =>
-                  setFormData({ ...formData, eventTime: e.target.value })
-                }
-                className="mt-1 bg-background/50 border-primary/30"
-              />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Event will trigger at {formData.eventTime || "--:--"} EAT on {getEatDateLabelFromIso(kickoffTime)}
-              </p>
-            </div>
+            {/* Time picker — hidden for score_update (uses match minute instead) */}
+            {formData.eventType !== "score_update" && (
+              <div>
+                <label className="text-sm font-medium">Event Time (EAT)</label>
+                <Input
+                  type="time"
+                  value={formData.eventTime}
+                  onChange={(e) =>
+                    setFormData({ ...formData, eventTime: e.target.value })
+                  }
+                  className="mt-1 bg-background/50 border-primary/30"
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Event will trigger at {formData.eventTime || "--:--"} EAT on {getEatDateLabelFromIso(kickoffTime)}
+                </p>
+              </div>
+            )}
 
             {/* Score Update Fields */}
             {formData.eventType === "score_update" && (
-              <div className="space-y-3 border-t border-primary/20 pt-4">
-                <p className="text-xs font-medium text-muted-foreground">Score Details</p>
-
+              <div className="space-y-3">
                 <div>
                   <label className="text-sm font-medium">Match Minute</label>
                   <Input
                     type="number"
-                    min="0"
+                    min="1"
                     max="120"
                     value={formData.minute}
                     onChange={(e) =>
-                      setFormData({ ...formData, minute: parseInt(e.target.value) || 0 })
+                      setFormData({ ...formData, minute: parseInt(e.target.value) || 1 })
                     }
                     className="mt-1 bg-background/50 border-primary/30"
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Score will update at minute {formData.minute} (kickoff + {formData.minute} min)
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
