@@ -11,7 +11,6 @@ import { useOdds, type GameOdds } from "@/context/OddsContext";
 import { useUserManagement } from "@/context/UserManagementContext";
 import { useUser } from "@/context/UserContext";
 import { useTransactions } from "@/context/TransactionContext";
-import { usePresence } from "@/context/PresenceContext";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -19,6 +18,7 @@ import { calculateMatchMinute } from "@/lib/gameTimeCalculator";
 import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT, formatTimeInEAT } from "@/lib/timezoneFormatter";
 import { MatchEventEditor } from "@/components/MatchEventEditor";
+import { ActiveMembers } from "@/components/ActiveMembers";
 
 const marketLabels: Record<string, string> = {
   bttsYes: "BTTS Yes", bttsNo: "BTTS No",
@@ -69,7 +69,6 @@ const AdminPortal = () => {
   const { users, updateUser, getAllUsers, fetchUsersFromBackend } = useUserManagement();
   const { user: loggedInUser, updateUser: updateCurrentUser } = useUser();
   const { updateTransactionStatus } = useTransactions();
-  const { activeCount } = usePresence();
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
@@ -1678,13 +1677,6 @@ const AdminPortal = () => {
 
   const stats: Array<{ icon: any; label: string; value: string; color: string; note?: string }> = [
     { icon: Users, label: "Total Users", value: totalUsers.toLocaleString(), color: "text-primary" },
-    {
-      icon: Users,
-      label: "Online",
-      value: activeCount.toLocaleString(),
-      color: "text-green-500",
-      note: "Real-time users logged in or running in the background",
-    },
     { icon: UserPlus, label: "Signed Up Today", value: todaySignups.toLocaleString(), color: "text-primary" },
     { icon: DollarSign, label: "Revenue Today", value: `KSH ${todayRevenue.toLocaleString()}`, color: "text-gold" },
     { icon: BarChart3, label: "Active Bets", value: activeBets.toLocaleString(), color: "text-primary" },
@@ -1907,7 +1899,20 @@ const AdminPortal = () => {
 
         {/* Stats */}
         <div className="mb-8 grid gap-4 md:grid-cols-6">
-          {stats.map((s) => (
+          {stats.slice(0, 1).map((s) => (
+            <div key={s.label} className="gradient-card rounded-xl border border-border/50 p-5 card-glow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p className={`mt-1 font-display text-2xl font-bold ${s.color}`}>{s.value}</p>
+                  {s.note && <p className="mt-1 text-[11px] text-muted-foreground">{s.note}</p>}
+                </div>
+                <s.icon className={`h-8 w-8 ${s.color} opacity-30`} />
+              </div>
+            </div>
+          ))}
+          <ActiveMembers />
+          {stats.slice(1).map((s) => (
             <div key={s.label} className="gradient-card rounded-xl border border-border/50 p-5 card-glow">
               <div className="flex items-center justify-between">
                 <div>

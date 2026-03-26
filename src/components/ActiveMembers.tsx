@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Users, LogIn, LogOut, Dot, RefreshCw } from "lucide-react";
+import { Users, Dot, RefreshCw } from "lucide-react";
 import { usePresence } from "@/context/PresenceContext";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { formatTimeInEAT } from "@/lib/timezoneFormatter";
+import { useUserManagement } from "@/context/UserManagementContext";
 
 interface UserPresence {
   id: string;
@@ -27,8 +27,8 @@ interface UserPresence {
 
 export function ActiveMembers() {
   const { activeUsers, activeCount } = usePresence();
+  const { users } = useUserManagement();
   const [isOpen, setIsOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<'recent' | 'username'>('recent');
   const [refreshing, setRefreshing] = useState(false);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
@@ -48,40 +48,62 @@ export function ActiveMembers() {
     }
   };
 
-  const sortedUsers = [...activeUsers].sort((a, b) => {
-    if (sortBy === 'recent') {
-      return new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime();
-    } else {
-      return (a.users?.username || '').localeCompare(b.users?.username || '');
+  const activeMembers = useMemo(() => {
+    const sorted = [...activeUsers].sort(
+      (a, b) => new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime()
+    );
+    const seenUserIds = new Set<string>();
+
+    return sorted.flatMap((presence: UserPresence) => {
+      const uniqueKey = presence.user_id || presence.session_id;
+      if (!uniqueKey || seenUserIds.has(uniqueKey)) {
+        return [];
+      }
+      seenUserIds.add(uniqueKey);
+
+      const cachedUser = users.find((user: any) => user.id === presence.user_id);
+      const username = presence.users?.username || cachedUser?.username || cachedUser?.name || "Unknown";
+      const phoneNumber = presence.users?.phone_number || cachedUser?.phone || "N/A";
+
+      return [{
+        sessionId: presence.session_id,
+        username,
+        phoneNumber,
+      }];
     }
-  });
+    );
+  }, [activeUsers, users]);
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <div className="gradient-card rounded-xl border border-border/50 p-5 card-glow cursor-pointer hover:border-primary/50 transition-colors">
+        <div className="gradient-card rounded-xl border border-border/50 p-5 card-glow hover:border-primary/50 transition-colors">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-muted-foreground">Active Members</p>
-              <p className="mt-1 font-display text-2xl font-bold text-primary">{activeCount}</p>
+              <p className="text-xs text-muted-foreground">Online</p>
+              <p className="mt-1 font-display text-2xl font-bold text-green-500">{activeCount}</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Active on the site or running in background</p>
             </div>
             <div className="relative">
-              <Users className="h-8 w-8 text-primary opacity-30" />
+              <Users className="h-8 w-8 text-green-500 opacity-30" />
               <Dot className="absolute top-0 right-0 h-4 w-4 text-green-500 animate-pulse" />
             </div>
           </div>
+          <Button variant="outline" size="sm" className="mt-4 w-full">
+            Show Online
+          </Button>
         </div>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-96 overflow-hidden flex flex-col bg-card border-border">
+      <DialogContent className="max-w-lg max-h-96 overflow-hidden flex flex-col bg-card border-border">
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div>
               <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
                 <Users className="h-5 w-5 text-primary" />
-                Active Members Online
+                Online Users
               </DialogTitle>
               <DialogDescription className="mt-1">
-                {activeCount} user{activeCount !== 1 ? 's' : ''} currently on the platform
+                {activeCount} user{activeCount !== 1 ? 's' : ''} active right now. Users appear and disappear in real time.
               </DialogDescription>
             </div>
             <Button 
@@ -97,70 +119,28 @@ export function ActiveMembers() {
           </div>
         </DialogHeader>
 
-        {/* Sort Options */}
-        <div className="flex gap-2 mb-4 border-b border-border pb-3">
-          <Button
-            size="sm"
-            variant={sortBy === 'recent' ? 'default' : 'outline'}
-            onClick={() => setSortBy('recent')}
-            className="text-xs"
-          >
-            Most Recent
-          </Button>
-          <Button
-            size="sm"
-            variant={sortBy === 'username' ? 'default' : 'outline'}
-            onClick={() => setSortBy('username')}
-            className="text-xs"
-          >
-            Username
-          </Button>
-        </div>
-
-        {/* Active Users List */}
         <ScrollArea className="flex-1 pr-4">
-          {sortedUsers.length === 0 ? (
+          {activeMembers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <Users className="h-12 w-12 text-muted-foreground/50 mb-3" />
-              <p className="text-sm text-muted-foreground">No active members currently</p>
+              <p className="text-sm text-muted-foreground">No users currently online</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {sortedUsers.map((presence: UserPresence) => {
-                const user = presence.users;
-                const timeSinceLogin = new Date(presence.login_time).toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: true
-                });
-                const lastActivityTime = new Date(presence.last_activity).getTime();
-                const nowTime = new Date().getTime();
-                const secondsAgo = Math.round((nowTime - lastActivityTime) / 1000);
-
+              {activeMembers.map((member) => {
                 return (
-                  <div key={presence.session_id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border hover:bg-secondary/70 transition-colors">
+                  <div key={member.sessionId} className="flex items-center justify-between rounded-lg border border-border bg-secondary/50 p-3 transition-colors hover:bg-secondary/70">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Dot className="h-3 w-3 text-green-500 animate-pulse flex-shrink-0" />
                         <p className="font-semibold text-sm text-foreground truncate">
-                          {user?.username || 'Unknown'}
+                          {member.username}
                         </p>
                         <Badge variant="outline" className="text-xs ml-auto flex-shrink-0">
                           Online
                         </Badge>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                        <p>📧 {user?.email || 'N/A'}</p>
-                        <p>📱 {user?.phone_number || 'N/A'}</p>
-                        <p>🎯 Bets: {user?.total_bets || 0}</p>
-                        <p>💰 Winnings: KSH {user?.total_winnings?.toLocaleString() || 0}</p>
-                      </div>
-                      <div className="mt-2 text-xs text-muted-foreground/70">
-                        <p>
-                          📍 Logged in: {timeSinceLogin} 
-                          {secondsAgo > 0 && ` • Active ${secondsAgo}s ago`}
-                        </p>
-                      </div>
+                      <p className="text-xs text-muted-foreground">{member.phoneNumber}</p>
                     </div>
                   </div>
                 );
@@ -168,24 +148,6 @@ export function ActiveMembers() {
             </div>
           )}
         </ScrollArea>
-
-        {/* Footer Stats */}
-        <div className="mt-4 pt-3 border-t border-border text-xs text-muted-foreground">
-          <div className="grid grid-cols-3 gap-2">
-            <div className="flex items-center gap-1">
-              <LogIn className="h-3 w-3 text-green-500" />
-              <span>All users reporting live</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <RefreshCw className="h-3 w-3 text-blue-500" />
-              <span>Updates every 1.5s</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Dot className="h-3 w-3 text-primary animate-pulse" />
-              <span>Real-time tracking</span>
-            </div>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
