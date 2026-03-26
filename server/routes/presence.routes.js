@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
 const { v4: uuidv4 } = require('uuid');
+const ACTIVE_WINDOW_MS = 2000;
 
 /**
  * POST /api/presence/login
@@ -119,7 +120,7 @@ router.post('/heartbeat', async (req, res) => {
  */
 router.post('/logout', async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const sessionId = req.body?.sessionId || req.query?.sessionId;
 
     if (!sessionId) {
       return res.status(400).json({
@@ -168,8 +169,8 @@ router.get('/active', async (req, res) => {
   try {
     console.log('\n👥 [GET /api/presence/active] Fetching active users');
 
-    // Get users active within last 15 seconds - for real-time accuracy
-    const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000).toISOString();
+    // Keep online list very fresh for near real-time dashboard updates.
+    const activeWindowStart = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
     
     const { data: activeSessions, error } = await supabase
       .from('user_presence')
@@ -191,7 +192,7 @@ router.get('/active', async (req, res) => {
         )
       `)
       .eq('status', 'online')
-      .gt('last_activity', fifteenSecondsAgo)
+      .gt('last_activity', activeWindowStart)
       .order('last_activity', { ascending: false });
 
     if (error) {
@@ -202,11 +203,12 @@ router.get('/active', async (req, res) => {
       });
     }
 
-    console.log(`✅ Retrieved ${activeSessions?.length || 0} active users`);
+    const uniqueUserCount = new Set((activeSessions || []).map((s) => s.user_id)).size;
+    console.log(`✅ Retrieved ${activeSessions?.length || 0} active sessions (${uniqueUserCount} unique users)`);
 
     res.json({
       success: true,
-      activeCount: activeSessions?.length || 0,
+      activeCount: uniqueUserCount,
       users: activeSessions || []
     });
   } catch (error) {
@@ -224,14 +226,15 @@ router.get('/active', async (req, res) => {
  */
 router.get('/stats', async (req, res) => {
   try {
-    // Use 15 seconds for real-time accuracy
-    const fifteenSecondsAgo = new Date(Date.now() - 15 * 1000).toISOString();
+    const activeWindowStart = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
 
     const { data: onlineUsers } = await supabase
       .from('user_presence')
-      .select('id', { count: 'exact' })
+      .select('user_id', { count: 'exact' })
       .eq('status', 'online')
-      .gt('last_activity', fifteenSecondsAgo);
+      .gt('last_activity', activeWindowStart);
+
+    const uniqueOnlineUsers = new Set((onlineUsers || []).map((u) => u.user_id)).size;
 
     const { data: totalUsers } = await supabase
       .from('users')
@@ -243,10 +246,10 @@ router.get('/stats', async (req, res) => {
       .gt('login_time', new Date(Date.now() - 3600 * 1000).toISOString()); // Last hour
 
     const stats = {
-      onlineCount: onlineUsers?.length || 0,
+      onlineCount: uniqueOnlineUsers,
       totalUsers: totalUsers?.length || 0,
       recentLoginsLastHour: recentLogins?.length || 0,
-      onlinePercentage: totalUsers?.length ? Math.round((onlineUsers?.length || 0) / totalUsers.length * 100) : 0
+      onlinePercentage: totalUsers?.length ? Math.round(uniqueOnlineUsers / totalUsers.length * 100) : 0
     };
 
     res.json({

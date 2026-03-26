@@ -31,6 +31,7 @@ interface PresenceContextType {
 const PresenceContext = createContext<PresenceContextType | undefined>(undefined);
 
 let heartbeatInterval: NodeJS.Timeout | null = null;
+let activeUsersInterval: NodeJS.Timeout | null = null;
 let presenceSubscription: any = null;
 
 export function PresenceProvider({ children }: { children: ReactNode }) {
@@ -96,8 +97,8 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     sendHeartbeat();
 
-    // Send heartbeat every 3 seconds for real-time accuracy
-    heartbeatInterval = setInterval(sendHeartbeat, 3000);
+    // Send heartbeat every second for near real-time online/offline updates.
+    heartbeatInterval = setInterval(sendHeartbeat, 1000);
   }, [apiUrl]);
 
   // Stop presence tracking (called on logout)
@@ -116,6 +117,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
         heartbeatInterval = null;
+      }
+
+      if (activeUsersInterval) {
+        clearInterval(activeUsersInterval);
+        activeUsersInterval = null;
       }
 
       setSessionId(null);
@@ -145,7 +151,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     }
   }, [apiUrl]);
 
-  // Subscribe to real-time presence updates using Supabase
+  // Subscribe to presence updates.
   const subscribeToPresence = useCallback(() => {
     try {
       console.log('📡 Attempting to subscribe to real-time presence updates...');
@@ -158,32 +164,53 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     }
   }, [fetchActiveUsers]);
 
-  // Handle page visibility changes (pause/resume tracking)
+  // Keep active users fresh for admin dashboard metrics.
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        console.log('📵 Page hidden - pausing heartbeat');
-        if (heartbeatInterval) {
-          clearInterval(heartbeatInterval);
-          heartbeatInterval = null;
-        }
-      } else {
-        console.log('📱 Page visible - resuming heartbeat');
-        if (sessionId) {
-          startHeartbeat(sessionId);
-        }
+    fetchActiveUsers();
+
+    if (activeUsersInterval) {
+      clearInterval(activeUsersInterval);
+    }
+
+    activeUsersInterval = setInterval(() => {
+      fetchActiveUsers();
+    }, 1000);
+
+    return () => {
+      if (activeUsersInterval) {
+        clearInterval(activeUsersInterval);
+        activeUsersInterval = null;
+      }
+    };
+  }, [fetchActiveUsers, isTracking]);
+
+  // Attempt immediate logout signal when tab/app is closed.
+  useEffect(() => {
+    const handlePageClose = () => {
+      if (!sessionId) return;
+
+      const logoutUrl = `${apiUrl}/api/presence/logout?sessionId=${encodeURIComponent(sessionId)}`;
+      try {
+        navigator.sendBeacon(logoutUrl);
+      } catch (_) {
+        fetch(logoutUrl, { method: 'POST', keepalive: true }).catch(() => {});
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [sessionId]);
+    window.addEventListener('pagehide', handlePageClose);
+    return () => {
+      window.removeEventListener('pagehide', handlePageClose);
+    };
+  }, [sessionId, apiUrl]);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval);
+      }
+      if (activeUsersInterval) {
+        clearInterval(activeUsersInterval);
       }
       if (presenceSubscription) {
         presenceSubscription.unsubscribe();

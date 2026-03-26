@@ -10,7 +10,7 @@ const BetsRoutes = require('./routes/bets.routes.js');
 const LiveRoutes = require('./routes/live.routes.js');
 const CronRoutes = require('./routes/cron.routes.js');
 const { startMatchEventScheduler } = require('./services/matchScheduler');
-// const PresenceRoutes = require('./routes/presence.routes.js');
+const PresenceRoutes = require('./routes/presence.routes.js');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -37,7 +37,7 @@ app.use('/api/admin', AdminRoutes);
 app.use('/api/bets', BetsRoutes);
 app.use('/api/live', LiveRoutes);
 app.use('/api/cron', CronRoutes);
-// app.use('/api/presence', PresenceRoutes);
+app.use('/api/presence', PresenceRoutes);
 
 // Health check
 // Health check endpoint
