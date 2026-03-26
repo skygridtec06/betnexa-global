@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const ACTIVE_WINDOW_MS = 2000;
 
 /**
@@ -28,7 +28,7 @@ router.post('/login', async (req, res) => {
       });
     }
 
-    const sessionId = uuidv4();
+    const sessionId = randomUUID();
     const { data, error } = await supabase
       .from('user_presence')
       .insert({
