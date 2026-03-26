@@ -20,6 +20,43 @@ const toIso = (value) => {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 };
 
+const normalizeUserRow = (user) => ({
+  id: user?.id || '',
+  username: user?.username || user?.name || '',
+  phone_number: user?.phone_number || user?.phone || '',
+  phone: user?.phone || user?.phone_number || '',
+  email: user?.email || '',
+  total_bets: user?.total_bets || 0,
+  total_winnings: user?.total_winnings || 0,
+  account_balance: user?.account_balance || 0,
+});
+
+const fetchUsersForPresence = async (userIds) => {
+  if (!canUseDatabase() || !Array.isArray(userIds) || userIds.length === 0) {
+    return new Map();
+  }
+
+  // Try schema with phone_number first.
+  let usersResult = await supabase
+    .from('users')
+    .select('id, username, name, phone_number, email, total_bets, total_winnings, account_balance')
+    .in('id', userIds);
+
+  // Fallback for schemas that use phone instead of phone_number.
+  if (usersResult.error) {
+    usersResult = await supabase
+      .from('users')
+      .select('id, username, name, phone, email, total_bets, total_winnings, account_balance')
+      .in('id', userIds);
+  }
+
+  if (usersResult.error || !Array.isArray(usersResult.data)) {
+    return new Map();
+  }
+
+  return new Map(usersResult.data.map((user) => [user.id, normalizeUserRow(user)]));
+};
+
 const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivity, loginTime, userAgent = '', ipAddress = '', username = '', phoneNumber = '' }) => {
   if (!sessionId) return;
 
@@ -37,6 +74,7 @@ const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivi
       id: userId || existing?.users?.id || '',
       username: username || existing?.users?.username || '',
       phone_number: phoneNumber || existing?.users?.phone_number || '',
+      phone: phoneNumber || existing?.users?.phone || existing?.users?.phone_number || '',
       email: existing?.users?.email || '',
       total_bets: existing?.users?.total_bets || 0,
       total_winnings: existing?.users?.total_winnings || 0,
@@ -55,16 +93,11 @@ const attachUsersById = async (sessions) => {
     return sessions;
   }
 
-  const usersResult = await supabase
-    .from('users')
-    .select('id, username, phone_number, email, total_bets, total_winnings, account_balance')
-    .in('id', userIds);
-
-  if (usersResult.error || !Array.isArray(usersResult.data)) {
+  const usersById = await fetchUsersForPresence(userIds);
+  if (usersById.size === 0) {
     return sessions;
   }
 
-  const usersById = new Map(usersResult.data.map((user) => [user.id, user]));
   return sessions.map((session) => ({
     ...session,
     users: usersById.get(session.user_id) || session.users || undefined,
@@ -311,17 +344,7 @@ router.get('/active', async (req, res) => {
         const rows = sessionResult.data || [];
         const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
 
-        let usersById = new Map();
-        if (userIds.length > 0) {
-          const usersResult = await supabase
-            .from('users')
-            .select('id, username, phone_number, email, total_bets, total_winnings, account_balance')
-            .in('id', userIds);
-
-          if (!usersResult.error && Array.isArray(usersResult.data)) {
-            usersById = new Map(usersResult.data.map((u) => [u.id, u]));
-          }
-        }
+        const usersById = await fetchUsersForPresence(userIds);
 
         activeSessions = rows.map((row) => ({
           ...row,

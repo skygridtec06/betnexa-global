@@ -132,6 +132,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       setIsTracking(false);
       setActiveUsers([]);
       setActiveCount(0);
+      sessionStorage.removeItem('presence_tracked_user_id');
     } catch (error) {
       console.error('❌ Error stopping presence tracking:', error);
     }

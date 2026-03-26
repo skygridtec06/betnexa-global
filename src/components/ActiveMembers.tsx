@@ -18,6 +18,7 @@ interface UserPresence {
     id: string;
     username: string;
     phone_number: string;
+    phone?: string;
     email: string;
     total_bets: number;
     total_winnings: number;
@@ -55,7 +56,7 @@ export function ActiveMembers() {
     const seenUserIds = new Set<string>();
 
     return sorted.flatMap((presence: UserPresence) => {
-      const uniqueKey = presence.user_id || presence.session_id;
+      const uniqueKey = String(presence.user_id || presence.users?.id || presence.session_id || '');
       if (!uniqueKey || seenUserIds.has(uniqueKey)) {
         return [];
       }
@@ -65,10 +66,10 @@ export function ActiveMembers() {
         ? users.find((user: any) => user.id === presence.user_id)
         : undefined;
       const username = presence.users?.username || cachedUser?.username || cachedUser?.name || "Unknown";
-      const phoneNumber = presence.users?.phone_number || cachedUser?.phone || "N/A";
+      const phoneNumber = presence.users?.phone_number || presence.users?.phone || cachedUser?.phone || "N/A";
 
       return [{
-        sessionId: presence.session_id,
+        sessionId: uniqueKey,
         username,
         phoneNumber,
       }];
