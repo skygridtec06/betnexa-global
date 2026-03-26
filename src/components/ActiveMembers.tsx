@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Users, Dot, RefreshCw } from "lucide-react";
 import { usePresence } from "@/context/PresenceContext";
@@ -61,7 +61,9 @@ export function ActiveMembers() {
       }
       seenUserIds.add(uniqueKey);
 
-      const cachedUser = users.find((user: any) => user.id === presence.user_id);
+      const cachedUser = Array.isArray(users)
+        ? users.find((user: any) => user.id === presence.user_id)
+        : undefined;
       const username = presence.users?.username || cachedUser?.username || cachedUser?.name || "Unknown";
       const phoneNumber = presence.users?.phone_number || cachedUser?.phone || "N/A";
 
@@ -75,25 +77,25 @@ export function ActiveMembers() {
   }, [activeUsers, users]);
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      <DialogTrigger asChild>
-        <div className="gradient-card rounded-xl border border-border/50 p-5 card-glow hover:border-primary/50 transition-colors">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">Online</p>
-              <p className="mt-1 font-display text-2xl font-bold text-green-500">{activeCount}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">Active on the site or running in background</p>
-            </div>
-            <div className="relative">
-              <Users className="h-8 w-8 text-green-500 opacity-30" />
-              <Dot className="absolute top-0 right-0 h-4 w-4 text-green-500 animate-pulse" />
-            </div>
+    <>
+      <div className="gradient-card rounded-xl border border-border/50 p-5 card-glow hover:border-primary/50 transition-colors">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground">Online</p>
+            <p className="mt-1 font-display text-2xl font-bold text-green-500">{activeCount}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">Active on the site or running in background</p>
           </div>
-          <Button variant="outline" size="sm" className="mt-4 w-full">
-            Show Online
-          </Button>
+          <div className="relative">
+            <Users className="h-8 w-8 text-green-500 opacity-30" />
+            <Dot className="absolute top-0 right-0 h-4 w-4 text-green-500 animate-pulse" />
+          </div>
         </div>
-      </DialogTrigger>
+        <Button variant="outline" size="sm" className="mt-4 w-full" onClick={() => setIsOpen(true)}>
+          Show Online
+        </Button>
+      </div>
+
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="max-w-lg max-h-96 overflow-hidden flex flex-col bg-card border-border">
         <DialogHeader>
           <div className="flex items-center justify-between">
@@ -149,6 +151,7 @@ export function ActiveMembers() {
           )}
         </ScrollArea>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+    </>
   );
 }
