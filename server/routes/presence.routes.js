@@ -8,6 +8,46 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const { randomUUID } = require('crypto');
 const ACTIVE_WINDOW_MS = 2000;
+const memoryPresence = new Map();
+
+const canUseDatabase = () => !!(supabase && typeof supabase.from === 'function');
+
+const toIso = (value) => {
+  if (!value) return new Date().toISOString();
+  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+};
+
+const upsertMemoryPresence = ({ sessionId, userId, status = 'online', lastActivity, loginTime, userAgent = '', ipAddress = '' }) => {
+  if (!sessionId) return;
+
+  const existing = memoryPresence.get(sessionId);
+  memoryPresence.set(sessionId, {
+    id: existing?.id || sessionId,
+    user_id: userId || existing?.user_id || null,
+    session_id: sessionId,
+    last_activity: toIso(lastActivity),
+    login_time: toIso(loginTime || existing?.login_time || new Date()),
+    status,
+    user_agent: userAgent || existing?.user_agent || '',
+    ip_address: ipAddress || existing?.ip_address || '',
+  });
+};
+
+const getActiveMemorySessions = () => {
+  const cutoff = Date.now() - ACTIVE_WINDOW_MS;
+  const rows = [];
+
+  for (const [sessionId, session] of memoryPresence.entries()) {
+    const activityMs = new Date(session.last_activity).getTime();
+    if (!Number.isFinite(activityMs) || activityMs <= cutoff || session.status !== 'online') {
+      continue;
+    }
+    rows.push(session);
+  }
+
+  rows.sort((a, b) => new Date(b.last_activity).getTime() - new Date(a.last_activity).getTime());
+  return rows;
+};
 
 /**
  * POST /api/presence/login
@@ -29,39 +69,71 @@ router.post('/login', async (req, res) => {
     }
 
     const sessionId = randomUUID();
-    const { data, error } = await supabase
-      .from('user_presence')
-      .insert({
-        user_id: userId,
-        session_id: sessionId,
-        status: 'online',
-        user_agent: userAgent || '',
-        ip_address: ipAddress || '',
-        last_activity: new Date().toISOString(),
-        login_time: new Date().toISOString()
-      })
-      .select()
-      .single();
+    const nowIso = new Date().toISOString();
+    let data = null;
+    let usingMemoryFallback = false;
 
-    if (error) {
-      console.error('❌ Error creating presence session:', error.message);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to create presence session'
+    if (canUseDatabase()) {
+      const insertResult = await supabase
+        .from('user_presence')
+        .insert({
+          user_id: userId,
+          session_id: sessionId,
+          status: 'online',
+          user_agent: userAgent || '',
+          ip_address: ipAddress || '',
+          last_activity: nowIso,
+          login_time: nowIso
+        })
+        .select()
+        .single();
+
+      data = insertResult.data;
+      if (insertResult.error) {
+        usingMemoryFallback = true;
+        console.warn('⚠️ Presence DB login insert failed, using memory fallback:', insertResult.error.message);
+      }
+    } else {
+      usingMemoryFallback = true;
+    }
+
+    if (usingMemoryFallback) {
+      upsertMemoryPresence({
+        sessionId,
+        userId,
+        status: 'online',
+        lastActivity: nowIso,
+        loginTime: nowIso,
+        userAgent,
+        ipAddress,
       });
+      data = memoryPresence.get(sessionId);
     }
 
     console.log(`✅ Presence session created for user ${userId}`);
     res.json({
       success: true,
       sessionId: sessionId,
+      source: usingMemoryFallback ? 'memory' : 'database',
       data
     });
   } catch (error) {
     console.error('❌ Login presence error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to track login'
+    const fallbackSessionId = randomUUID();
+    upsertMemoryPresence({
+      sessionId: fallbackSessionId,
+      userId: req.body?.userId || null,
+      status: 'online',
+      lastActivity: new Date(),
+      loginTime: new Date(),
+      userAgent: req.body?.userAgent || '',
+      ipAddress: req.body?.ipAddress || '',
+    });
+
+    res.json({
+      success: true,
+      source: 'memory',
+      sessionId: fallbackSessionId
     });
   }
 });
@@ -81,32 +153,42 @@ router.post('/heartbeat', async (req, res) => {
       });
     }
 
-    const { data, error } = await supabase
-      .from('user_presence')
-      .update({
-        last_activity: new Date().toISOString(),
-        status: 'online'
-      })
-      .eq('session_id', sessionId)
-      .select()
-      .single();
+    const nowIso = new Date().toISOString();
+    let data = null;
+    let usingMemoryFallback = false;
 
-    if (error) {
-      console.warn('⚠️ Heartbeat update error:', error.message);
-      // Don't fail if session doesn't exist
-      return res.json({
-        success: true,
-        message: 'Heartbeat received'
-      });
+    if (canUseDatabase()) {
+      const updateResult = await supabase
+        .from('user_presence')
+        .update({
+          last_activity: nowIso,
+          status: 'online'
+        })
+        .eq('session_id', sessionId)
+        .select()
+        .single();
+
+      data = updateResult.data;
+      if (updateResult.error) {
+        usingMemoryFallback = true;
+        console.warn('⚠️ Heartbeat DB update failed, using memory fallback:', updateResult.error.message);
+      }
+    } else {
+      usingMemoryFallback = true;
+    }
+
+    if (usingMemoryFallback) {
+      upsertMemoryPresence({ sessionId, lastActivity: nowIso, status: 'online' });
+      data = memoryPresence.get(sessionId) || null;
     }
 
     res.json({
       success: true,
+      source: usingMemoryFallback ? 'memory' : 'database',
       data
     });
   } catch (error) {
     console.error('❌ Heartbeat error:', error);
-    // Don't fail on heartbeat errors
     res.json({
       success: true,
       message: 'Heartbeat recorded'
@@ -132,18 +214,17 @@ router.post('/logout', async (req, res) => {
     console.log('\n👤 [POST /api/presence/logout] User logout');
     console.log('   Session ID:', sessionId);
 
-    const { error } = await supabase
-      .from('user_presence')
-      .delete()
-      .eq('session_id', sessionId);
+    memoryPresence.delete(sessionId);
 
-    if (error) {
-      console.warn('⚠️ Logout error:', error.message);
-      // Don't fail if session doesn't exist
-      return res.json({
-        success: true,
-        message: 'Logout recorded'
-      });
+    if (canUseDatabase()) {
+      const { error } = await supabase
+        .from('user_presence')
+        .delete()
+        .eq('session_id', sessionId);
+
+      if (error) {
+        console.warn('⚠️ Logout DB error:', error.message);
+      }
     }
 
     console.log(`✅ Presence session deleted for session ${sessionId}`);
@@ -171,36 +252,49 @@ router.get('/active', async (req, res) => {
 
     // Keep online list very fresh for near real-time dashboard updates.
     const activeWindowStart = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
-    
-    const { data: activeSessions, error } = await supabase
-      .from('user_presence')
-      .select(`
-        id,
-        user_id,
-        session_id,
-        last_activity,
-        login_time,
-        status,
-        users:user_id (
-          id,
-          username,
-          phone_number,
-          email,
-          total_bets,
-          total_winnings,
-          account_balance
-        )
-      `)
-      .eq('status', 'online')
-      .gt('last_activity', activeWindowStart)
-      .order('last_activity', { ascending: false });
 
-    if (error) {
-      console.error('❌ Error fetching active users:', error.message);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch active users'
-      });
+    let activeSessions = [];
+    let source = 'memory';
+
+    if (canUseDatabase()) {
+      const sessionResult = await supabase
+        .from('user_presence')
+        .select('id, user_id, session_id, last_activity, login_time, status')
+        .eq('status', 'online')
+        .gt('last_activity', activeWindowStart)
+        .order('last_activity', { ascending: false });
+
+      if (!sessionResult.error) {
+        source = 'database';
+        const rows = sessionResult.data || [];
+        const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+
+        let usersById = new Map();
+        if (userIds.length > 0) {
+          const usersResult = await supabase
+            .from('users')
+            .select('id, username, phone_number, email, total_bets, total_winnings, account_balance')
+            .in('id', userIds);
+
+          if (!usersResult.error && Array.isArray(usersResult.data)) {
+            usersById = new Map(usersResult.data.map((u) => [u.id, u]));
+          }
+        }
+
+        activeSessions = rows.map((row) => ({
+          ...row,
+          users: usersById.get(row.user_id) || undefined,
+        }));
+      } else {
+        console.warn('⚠️ Active presence DB query failed, using memory fallback:', sessionResult.error.message);
+      }
+    }
+
+    if (source === 'memory') {
+      activeSessions = getActiveMemorySessions().map((row) => ({
+        ...row,
+        users: undefined,
+      }));
     }
 
     const uniqueUserCount = new Set((activeSessions || []).map((s) => s.user_id)).size;
@@ -208,14 +302,23 @@ router.get('/active', async (req, res) => {
 
     res.json({
       success: true,
+      source,
       activeCount: uniqueUserCount,
       users: activeSessions || []
     });
   } catch (error) {
     console.error('❌ Get active users error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to get active users'
+    const activeSessions = getActiveMemorySessions().map((row) => ({
+      ...row,
+      users: undefined,
+    }));
+    const uniqueUserCount = new Set((activeSessions || []).map((s) => s.user_id)).size;
+
+    res.json({
+      success: true,
+      source: 'memory',
+      activeCount: uniqueUserCount,
+      users: activeSessions || []
     });
   }
 });
@@ -228,28 +331,48 @@ router.get('/stats', async (req, res) => {
   try {
     const activeWindowStart = new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString();
 
-    const { data: onlineUsers } = await supabase
-      .from('user_presence')
-      .select('user_id', { count: 'exact' })
-      .eq('status', 'online')
-      .gt('last_activity', activeWindowStart);
+    let uniqueOnlineUsers = 0;
+    let totalUsersCount = 0;
+    let recentLoginsCount = 0;
 
-    const uniqueOnlineUsers = new Set((onlineUsers || []).map((u) => u.user_id)).size;
+    if (canUseDatabase()) {
+      const onlineUsersResult = await supabase
+        .from('user_presence')
+        .select('user_id', { count: 'exact' })
+        .eq('status', 'online')
+        .gt('last_activity', activeWindowStart);
 
-    const { data: totalUsers } = await supabase
-      .from('users')
-      .select('id', { count: 'exact' });
+      if (!onlineUsersResult.error) {
+        uniqueOnlineUsers = new Set((onlineUsersResult.data || []).map((u) => u.user_id)).size;
+      }
 
-    const { data: recentLogins } = await supabase
-      .from('user_presence')
-      .select('id', { count: 'exact' })
-      .gt('login_time', new Date(Date.now() - 3600 * 1000).toISOString()); // Last hour
+      const totalUsersResult = await supabase
+        .from('users')
+        .select('id', { count: 'exact' });
+
+      if (!totalUsersResult.error) {
+        totalUsersCount = (totalUsersResult.data || []).length;
+      }
+
+      const recentLoginsResult = await supabase
+        .from('user_presence')
+        .select('id', { count: 'exact' })
+        .gt('login_time', new Date(Date.now() - 3600 * 1000).toISOString());
+
+      if (!recentLoginsResult.error) {
+        recentLoginsCount = (recentLoginsResult.data || []).length;
+      }
+    }
+
+    if (!uniqueOnlineUsers) {
+      uniqueOnlineUsers = new Set(getActiveMemorySessions().map((u) => u.user_id)).size;
+    }
 
     const stats = {
       onlineCount: uniqueOnlineUsers,
-      totalUsers: totalUsers?.length || 0,
-      recentLoginsLastHour: recentLogins?.length || 0,
-      onlinePercentage: totalUsers?.length ? Math.round(uniqueOnlineUsers / totalUsers.length * 100) : 0
+      totalUsers: totalUsersCount,
+      recentLoginsLastHour: recentLoginsCount,
+      onlinePercentage: totalUsersCount ? Math.round(uniqueOnlineUsers / totalUsersCount * 100) : 0
     };
 
     res.json({
