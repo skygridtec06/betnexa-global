@@ -7,7 +7,10 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
 const { randomUUID } = require('crypto');
-const ACTIVE_WINDOW_MS = 2000;
+// How long a user stays "active" after their last heartbeat.
+// Must be comfortably larger than the heartbeat interval (5 s) to absorb
+// network jitter — 30 s gives a 25 s safety margin.
+const ACTIVE_WINDOW_MS = 30000;
 const memoryPresence = new Map();
 
 const canUseDatabase = () => !!(supabase && typeof supabase.from === 'function');

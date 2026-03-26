@@ -99,8 +99,10 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     sendHeartbeat();
 
-    // Send heartbeat every second for near real-time online/offline updates.
-    heartbeatInterval = setInterval(sendHeartbeat, 1000);
+    // Send heartbeat every 5 s — well within the 30 s server active window.
+    // Using a longer interval avoids the tight timing that caused users to
+    // blink in/out of the online list due to network jitter.
+    heartbeatInterval = setInterval(sendHeartbeat, 5000);
   }, [apiUrl]);
 
   // Stop presence tracking (called on logout)
@@ -146,10 +148,11 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (data.success && data.users) {
         setActiveUsers(data.users);
         setActiveCount(data.activeCount);
-        console.log(`👥 Active users updated: ${data.activeCount}`);
       }
     } catch (error) {
-      console.warn('⚠️ Error fetching active users:', error);
+      // On network errors keep the existing list visible — don't blink
+      // users away just because one poll failed.
+      console.warn('⚠️ Error fetching active users (keeping current list):', error);
     }
   }, [apiUrl]);
 
@@ -174,9 +177,12 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       clearInterval(activeUsersInterval);
     }
 
+    // Poll every 3 s — frequent enough for smooth updates, infrequent
+    // enough to stop causing per-second list replacements that made users
+    // appear to blink on the admin dashboard.
     activeUsersInterval = setInterval(() => {
       fetchActiveUsers();
-    }, 1000);
+    }, 3000);
 
     return () => {
       if (activeUsersInterval) {
