@@ -8,6 +8,25 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendWelcomeSms } = require('../services/smsService.js');
 
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const withRetry = async (operation, attempts = 2, delayMs = 250) => {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt < attempts) {
+        await wait(delayMs);
+      }
+    }
+  }
+
+  throw lastError;
+};
+
 const getPhoneCandidates = (inputPhone) => {
   const raw = String(inputPhone || '').trim();
   if (!raw) return [];
@@ -49,11 +68,13 @@ const findUserByPhone = async (phone) => {
     return { user: null, error: null };
   }
 
-  const result = await supabase
-    .from('users')
-    .select('*')
-    .in('phone_number', candidates)
-    .limit(1);
+  const result = await withRetry(async () => (
+    supabase
+      .from('users')
+      .select('*')
+      .in('phone_number', candidates)
+      .limit(1)
+  ));
 
   if (result.error) {
     return { user: null, error: result.error };

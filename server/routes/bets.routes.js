@@ -8,6 +8,15 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendBetPlacedSms, sendBetWonSms } = require('../services/smsService.js');
 
+const chunkArray = (arr, size) => {
+  if (!Array.isArray(arr) || size <= 0) return [];
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+};
+
 const fetchUsersByIds = async (userIds) => {
   const ids = [...new Set((userIds || []).filter(Boolean))];
   if (ids.length === 0) {
@@ -613,6 +622,8 @@ router.put('/:betId/status', async (req, res) => {
 router.get('/admin/all', async (req, res) => {
   try {
     console.log('\n👨‍💼 [GET /api/bets/admin/all] Fetching all bets with user data');
+    const parsedLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 2000) : 500;
 
     const joinedResult = await supabase
       .from('bets')
@@ -625,7 +636,8 @@ router.get('/admin/all', async (req, res) => {
           account_balance
         )
       `)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(limit);
 
     let bets = joinedResult.data;
 
@@ -635,7 +647,8 @@ router.get('/admin/all', async (req, res) => {
       const plainResult = await supabase
         .from('bets')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(limit);
 
       if (plainResult.error) {
         console.error('❌ Error fetching bets:', plainResult.error.message);
@@ -652,21 +665,37 @@ router.get('/admin/all', async (req, res) => {
       }));
     }
 
-    const betsWithSelections = await Promise.all(
-      (bets || []).map(async (bet) => {
-        const { data: selections } = await supabase
+    const betRows = bets || [];
+    const betIds = betRows.map((bet) => bet.id).filter(Boolean);
+    const selectionsByBetId = new Map();
+
+    if (betIds.length > 0) {
+      const idChunks = chunkArray(betIds, 150);
+      for (const ids of idChunks) {
+        const { data: chunkSelections, error: chunkError } = await supabase
           .from('bet_selections')
           .select('*')
-          .eq('bet_id', bet.id)
+          .in('bet_id', ids)
           .order('created_at', { ascending: true });
 
-        return {
-          ...bet,
-          status: bet.status,
-          bet_selections: selections || []
-        };
-      })
-    );
+        if (chunkError) {
+          console.warn('⚠️ Error fetching bet selections chunk:', chunkError.message);
+          continue;
+        }
+
+        for (const selection of chunkSelections || []) {
+          const list = selectionsByBetId.get(selection.bet_id) || [];
+          list.push(selection);
+          selectionsByBetId.set(selection.bet_id, list);
+        }
+      }
+    }
+
+    const betsWithSelections = betRows.map((bet) => ({
+      ...bet,
+      status: bet.status,
+      bet_selections: selectionsByBetId.get(bet.id) || []
+    }));
 
     console.log(`✅ Retrieved ${betsWithSelections.length} bets with user data`);
 
