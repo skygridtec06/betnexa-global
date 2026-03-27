@@ -15,9 +15,36 @@ const PresenceRoutes = require('./routes/presence.routes.js');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+const defaultAllowedOrigins = [
+  'https://betnexa.vercel.app',
+  'https://betnexa-server.vercel.app',
+  'https://betnexa.co.ke',
+  'https://www.betnexa.co.ke',
+  'http://localhost:8080',
+  'http://localhost:3000',
+];
+
+const envAllowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultAllowedOrigins, ...envAllowedOrigins])];
+
 // Middleware
 app.use(cors({
-  origin: ['https://betnexa.vercel.app', 'https://betnexa-server.vercel.app', 'http://localhost:8080', 'http://localhost:3000'],
+  origin: (origin, callback) => {
+    // Allow non-browser clients or same-origin requests without Origin header.
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
   credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
