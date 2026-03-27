@@ -8,6 +8,61 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendWelcomeSms } = require('../services/smsService.js');
 
+const getPhoneCandidates = (inputPhone) => {
+  const raw = String(inputPhone || '').trim();
+  if (!raw) return [];
+
+  const digits = raw.replace(/\D/g, '');
+  const candidates = new Set([raw]);
+
+  if (digits) {
+    candidates.add(digits);
+  }
+
+  // Kenya number normalization helpers (07..., 2547..., +2547...)
+  if (digits.startsWith('0') && digits.length === 10) {
+    const tail = digits.slice(1);
+    candidates.add(`+254${tail}`);
+    candidates.add(`254${tail}`);
+  }
+
+  if (digits.startsWith('254') && digits.length === 12) {
+    const tail = digits.slice(3);
+    candidates.add(`0${tail}`);
+    candidates.add(`+254${tail}`);
+  }
+
+  if (raw.startsWith('+254')) {
+    const tail = raw.slice(4).replace(/\D/g, '');
+    if (tail) {
+      candidates.add(`0${tail}`);
+      candidates.add(`254${tail}`);
+    }
+  }
+
+  return [...candidates].filter(Boolean);
+};
+
+const findUserByPhone = async (phone) => {
+  const candidates = getPhoneCandidates(phone);
+  if (candidates.length === 0) {
+    return { user: null, error: null };
+  }
+
+  const result = await supabase
+    .from('users')
+    .select('*')
+    .in('phone_number', candidates)
+    .limit(1);
+
+  if (result.error) {
+    return { user: null, error: result.error };
+  }
+
+  const user = Array.isArray(result.data) && result.data.length > 0 ? result.data[0] : null;
+  return { user, error: null };
+};
+
 /**
  * POST /api/auth/login
  * Login user with phone and password
@@ -25,14 +80,19 @@ router.post('/login', async (req, res) => {
 
     console.log(`\n🔐 [POST /api/auth/login] Login attempt for phone: ${phone}`);
 
-    // Query Supabase for user by phone
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone_number', phone)
-      .single();
+    // Query Supabase for user by phone (supports 07..., 254..., +254... variants)
+    const { user, error } = await findUserByPhone(phone);
 
-    if (error || !user) {
+    if (error) {
+      console.error('❌ Login lookup error:', error.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Login failed',
+        error: error.message,
+      });
+    }
+
+    if (!user) {
       console.error(`❌ User not found: ${phone}`);
       return res.status(401).json({
         success: false,
@@ -107,12 +167,16 @@ router.post('/signup', async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('phone_number', phone)
-      .single();
+    // Check if user already exists (across common phone formats)
+    const { user: existingUser, error: existingUserError } = await findUserByPhone(phone);
+
+    if (existingUserError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to validate phone number',
+        error: existingUserError.message,
+      });
+    }
 
     if (existingUser) {
       return res.status(409).json({
@@ -200,14 +264,18 @@ router.get('/profile/:phone', async (req, res) => {
       });
     }
 
-    // Query Supabase for user by phone
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('phone_number', phone)
-      .single();
+    // Query Supabase for user by phone (supports 07..., 254..., +254... variants)
+    const { user, error } = await findUserByPhone(phone);
 
-    if (error || !user) {
+    if (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch profile',
+        error: error.message
+      });
+    }
+
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'

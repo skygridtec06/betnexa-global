@@ -8,6 +8,24 @@ const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendBetPlacedSms, sendBetWonSms } = require('../services/smsService.js');
 
+const fetchUsersByIds = async (userIds) => {
+  const ids = [...new Set((userIds || []).filter(Boolean))];
+  if (ids.length === 0) {
+    return new Map();
+  }
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, username, phone_number, account_balance')
+    .in('id', ids);
+
+  if (error || !Array.isArray(data)) {
+    return new Map();
+  }
+
+  return new Map(data.map((u) => [u.id, u]));
+};
+
 /**
  * POST /api/bets/place
  * Place a new bet and deduct from user balance
@@ -596,7 +614,7 @@ router.get('/admin/all', async (req, res) => {
   try {
     console.log('\n👨‍💼 [GET /api/bets/admin/all] Fetching all bets with user data');
 
-    const { data: bets, error } = await supabase
+    const joinedResult = await supabase
       .from('bets')
       .select(`
         *,
@@ -609,12 +627,29 @@ router.get('/admin/all', async (req, res) => {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('❌ Error fetching bets:', error.message);
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch bets'
-      });
+    let bets = joinedResult.data;
+
+    if (joinedResult.error) {
+      console.warn('⚠️ Joined bets query failed, using fallback query:', joinedResult.error.message);
+
+      const plainResult = await supabase
+        .from('bets')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (plainResult.error) {
+        console.error('❌ Error fetching bets:', plainResult.error.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to fetch bets'
+        });
+      }
+
+      const usersById = await fetchUsersByIds((plainResult.data || []).map((b) => b.user_id));
+      bets = (plainResult.data || []).map((bet) => ({
+        ...bet,
+        users: usersById.get(bet.user_id) || null,
+      }));
     }
 
     const betsWithSelections = await Promise.all(
