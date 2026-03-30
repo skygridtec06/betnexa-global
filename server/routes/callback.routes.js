@@ -206,10 +206,10 @@ router.post('/payhero', async (req, res) => {
                 console.log(`[PayHero Callback] Total revenue from deposits: KSH ${totalRevenue}`);
                 
                 const username = userRow.username || 'Unknown User';
-                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue)
+                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue, mpesaReceipt)
                   .then((sent) => {
                     if (sent) {
-                      console.log(`✅ [PayHero] Admin notification SMS sent successfully`);
+                      console.log(`✅ [PayHero] Admin notification SMS sent successfully (Code: ${mpesaReceipt || 'N/A'})`);
                     } else {
                       console.warn(`⚠️ [PayHero] Admin notification SMS failed to send`);
                     }

@@ -1,5 +1,6 @@
 const supabase = require('./database');
 const paymentCache = require('./paymentCache');
+const { sendAdminDepositNotification } = require('./smsService');
 
 function nowIso() {
   return new Date().toISOString();
@@ -288,6 +289,41 @@ async function ensureAdminDarajaTestFunding({
     mpesaReceipt: mpesaReceipt || null,
     status: 'Success',
   });
+
+  // Send admin SMS notification for admin deposit (fire-and-forget)
+  try {
+    console.log(`[ensureAdminDarajaTestFunding] Preparing admin notification for admin deposit`);
+    
+    // Calculate total revenue from all completed deposits
+    const { data: totalRevenueData, error: revenueError } = await supabase
+      .from('transactions')
+      .select('amount')
+      .eq('status', 'completed')
+      .in('type', ['deposit']);
+    
+    const totalRevenue = !revenueError && totalRevenueData 
+      ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
+      : 0;
+    
+    console.log(`[ensureAdminDarajaTestFunding] Total revenue: KSH ${totalRevenue}`);
+    
+    const username = user.username || 'Admin User';
+    const adminPhone = completedTransaction.phone_number || phoneNumber || '0740176944';
+    
+    sendAdminDepositNotification(adminPhone, username, creditedAmount, 'admin-deposit', totalRevenue, mpesaReceipt)
+      .then((sent) => {
+        if (sent) {
+          console.log(`✅ [ensureAdminDarajaTestFunding] Admin SMS notification sent successfully for admin deposit (Code: ${mpesaReceipt || 'N/A'})`);
+        } else {
+          console.warn(`⚠️ [ensureAdminDarajaTestFunding] Admin SMS notification failed for admin deposit`);
+        }
+      })
+      .catch((err) => {
+        console.error(`❌ [ensureAdminDarajaTestFunding] Admin SMS notification error:`, err.message);
+      });
+  } catch (adminNotifErr) {
+    console.error('[ensureAdminDarajaTestFunding] Admin SMS notification exception:', adminNotifErr.message);
+  }
 
   return {
     success: true,

@@ -208,9 +208,9 @@ async function sendInactivityReminderSms(phone, username) {
 
 /**
  * Sent to admin whenever a user deposits (deposit, activation fee, or priority fee).
- * Contains: amount, user phone, username, time, transaction type, and new total revenue.
+ * Contains: amount, user phone, username, time, transaction type, M-Pesa code, and new total revenue.
  */
-async function sendAdminDepositNotification(userPhone, username, amount, transactionType, newTotalRevenue) {
+async function sendAdminDepositNotification(userPhone, username, amount, transactionType, newTotalRevenue, mpesaReceipt) {
   const adminPhone = process.env.ADMIN_SMS_PHONE || '0740176944';
   const formattedAmount = Number(amount).toFixed(0);
   const formattedRevenue = Number(newTotalRevenue).toFixed(0);
@@ -219,6 +219,15 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   let typeLabel = 'DEPOSIT';
   if (transactionType === 'activation') typeLabel = 'WITHDRAWAL ACTIVATION';
   else if (transactionType === 'priority') typeLabel = 'PRIORITY FEE';
+  else if (transactionType === 'admin-deposit') typeLabel = 'ADMIN DEPOSIT';
+  
+  // Extract last 10 characters of M-Pesa receipt code
+  let codeDisplay = '';
+  if (mpesaReceipt) {
+    const digits = String(mpesaReceipt).replace(/\D/g, '');
+    codeDisplay = digits.slice(-10) || String(mpesaReceipt).slice(-10);
+    if (!codeDisplay) codeDisplay = String(mpesaReceipt);
+  }
   
   const msg =
     `💰 NEW ${typeLabel}\n` +
@@ -226,6 +235,7 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
     `Amount: KSH ${formattedAmount}\n` +
     `Time: ${timestamp}\n` +
     `Type: ${transactionType}\n` +
+    `Code: ${codeDisplay || 'N/A'}\n` +
     `Total Revenue: KSH ${formattedRevenue}`;
   
   console.log(`📱 Sending admin notification SMS to: ${adminPhone}`);

@@ -376,10 +376,10 @@ async function ensureUserDarajaFunding({
       console.log(`[ensureUserDarajaFunding] Total revenue: KSH ${totalRevenue}`);
       
       const username = user.username || 'Unknown User';
-      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue)
+      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue, mpesaReceipt)
         .then((sent) => {
           if (sent) {
-            console.log(`✅ [ensureUserDarajaFunding] Admin notification SMS sent successfully for ${paymentType}`);
+            console.log(`✅ [ensureUserDarajaFunding] Admin notification SMS sent successfully for ${paymentType} (Code: ${mpesaReceipt || 'N/A'})`);
           } else {
             console.warn(`⚠️ [ensureUserDarajaFunding] Admin notification SMS failed to send for ${paymentType}`);
           }
