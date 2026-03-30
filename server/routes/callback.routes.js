@@ -203,10 +203,22 @@ router.post('/payhero', async (req, res) => {
                   ? totalRevenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)
                   : 0;
                 
+                console.log(`[PayHero Callback] Total revenue from deposits: KSH ${totalRevenue}`);
+                
                 const username = userRow.username || 'Unknown User';
-                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue).catch(() => {});
+                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue)
+                  .then((sent) => {
+                    if (sent) {
+                      console.log(`✅ [PayHero] Admin notification SMS sent successfully`);
+                    } else {
+                      console.warn(`⚠️ [PayHero] Admin notification SMS failed to send`);
+                    }
+                  })
+                  .catch((err) => {
+                    console.error(`❌ [PayHero] Admin notification error:`, err.message);
+                  });
               } catch (adminNotifErr) {
-                console.warn('⚠️ Admin notification error:', adminNotifErr.message);
+                console.error('[PayHero] Admin notification exception:', adminNotifErr.message);
               }
             }
           }

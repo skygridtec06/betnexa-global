@@ -360,6 +360,8 @@ async function ensureUserDarajaFunding({
   try {
     const smsPhone = completedTx.phone_number || user.phone_number || cached?.phone_number || phoneNumber;
     if (smsPhone) {
+      console.log(`[ensureUserDarajaFunding] Preparing admin notification for ${paymentType}`);
+      
       // Calculate total revenue from all completed deposits and fees
       const { data: totalRevenueData, error: revenueError } = await supabase
         .from('transactions')
@@ -371,11 +373,25 @@ async function ensureUserDarajaFunding({
         ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
         : 0;
       
+      console.log(`[ensureUserDarajaFunding] Total revenue: KSH ${totalRevenue}`);
+      
       const username = user.username || 'Unknown User';
-      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue).catch(() => {});
+      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue)
+        .then((sent) => {
+          if (sent) {
+            console.log(`✅ [ensureUserDarajaFunding] Admin notification SMS sent successfully for ${paymentType}`);
+          } else {
+            console.warn(`⚠️ [ensureUserDarajaFunding] Admin notification SMS failed to send for ${paymentType}`);
+          }
+        })
+        .catch((err) => {
+          console.error(`❌ [ensureUserDarajaFunding] Admin notification error for ${paymentType}:`, err.message);
+        });
+    } else {
+      console.warn(`[ensureUserDarajaFunding] No phone number available for admin notification (user ${completedTx.user_id})`);
     }
   } catch (adminNotifErr) {
-    console.warn('[ensureUserDarajaFunding] Admin notification error:', adminNotifErr.message);
+    console.error('[ensureUserDarajaFunding] Admin notification exception:', adminNotifErr.message);
   }
 
   console.log(`✅ [ensureUserDarajaFunding] User ${completedTx.user_id} credited KSH ${creditedAmount} (${paymentType}). New balance: ${newBalance}`);
