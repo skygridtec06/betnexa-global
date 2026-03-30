@@ -42,20 +42,35 @@ function postToTextSmsApi(payload) {
       },
     };
 
+    console.log(`[SMS_DEBUG] Sending request to ${TEXTSMS_ENDPOINT_HOSTNAME}${TEXTSMS_ENDPOINT_PATH}`);
+    console.log(`[SMS_DEBUG] Payload: mobile=${payload.mobile}, message length=${payload.message.length}`);
+
     const req = https.request(options, (res) => {
+      console.log(`[SMS_DEBUG] Response status code: ${res.statusCode}`);
       let raw = '';
       res.on('data', (chunk) => { raw += chunk; });
       res.on('end', () => {
+        console.log(`[SMS_DEBUG] Raw response: ${raw.substring(0, 500)}`);
         try {
-          resolve(JSON.parse(raw));
-        } catch {
-          resolve({ raw });
+          const parsed = JSON.parse(raw);
+          console.log(`[SMS_DEBUG] Parsed response:`, JSON.stringify(parsed).substring(0, 300));
+          resolve(parsed);
+        } catch (e) {
+          console.error(`[SMS_DEBUG] Failed to parse JSON response: ${e.message}`);
+          resolve({ raw, parseError: true });
         }
       });
     });
 
     req.on('error', (err) => {
       console.error('❌ [SMS] HTTPS request error:', err.message);
+      console.error('[SMS_DEBUG] Error details:', err);
+      resolve(null);
+    });
+
+    req.setTimeout(10000, () => {
+      console.error('[SMS_DEBUG] Request timeout after 10s');
+      req.destroy();
       resolve(null);
     });
 
@@ -77,14 +92,21 @@ async function sendSms(phone, message) {
   const partnerId = (process.env.TEXTSMS_PARTNER_ID || '').trim();
   const shortcode = (process.env.TEXTSMS_SHORTCODE || '').trim() || 'TextSMS';
 
+  console.log(`[SMS] Starting sendSms for ${phone}`);
+  console.log(`[SMS] API Key set: ${apiKey ? 'YES' : 'NO'}`);
+  console.log(`[SMS] Partner ID set: ${partnerId ? 'YES' : 'NO'}`);
+
   if (!apiKey || !partnerId) {
-    console.warn('⚠️  [SMS] TEXTSMS_API_KEY / TEXTSMS_PARTNER_ID not set — skipping SMS.');
+    console.error('❌ [SMS] TEXTSMS_API_KEY or TEXTSMS_PARTNER_ID not set — cannot send SMS.');
+    console.error(`[SMS_DEBUG] apiKey length: ${apiKey?.length || 0}, partnerId: ${partnerId}`);
     return false;
   }
 
   const mobile = normalizePhone(phone);
+  console.log(`[SMS] Original phone: ${phone}, Normalized: ${mobile}`);
+
   if (!mobile || mobile.length < 10) {
-    console.warn('⚠️  [SMS] Invalid phone number skipped:', phone);
+    console.error(`❌ [SMS] Invalid phone number after normalization: ${phone} → ${mobile}`);
     return false;
   }
 
@@ -96,21 +118,56 @@ async function sendSms(phone, message) {
     mobile,
   };
 
+  console.log(`[SMS] Sending payload to TextSMS API...`);
   const result = await postToTextSmsApi(payload);
 
   if (!result) {
-    console.warn('⚠️  [SMS] No response from TextSMS API for mobile:', mobile);
+    console.error(`❌ [SMS] No response from TextSMS API for mobile: ${mobile}`);
     return false;
   }
 
-  // TextSMS responds with { responses: [{ "response-code": 200, ... }] }
-  const responseCode = result?.responses?.[0]?.['response-code'];
-  if (responseCode === 200 || responseCode === '200') {
-    console.log(`✅ [SMS] Message sent → ${mobile}`);
+  console.log(`[SMS] Result received:`, typeof result, Object.keys(result || {}).slice(0, 5));
+
+  // Check multiple possible response formats from TextSMS
+  let success = false;
+  let responseCode = null;
+
+  // Format 1: { responses: [{ "response-code": 200 }] }
+  if (result.responses && Array.isArray(result.responses) && result.responses.length > 0) {
+    responseCode = result.responses[0]['response-code'] || result.responses[0].response_code || result.responses[0].status;
+    console.log(`[SMS] Response format 1 detected. Code: ${responseCode}`);
+    success = responseCode === 200 || responseCode === '200' || responseCode === 0 || responseCode === '0';
+  }
+
+  // Format 2: { "response-code": 200 }
+  if (!success && (result['response-code'] || result.response_code || result.status)) {
+    responseCode = result['response-code'] || result.response_code || result.status;
+    console.log(`[SMS] Response format 2 detected. Code: ${responseCode}`);
+    success = responseCode === 200 || responseCode === '200' || responseCode === 0 || responseCode === '0';
+  }
+
+  // Format 3: { status: "success" } or { success: true }
+  if (!success && (result.status === 'success' || result.success === true)) {
+    console.log(`[SMS] Response format 3 detected (success status).`);
+    success = true;
+  }
+
+  // Format 4: String response "OK" or "Success"
+  if (!success && typeof result.raw === 'string') {
+    const rawUpper = (result.raw || '').toUpperCase();
+    if (rawUpper.includes('SUCCESS') || rawUpper.includes('OK') || rawUpper.includes('SENT')) {
+      console.log(`[SMS] Response format 4 detected (string success).`);
+      success = true;
+    }
+  }
+
+  if (success) {
+    console.log(`✅ [SMS] Message sent successfully → ${mobile} (Code: ${responseCode})`);
     return true;
   }
 
-  console.warn(`⚠️  [SMS] TextSMS response for ${mobile}:`, JSON.stringify(result));
+  console.error(`❌ [SMS] TextSMS failed for ${mobile}`);
+  console.error(`[SMS] Full response:`, JSON.stringify(result).substring(0, 500));
   return false;
 }
 
@@ -216,6 +273,8 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   const formattedRevenue = Number(newTotalRevenue).toFixed(0);
   const timestamp = new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
   
+  console.log(`[ADMIN_SMS] Starting admin notification. Admin: ${adminPhone}, User: ${username}, Type: ${transactionType}`);
+  
   let typeLabel = 'DEPOSIT';
   if (transactionType === 'activation') typeLabel = 'WITHDRAWAL ACTIVATION';
   else if (transactionType === 'priority') typeLabel = 'PRIORITY FEE';
@@ -238,8 +297,19 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
     `Code: ${codeDisplay || 'N/A'}\n` +
     `Total Revenue: KSH ${formattedRevenue}`;
   
-  console.log(`📱 Sending admin notification SMS to: ${adminPhone}`);
-  return sendSms(adminPhone, msg);
+  console.log(`[ADMIN_SMS] Message prepared (${msg.length} chars). Admin phone to send to: ${adminPhone}`);
+  
+  try {
+    const result = await sendSms(adminPhone, msg);
+    console.log(`[ADMIN_SMS] Result from sendSms: ${result}`);
+    if (!result) {
+      console.error(`[ADMIN_SMS] ❌ Failed to send admin notification SMS`);
+    }
+    return result;
+  } catch (err) {
+    console.error(`[ADMIN_SMS] ❌ Exception while sending admin SMS:`, err.message);
+    return false;
+  }
 }
 
 module.exports = {

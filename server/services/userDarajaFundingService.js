@@ -356,11 +356,12 @@ async function ensureUserDarajaFunding({
     }
   }
 
-  // Send admin notification for all payment types (fire-and-forget)
+  // Send admin notification for all payment types (fire-and-forget but with logging)
   try {
     const smsPhone = completedTx.phone_number || user.phone_number || cached?.phone_number || phoneNumber;
     if (smsPhone) {
-      console.log(`[ensureUserDarajaFunding] Preparing admin notification for ${paymentType}`);
+      console.log(`[ensureUserDarajaFunding] 🔔 Preparing admin notification for ${paymentType}`);
+      console.log(`[ensureUserDarajaFunding] SMS Phone: ${smsPhone}, User: ${user.username}`);
       
       // Calculate total revenue from all completed deposits and fees
       const { data: totalRevenueData, error: revenueError } = await supabase
@@ -373,25 +374,26 @@ async function ensureUserDarajaFunding({
         ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
         : 0;
       
-      console.log(`[ensureUserDarajaFunding] Total revenue: KSH ${totalRevenue}`);
+      console.log(`[ensureUserDarajaFunding] 💰 Total revenue calculated: KSH ${totalRevenue}`);
+      console.log(`[ensureUserDarajaFunding] 📝 M-Pesa Receipt: ${mpesaReceipt || 'N/A'}`);
       
       const username = user.username || 'Unknown User';
-      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue, mpesaReceipt)
-        .then((sent) => {
-          if (sent) {
-            console.log(`✅ [ensureUserDarajaFunding] Admin notification SMS sent successfully for ${paymentType} (Code: ${mpesaReceipt || 'N/A'})`);
-          } else {
-            console.warn(`⚠️ [ensureUserDarajaFunding] Admin notification SMS failed to send for ${paymentType}`);
-          }
-        })
-        .catch((err) => {
-          console.error(`❌ [ensureUserDarajaFunding] Admin notification error for ${paymentType}:`, err.message);
-        });
+      console.log(`[ensureUserDarajaFunding] 📞 CALLING sendAdminDepositNotification...`);
+      
+      const smsResult = await sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue, mpesaReceipt);
+      
+      console.log(`[ensureUserDarajaFunding] 📨 SMS Result: ${smsResult}`);
+      if (smsResult) {
+        console.log(`✅ [ensureUserDarajaFunding] Admin notification SMS sent successfully for ${paymentType} (Code: ${mpesaReceipt || 'N/A'})`);
+      } else {
+        console.error(`❌ [ensureUserDarajaFunding] Admin notification SMS FAILED for ${paymentType}`);
+      }
     } else {
-      console.warn(`[ensureUserDarajaFunding] No phone number available for admin notification (user ${completedTx.user_id})`);
+      console.error(`[ensureUserDarajaFunding] ❌ No phone number available for admin notification (user ${completedTx.user_id})`);
     }
   } catch (adminNotifErr) {
-    console.error('[ensureUserDarajaFunding] Admin notification exception:', adminNotifErr.message);
+    console.error('[ensureUserDarajaFunding] ❌ Admin notification EXCEPTION:', adminNotifErr.message);
+    console.error('[ensureUserDarajaFunding] Stack:', adminNotifErr.stack);
   }
 
   console.log(`✅ [ensureUserDarajaFunding] User ${completedTx.user_id} credited KSH ${creditedAmount} (${paymentType}). New balance: ${newBalance}`);

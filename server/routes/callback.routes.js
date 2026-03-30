@@ -191,8 +191,10 @@ router.post('/payhero', async (req, res) => {
                 sendDepositSms(smsPhone, creditAmount, newBalance).catch(() => {});
               }
               
-              // Send admin notification with total revenue (fire-and-forget)
+              // Send admin notification with total revenue (with proper logging)
               try {
+                console.log(`[PayHero Callback] 🔔 Starting admin notification`);
+                
                 // Calculate total revenue from all completed deposits
                 const { data: totalRevenueData, error: revenueError } = await supabase
                   .from('deposits')
@@ -203,22 +205,23 @@ router.post('/payhero', async (req, res) => {
                   ? totalRevenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)
                   : 0;
                 
-                console.log(`[PayHero Callback] Total revenue from deposits: KSH ${totalRevenue}`);
+                console.log(`[PayHero Callback] 💰 Total revenue from deposits: KSH ${totalRevenue}`);
+                console.log(`[PayHero Callback] 📝 SMS Phone: ${smsPhone}, User: ${userRow.username}`);
                 
                 const username = userRow.username || 'Unknown User';
-                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue, mpesaReceipt)
-                  .then((sent) => {
-                    if (sent) {
-                      console.log(`✅ [PayHero] Admin notification SMS sent successfully (Code: ${mpesaReceipt || 'N/A'})`);
-                    } else {
-                      console.warn(`⚠️ [PayHero] Admin notification SMS failed to send`);
-                    }
-                  })
-                  .catch((err) => {
-                    console.error(`❌ [PayHero] Admin notification error:`, err.message);
-                  });
+                console.log(`[PayHero Callback] 📞 CALLING sendAdminDepositNotification...`);
+                
+                const smsResult = await sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue, mpesaReceipt);
+                
+                console.log(`[PayHero Callback] 📨 SMS Result: ${smsResult}`);
+                if (smsResult) {
+                  console.log(`✅ [PayHero] Admin notification SMS sent successfully (Code: ${mpesaReceipt || 'N/A'})`);
+                } else {
+                  console.error(`❌ [PayHero] Admin notification SMS FAILED`);
+                }
               } catch (adminNotifErr) {
-                console.error('[PayHero] Admin notification exception:', adminNotifErr.message);
+                console.error('[PayHero] ❌ Admin notification EXCEPTION:', adminNotifErr.message);
+                console.error('[PayHero] Stack:', adminNotifErr.stack);
               }
             }
           }
