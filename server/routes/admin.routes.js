@@ -1632,33 +1632,8 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       console.log(`   ✅ Inserted ${entriesToInsert.length} market entries`);
     }
 
-    // Step 3: Verify all markets still present
-    const { data: allMarketsNow } = await supabase
-      .from('markets')
-      .select('market_key')
-      .eq('game_id', gameUUID);
-
-    const finalCount = allMarketsNow?.length || 0;
-    console.log(`   ✅ Result: ${finalCount} total markets for game (${incomingMarketCount} updated)`);
-
-    res.json({ 
-      success: true, 
-      gameId,
-      marketCountBefore: existingMarkets?.length || 0,
-      marketCountAfter: finalCount,
-      marketsUpdated: incomingMarketCount
-    });
-
-  } catch (error) {
-    console.error('❌ Markets update error:', error.message);
-    res.status(500).json({ error: 'Failed to update markets', details: error.message });
-  }
-});
-    }
-
-    // Fetch the actually-saved markets from the database to verify persistence
-    console.log(`🔍 Verifying saved markets...`);
-    const { data: savedMarkets, error: verifyError } = await supabase
+    // Step 3: Verify all markets still present and fetch actual saved values
+    const { data: allMarketsNow, error: verifyError } = await supabase
       .from('markets')
       .select('market_key, odds')
       .eq('game_id', gameUUID);
@@ -1666,29 +1641,32 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
     if (verifyError) {
       console.warn('⚠️ Could not verify saved markets:', verifyError.message);
     } else {
-      console.log(`✅ Verified ${savedMarkets?.length || 0} markets in database`);
-      if (savedMarkets && savedMarkets.length > 0) {
-        const verifiedMarkets = {};
-        savedMarkets.forEach(m => {
-          verifiedMarkets[m.market_key] = parseFloat(m.odds);
-        });
-        console.log(`   Sample saved markets: ${JSON.stringify(Object.entries(verifiedMarkets).slice(0, 3))}`);
-      }
+      console.log(`✅ Verified ${allMarketsNow?.length || 0} markets in database`);
     }
 
-    console.log(`✅ Markets updated successfully for game ${gameId}`);
+    const finalCount = allMarketsNow?.length || 0;
+    console.log(`   ✅ Result: ${finalCount} total markets for game (${incomingMarketCount} updated)`);
+
+    // Build savedMarkets object from database for response
+    const savedMarkets = {};
+    if (allMarketsNow && allMarketsNow.length > 0) {
+      allMarketsNow.forEach(m => {
+        savedMarkets[m.market_key] = parseFloat(m.odds);
+      });
+      console.log(`   Sample saved markets: ${JSON.stringify(Object.entries(savedMarkets).slice(0, 3))}`);
+    }
 
     res.json({ 
       success: true, 
-      game, 
-      marketCount: marketEntriesBase.length,
-      savedMarkets: savedMarkets?.reduce((acc, m) => {
-        acc[m.market_key] = parseFloat(m.odds);
-        return acc;
-      }, {}) || {}
+      gameId,
+      marketCountBefore: existingMarkets?.length || 0,
+      marketCountAfter: finalCount,
+      marketsUpdated: incomingMarketCount,
+      savedMarkets: savedMarkets
     });
+
   } catch (error) {
-    console.error('❌ Update markets error:', error.message);
+    console.error('❌ Markets update error:', error.message);
     res.status(500).json({ error: 'Failed to update markets', details: error.message });
   }
 });

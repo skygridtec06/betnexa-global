@@ -2638,10 +2638,15 @@ const AdminPortal = () => {
                   {editingGame !== game.id && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       {["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => {
-                        const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+                        // Prioritize actual saved markets from database; only generate if missing
+                        let marketOdds = game.markets && game.markets[key];
+                        if (!marketOdds || marketOdds < 1.01) {
+                          const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+                          marketOdds = fullMarkets[key];
+                        }
                         return (
                           <span key={key} className="rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                            {marketLabels[key as keyof typeof marketLabels]}: <span className="font-mono font-bold text-foreground">{(fullMarkets[key] || 1.50).toFixed(2)}</span>
+                            {marketLabels[key as keyof typeof marketLabels]}: <span className="font-mono font-bold text-foreground">{(marketOdds || 1.50).toFixed(2)}</span>
                           </span>
                         );
                       })}
