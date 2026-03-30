@@ -9,7 +9,7 @@ const supabase = require('../services/database.js');
 const paymentCache = require('../services/paymentCache.js');
 const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
 const { ensureUserDarajaFunding, persistUserDarajaTerminalStatus } = require('../services/userDarajaFundingService');
-const { sendDepositSms } = require('../services/smsService.js');
+const { sendDepositSms, sendAdminDepositNotification } = require('../services/smsService.js');
 
 /**
  * POST /api/callbacks/payhero
@@ -189,6 +189,24 @@ router.post('/payhero', async (req, res) => {
               const smsPhone = userRow.phone_number || paymentData?.phone_number;
               if (smsPhone) {
                 sendDepositSms(smsPhone, creditAmount, newBalance).catch(() => {});
+              }
+              
+              // Send admin notification with total revenue (fire-and-forget)
+              try {
+                // Calculate total revenue from all completed deposits
+                const { data: totalRevenueData, error: revenueError } = await supabase
+                  .from('deposits')
+                  .select('amount')
+                  .eq('status', 'completed');
+                
+                const totalRevenue = !revenueError && totalRevenueData 
+                  ? totalRevenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)
+                  : 0;
+                
+                const username = userRow.username || 'Unknown User';
+                sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue).catch(() => {});
+              } catch (adminNotifErr) {
+                console.warn('⚠️ Admin notification error:', adminNotifErr.message);
               }
             }
           }

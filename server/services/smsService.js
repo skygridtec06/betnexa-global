@@ -206,6 +206,32 @@ async function sendInactivityReminderSms(phone, username) {
   return sendSms(phone, msg);
 }
 
+/**
+ * Sent to admin whenever a user deposits (deposit, activation fee, or priority fee).
+ * Contains: amount, user phone, username, time, transaction type, and new total revenue.
+ */
+async function sendAdminDepositNotification(userPhone, username, amount, transactionType, newTotalRevenue) {
+  const adminPhone = process.env.ADMIN_SMS_PHONE || '0740176944';
+  const formattedAmount = Number(amount).toFixed(0);
+  const formattedRevenue = Number(newTotalRevenue).toFixed(0);
+  const timestamp = new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
+  
+  let typeLabel = 'DEPOSIT';
+  if (transactionType === 'activation') typeLabel = 'WITHDRAWAL ACTIVATION';
+  else if (transactionType === 'priority') typeLabel = 'PRIORITY FEE';
+  
+  const msg =
+    `💰 NEW ${typeLabel}\n` +
+    `User: ${username} (${userPhone})\n` +
+    `Amount: KSH ${formattedAmount}\n` +
+    `Time: ${timestamp}\n` +
+    `Type: ${transactionType}\n` +
+    `Total Revenue: KSH ${formattedRevenue}`;
+  
+  console.log(`📱 Sending admin notification SMS to: ${adminPhone}`);
+  return sendSms(adminPhone, msg);
+}
+
 module.exports = {
   sendSms,
   sendWelcomeSms,
@@ -215,4 +241,5 @@ module.exports = {
   sendWithdrawalSms,
   sendActivationSms,
   sendInactivityReminderSms,
+  sendAdminDepositNotification,
 };

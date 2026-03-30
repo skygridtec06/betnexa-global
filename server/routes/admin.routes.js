@@ -17,7 +17,7 @@ const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
 } = require('../services/adminDarajaTestFundingService');
-const { sendSms, sendActivationSms, sendWithdrawalSms, sendBetWonSms } = require('../services/smsService.js');
+const { sendSms, sendActivationSms, sendWithdrawalSms, sendBetWonSms, sendAdminDepositNotification } = require('../services/smsService.js');
 
 const router = express.Router();
 
@@ -2286,6 +2286,26 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
         console.warn('⚠️ Failed to deduct activation fee:', balanceError.message);
       } else {
         console.log(`✅ Activation fee deducted. New balance: KSH ${newBalance}`);
+        
+        // Send admin notification (fire-and-forget)
+        try {
+          // Calculate total revenue from all completed transactions
+          const { data: totalRevenueData, error: revenueError } = await supabase
+            .from('transactions')
+            .select('amount')
+            .eq('status', 'completed')
+            .in('type', ['deposit']);
+          
+          const totalRevenue = !revenueError && totalRevenueData 
+            ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
+            : 0;
+          
+          const userPhone = user.phone_number || 'Unknown';
+          const username = user.username || 'Unknown User';
+          sendAdminDepositNotification(userPhone, username, ACTIVATION_FEE, 'activation', totalRevenue).catch(() => {});
+        } catch (adminNotifErr) {
+          console.warn('⚠️ Admin notification error:', adminNotifErr.message);
+        }
       }
     } catch (err) {
       console.warn('⚠️ Error updating user balance for activation fee:', err.message);

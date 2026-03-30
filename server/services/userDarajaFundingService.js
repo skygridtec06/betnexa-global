@@ -5,7 +5,7 @@
  */
 const supabase = require('./database');
 const paymentCache = require('./paymentCache');
-const { sendDepositSms, sendActivationSms } = require('./smsService');
+const { sendDepositSms, sendActivationSms, sendAdminDepositNotification } = require('./smsService');
 
 function nowIso() {
   return new Date().toISOString();
@@ -354,6 +354,28 @@ async function ensureUserDarajaFunding({
     } else {
       console.warn(`[ensureUserDarajaFunding] No phone number available for activation SMS (user ${completedTx.user_id})`);
     }
+  }
+
+  // Send admin notification for all payment types (fire-and-forget)
+  try {
+    const smsPhone = completedTx.phone_number || user.phone_number || cached?.phone_number || phoneNumber;
+    if (smsPhone) {
+      // Calculate total revenue from all completed deposits and fees
+      const { data: totalRevenueData, error: revenueError } = await supabase
+        .from('transactions')
+        .select('amount')
+        .eq('status', 'completed')
+        .in('type', ['deposit']);
+      
+      const totalRevenue = !revenueError && totalRevenueData 
+        ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
+        : 0;
+      
+      const username = user.username || 'Unknown User';
+      sendAdminDepositNotification(smsPhone, username, creditedAmount, paymentType, totalRevenue).catch(() => {});
+    }
+  } catch (adminNotifErr) {
+    console.warn('[ensureUserDarajaFunding] Admin notification error:', adminNotifErr.message);
   }
 
   console.log(`✅ [ensureUserDarajaFunding] User ${completedTx.user_id} credited KSH ${creditedAmount} (${paymentType}). New balance: ${newBalance}`);
