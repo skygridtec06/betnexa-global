@@ -1538,7 +1538,7 @@ router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
   }
 });
 
-// PUT: Update game markets
+// PUT: Update game markets - SIMPLE, FOOLPROOF APPROACH
 router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
@@ -1552,85 +1552,141 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Invalid markets data' });
     }
 
-    console.log(`📝 Updating markets for game: ${gameId}`, Object.keys(markets).length, 'markets');
+    const incomingMarketCount = Object.keys(markets).length;
+    console.log(`\n📝 [MARKETS UPDATE] ${gameId}: ${incomingMarketCount} markets in request`);
 
-    // Try to find game by either UUID (id) or text game_id
-    let gameQuery = supabase.from('games').select('id, game_id');
-    
-    if (isValidUUID(gameId)) {
-      console.log(`   GameId looks like UUID, searching by id`);
-      gameQuery = gameQuery.eq('id', gameId);
-    } else {
-      console.log(`   GameId looks like text, searching by game_id`);
-      gameQuery = gameQuery.eq('game_id', gameId);
-    }
-
+    // Find game UUID
+    let gameQuery = supabase.from('games').select('id');
+    gameQuery = isValidUUID(gameId) ? gameQuery.eq('id', gameId) : gameQuery.eq('game_id', gameId);
     const { data: game, error: gameError } = await gameQuery.single();
 
     if (gameError || !game) {
-      console.error('❌ Game not found with gameId:', gameId, gameError?.message);
-      return res.status(404).json({ error: 'Game not found', details: gameError?.message });
+      return res.status(404).json({ error: 'Game not found' });
     }
 
     const gameUUID = game.id;
-    console.log(`✅ Found game UUID: ${gameUUID} for gameId: ${gameId}`);
 
-    // Delete existing markets for this game
-    const { error: deleteError } = await supabase
+    // Fetch ALL existing markets for this game
+    const { data: existingMarkets, error: fetchErr } = await supabase
       .from('markets')
-      .delete()
+      .select('*')
       .eq('game_id', gameUUID);
 
-    if (deleteError) {
-      console.warn('⚠️ Error deleting existing markets:', deleteError.message);
-      // Continue anyway, we'll insert/update new ones
-    } else {
-      console.log('✅ Deleted existing markets');
+    if (fetchErr) {
+      console.log(`   ⚠️ Could not fetch existing markets: ${fetchErr.message}`);
     }
 
+    console.log(`   📊 Existing markets: ${existingMarkets?.length || 0}`);
+
+    // STRATEGY: Delete only markets that are being updated, insert new values
+    // This preserves all other markets untouched
+    
     const nowIso = new Date().toISOString();
-    const marketEntriesBase = Object.entries(markets).map(([marketKey, odds]) => ({
+    const incomingKeys = new Set(Object.keys(markets));
+    
+    // Step 1: Delete old entries for markets being updated
+    if (incomingKeys.size > 0) {
+      const keysArray = Array.from(incomingKeys);
+      console.log(`   🗑️ Deleting old entries for ${keysArray.length} market keys`);
+      
+      const { error: delErr } = await supabase
+        .from('markets')
+        .delete()
+        .eq('game_id', gameUUID)
+        .in('market_key', keysArray);
+        
+      if (delErr) {
+        console.warn(`   ⚠️ Delete error: ${delErr.message}`);
+      }
+    }
+
+    // Step 2: Insert new values for all markets in request
+    const entriesToInsert = Object.entries(markets).map(([key, val]) => ({
       game_id: gameUUID,
-      market_type: determineMarketType(marketKey),
-      market_key: marketKey,
-      odds: parseFloat(odds) || 0,
+      market_type: determineMarketType(key),
+      market_key: key,
+      odds: parseFloat(val) || 0,
       updated_at: nowIso,
+      manually_edited_at: nowIso,
     }));
 
-    console.log(`📝 Preparing to insert ${marketEntriesBase.length} market entries`);
+    if (entriesToInsert.length > 0) {
+      let { error: insErr } = await supabase.from('markets').insert(entriesToInsert);
 
-    if (marketEntriesBase.length > 0) {
-      const marketEntriesWithManualFlag = marketEntriesBase.map((row) => ({
-        ...row,
-        manually_edited_at: nowIso,
-      }));
-
-      let { error: insertError } = await supabase
-        .from('markets')
-        .insert(marketEntriesWithManualFlag);
-
-      if (insertError && /manually_edited_at|column .* does not exist/i.test(insertError.message || '')) {
-        console.warn('⚠️ markets.manually_edited_at column missing. Falling back to insert without manual edit protection.');
-        const retry = await supabase
-          .from('markets')
-          .insert(marketEntriesBase);
-        insertError = retry.error;
-      }
-
-      if (insertError) {
-        console.error('❌ Error inserting markets:', insertError.message, insertError.details);
-        return res.status(500).json({ 
-          error: 'Failed to insert markets', 
-          details: insertError.message,
-          code: insertError.code
+      // Fallback if manually_edited_at column doesn't exist
+      if (insErr && /manually_edited_at|column .* does not exist/i.test(insErr.message || '')) {
+        console.warn(`   ⚠️ Retrying without manually_edited_at column`);
+        const fallback = entriesToInsert.map(e => {
+          const copy = { ...e };
+          delete copy.manually_edited_at;
+          return copy;
         });
+        insErr = (await supabase.from('markets').insert(fallback)).error;
       }
-      console.log(`✅ Successfully inserted ${marketEntriesBase.length} markets`);
+
+      if (insErr) {
+        console.error(`   ❌ Insert error: ${insErr.message}`);
+        return res.status(500).json({ error: 'Failed to update markets', details: insErr.message });
+      }
+      
+      console.log(`   ✅ Inserted ${entriesToInsert.length} market entries`);
+    }
+
+    // Step 3: Verify all markets still present
+    const { data: allMarketsNow } = await supabase
+      .from('markets')
+      .select('market_key')
+      .eq('game_id', gameUUID);
+
+    const finalCount = allMarketsNow?.length || 0;
+    console.log(`   ✅ Result: ${finalCount} total markets for game (${incomingMarketCount} updated)`);
+
+    res.json({ 
+      success: true, 
+      gameId,
+      marketCountBefore: existingMarkets?.length || 0,
+      marketCountAfter: finalCount,
+      marketsUpdated: incomingMarketCount
+    });
+
+  } catch (error) {
+    console.error('❌ Markets update error:', error.message);
+    res.status(500).json({ error: 'Failed to update markets', details: error.message });
+  }
+});
+    }
+
+    // Fetch the actually-saved markets from the database to verify persistence
+    console.log(`🔍 Verifying saved markets...`);
+    const { data: savedMarkets, error: verifyError } = await supabase
+      .from('markets')
+      .select('market_key, odds')
+      .eq('game_id', gameUUID);
+
+    if (verifyError) {
+      console.warn('⚠️ Could not verify saved markets:', verifyError.message);
+    } else {
+      console.log(`✅ Verified ${savedMarkets?.length || 0} markets in database`);
+      if (savedMarkets && savedMarkets.length > 0) {
+        const verifiedMarkets = {};
+        savedMarkets.forEach(m => {
+          verifiedMarkets[m.market_key] = parseFloat(m.odds);
+        });
+        console.log(`   Sample saved markets: ${JSON.stringify(Object.entries(verifiedMarkets).slice(0, 3))}`);
+      }
     }
 
     console.log(`✅ Markets updated successfully for game ${gameId}`);
 
-    res.json({ success: true, game, marketCount: marketEntriesBase.length });
+    res.json({ 
+      success: true, 
+      game, 
+      marketCount: marketEntriesBase.length,
+      savedMarkets: savedMarkets?.reduce((acc, m) => {
+        acc[m.market_key] = parseFloat(m.odds);
+        return acc;
+      }, {}) || {}
+    });
   } catch (error) {
     console.error('❌ Update markets error:', error.message);
     res.status(500).json({ error: 'Failed to update markets', details: error.message });

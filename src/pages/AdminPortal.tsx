@@ -915,10 +915,38 @@ const AdminPortal = () => {
       const data = await response.json();
 
       if (data.success) {
-        updateGameMarkets(id, editMarkets);
+        // Use the server-returned markets to ensure we have the verified saved values
+        const savedMarkets = data.savedMarkets || editMarkets;
+        
+        console.log(`✅ Markets saved and verified:`, Object.entries(savedMarkets).slice(0, 3));
+        
+        // Verify that all markets were saved correctly
+        let allMarketsSaved = true;
+        const missingMarkets = [];
+        for (const [key, value] of Object.entries(editMarkets)) {
+          if (!savedMarkets[key]) {
+            allMarketsSaved = false;
+            missingMarkets.push(key);
+            console.warn(`⚠️ Market not found in saved data: ${key}`);
+          }
+        }
+        
+        if (!allMarketsSaved) {
+          console.error(`❌ Some markets were not saved: ${missingMarkets.join(', ')}`);
+          alert(`⚠️ Some markets may not have been saved: ${missingMarkets.slice(0, 3).join(', ')}`);
+        }
+        
+        // Update with the verified saved markets from server
+        updateGameMarkets(id, savedMarkets);
         setEditingGame(null);
         setEditMarkets(null);
-        alert('✅ Markets updated successfully!');
+        alert('✅ Markets updated and verified successfully!');
+        
+        // Refresh games after a short delay to ensure database propagation
+        setTimeout(() => {
+          console.log('🔄 Refreshing games to verify market persistence...');
+          refreshGames();
+        }, 500);
       } else {
         alert(`Error: ${data.error || 'Failed to update markets'}`);
       }
