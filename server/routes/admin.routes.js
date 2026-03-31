@@ -2522,13 +2522,45 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
       includeAdmins = false,
     } = filters;
 
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('id, name, username, phone_number, withdrawal_activated, total_bets, total_winnings, account_balance, is_admin');
+    // Try to fetch all available user data - be flexible with column names
+    let users = [];
+    let usersError = null;
 
-    if (usersError) {
-      console.error('❌ Broadcast users fetch error:', usersError.message);
-      return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+    try {
+      // First try with all fields
+      const { data: allUsers, error: err } = await supabase
+        .from('users')
+        .select('*');
+      
+      if (err) {
+        console.warn('⚠️ Select * error:', err.message);
+        usersError = err;
+      } else {
+        users = allUsers || [];
+      }
+    } catch (err) {
+      console.error('❌ Broadcast users fetch error:', err.message);
+      usersError = err;
+    }
+
+    if (usersError || !users || users.length === 0) {
+      console.log('⚠️ Fallback: Fetching users with minimal fields');
+      try {
+        const { data: minimalUsers, error: minErr } = await supabase
+          .from('users')
+          .select('id, phone_number');
+        
+        if (minErr) {
+          console.error('❌ Fallback fetch failed:', minErr.message);
+          return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+        }
+        
+        users = minimalUsers || [];
+        console.log(`✅ Fallback successful: Found ${users.length} users`);
+      } catch (fallbackErr) {
+        console.error('❌ Fallback error:', fallbackErr.message);
+        return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+      }
     }
 
     const minBalanceNum = Number(minBalance);
@@ -2539,21 +2571,36 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
 
     const recipients = (users || []).filter((user) => {
       if (!user?.phone_number) return false;
+      
+      // Optional: filter by admin status if column exists
       if (!includeAdmins && user.is_admin) return false;
 
-      if (activationStatus === 'activated' && !user.withdrawal_activated) return false;
-      if (activationStatus === 'not_activated' && user.withdrawal_activated) return false;
+      // Optional: activation status filter (only if column exists)
+      if (activationStatus !== 'all' && user.withdrawal_activated !== undefined) {
+        if (activationStatus === 'activated' && !user.withdrawal_activated) return false;
+        if (activationStatus === 'not_activated' && user.withdrawal_activated) return false;
+      }
 
-      const totalBets = parseFloat(user.total_bets || 0);
-      if (bettingStatus === 'with_bets' && totalBets <= 0) return false;
-      if (bettingStatus === 'no_bets' && totalBets > 0) return false;
+      // Optional: betting status filter (only if column exists)
+      if (bettingStatus !== 'all' && user.total_bets !== undefined) {
+        const totalBets = parseFloat(user.total_bets || 0);
+        if (bettingStatus === 'with_bets' && totalBets <= 0) return false;
+        if (bettingStatus === 'no_bets' && totalBets > 0) return false;
+      }
 
-      const balance = parseFloat(user.account_balance || 0);
-      if (hasMinBalance && balance < minBalanceNum) return false;
+      // Optional: minimum balance filter (only if column exists)
+      if (hasMinBalance && user.account_balance !== undefined) {
+        const balance = parseFloat(user.account_balance || 0);
+        if (balance < minBalanceNum) return false;
+      }
 
-      const winnings = parseFloat(user.total_winnings || 0);
-      if (hasMinWinnings && winnings < minWinningsNum) return false;
+      // Optional: minimum winnings filter (only if column exists)
+      if (hasMinWinnings && user.total_winnings !== undefined) {
+        const winnings = parseFloat(user.total_winnings || 0);
+        if (winnings < minWinningsNum) return false;
+      }
 
+      // Optional: search filter
       if (normalizedSearch) {
         const name = String(user.name || '').toLowerCase();
         const username = String(user.username || '').toLowerCase();
@@ -2567,9 +2614,10 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
     });
 
     if (recipients.length === 0) {
+      console.log(`ℹ️ Broadcast: No users matched the filters. Total users in system: ${users?.length || 0}`);
       return res.json({
         success: true,
-        message: 'No users matched the selected filters',
+        message: 'No users matched the selected filters. Try removing some filters.',
         totalUsers: users?.length || 0,
         matchedRecipients: 0,
         sent: 0,
@@ -2577,6 +2625,7 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
       });
     }
 
+    console.log(`📤 Starting broadcast to ${recipients.length} users...`);
     let sent = 0;
     let failed = 0;
     const chunkSize = 25;
@@ -2585,18 +2634,28 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
       const chunk = recipients.slice(i, i + chunkSize);
       await Promise.all(
         chunk.map(async (recipient) => {
-          const ok = await sendSms(recipient.phone_number, textMessage);
-          if (ok) sent += 1;
-          else failed += 1;
+          try {
+            const ok = await sendSms(recipient.phone_number, textMessage);
+            if (ok) {
+              sent += 1;
+              console.log(`✅ SMS sent to ${recipient.phone_number}`);
+            } else {
+              failed += 1;
+              console.warn(`⚠️ SMS failed for ${recipient.phone_number}`);
+            }
+          } catch (smsErr) {
+            failed += 1;
+            console.error(`❌ SMS error for ${recipient.phone_number}:`, smsErr.message);
+          }
         })
       );
     }
 
-    console.log(`✅ [SMS Broadcast] Admin ${req.user?.phone || 'unknown'} sent message to ${sent}/${recipients.length} users`);
+    console.log(`✅ [SMS Broadcast] Admin ${req.user?.phone || 'unknown'} sent message to ${sent}/${recipients.length} users (${failed} failed)`);
 
     res.json({
       success: true,
-      message: `Broadcast complete. Sent: ${sent}, Failed: ${failed}`,
+      message: `Broadcast complete. Sent to ${sent} users${failed > 0 ? `, ${failed} failed` : ''}`,
       totalUsers: users?.length || 0,
       matchedRecipients: recipients.length,
       sent,
