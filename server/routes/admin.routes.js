@@ -2522,45 +2522,48 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
       includeAdmins = false,
     } = filters;
 
-    // Try to fetch all available user data - be flexible with column names
+    // Fetch users - SIMPLE approach, just get id and phone_number
+    console.log('📋 Fetching users for broadcast...');
     let users = [];
-    let usersError = null;
 
     try {
-      // First try with all fields
-      const { data: allUsers, error: err } = await supabase
+      const { data: fetchedUsers, error: fetchError } = await supabase
         .from('users')
-        .select('*');
+        .select('id, phone_number, name, username, is_admin, withdrawal_activated, account_balance, total_bets, total_winnings');
       
-      if (err) {
-        console.warn('⚠️ Select * error:', err.message);
-        usersError = err;
-      } else {
-        users = allUsers || [];
-      }
-    } catch (err) {
-      console.error('❌ Broadcast users fetch error:', err.message);
-      usersError = err;
-    }
-
-    if (usersError || !users || users.length === 0) {
-      console.log('⚠️ Fallback: Fetching users with minimal fields');
-      try {
-        const { data: minimalUsers, error: minErr } = await supabase
+      if (fetchError) {
+        console.error('❌ Error fetching users:', fetchError.message);
+        // If the full select fails, try minimal select
+        console.log('⚠️ Trying minimal select...');
+        const { data: minUsers, error: minError } = await supabase
           .from('users')
           .select('id, phone_number');
         
-        if (minErr) {
-          console.error('❌ Fallback fetch failed:', minErr.message);
-          return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+        if (minError) {
+          console.error('❌ Minimal select also failed:', minError.message);
+          return res.status(500).json({ success: false, error: `Failed to fetch users: ${minError.message}` });
         }
-        
-        users = minimalUsers || [];
-        console.log(`✅ Fallback successful: Found ${users.length} users`);
-      } catch (fallbackErr) {
-        console.error('❌ Fallback error:', fallbackErr.message);
-        return res.status(500).json({ success: false, error: 'Failed to fetch users for broadcast' });
+        users = minUsers || [];
+      } else {
+        users = fetchedUsers || [];
       }
+
+      console.log(`✅ Fetched ${users.length} users`);
+    } catch (err) {
+      console.error('❌ Catch error fetching users:', err.message);
+      return res.status(500).json({ success: false, error: `Failed to fetch users: ${err.message}` });
+    }
+
+    if (!users || users.length === 0) {
+      console.log('⚠️ No users found in database');
+      return res.json({
+        success: true,
+        message: 'No users found in the system',
+        totalUsers: 0,
+        matchedRecipients: 0,
+        sent: 0,
+        failed: 0,
+      });
     }
 
     const minBalanceNum = Number(minBalance);
@@ -2569,6 +2572,7 @@ router.post('/sms-broadcast', checkAdmin, async (req, res) => {
     const hasMinWinnings = Number.isFinite(minWinningsNum);
     const normalizedSearch = String(searchTerm || '').trim().toLowerCase();
 
+    // Apply filters
     const recipients = (users || []).filter((user) => {
       if (!user?.phone_number) return false;
       
