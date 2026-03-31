@@ -1403,4 +1403,36 @@ router.get('/daraja/status', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/payments/debug/daraja-config
+ * DEBUG ENDPOINT - Check current Daraja configuration being used
+ */
+router.get('/debug/daraja-config', (req, res) => {
+  try {
+    const config = {
+      DARAJA_TEST_CONSUMER_KEY: process.env.DARAJA_TEST_CONSUMER_KEY ? '✓ SET' : '✗ MISSING',
+      DARAJA_TEST_CONSUMER_SECRET: process.env.DARAJA_TEST_CONSUMER_SECRET ? '✓ SET' : '✗ MISSING',
+      DARAJA_TEST_PARTY_B: process.env.DARAJA_TEST_PARTY_B || '✗ MISSING',
+      DARAJA_TEST_PASSKEY: process.env.DARAJA_TEST_PASSKEY ? '✓ SET' : '✗ MISSING',
+      DARAJA_TEST_SHORT_CODE: process.env.DARAJA_TEST_SHORT_CODE || '✗ MISSING',
+      DARAJA_TEST_TRANSACTION_TYPE: process.env.DARAJA_TEST_TRANSACTION_TYPE || 'CustomerPayBillOnline',
+      DARAJA_TEST_CALLBACK_BASE_URL: process.env.DARAJA_TEST_CALLBACK_BASE_URL || 'NOT SET',
+      NODE_ENV: process.env.NODE_ENV || 'development',
+      timestamp: new Date().toISOString()
+    };
+
+    console.log('🔍 DEBUG: Daraja Configuration:', config);
+
+    res.json({
+      success: true,
+      debug: true,
+      config: config,
+      message: 'Current Daraja configuration (PartyB is the till number receiving payments)'
+    });
+  } catch (error) {
+    console.error('❌ Debug error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
