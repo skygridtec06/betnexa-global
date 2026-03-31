@@ -1435,4 +1435,82 @@ router.get('/debug/daraja-config', (req, res) => {
   }
 });
 
+/**
+ * POST /api/payments/test-deposit
+ * TEST ENDPOINT - Make a test deposit and see which till handles it
+ */
+router.post('/test-deposit', async (req, res) => {
+  try {
+    const { phoneNumber, amount = 100 } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ success: false, message: 'phoneNumber is required' });
+    }
+
+    console.log('\n' + '='.repeat(80));
+    console.log('🧪 TEST DEPOSIT INITIATED');
+    console.log('='.repeat(80));
+    
+    // Log all environment variables
+    console.log('\n📋 Environment Variables:');
+    console.log('   DARAJA_TEST_PARTY_B:', process.env.DARAJA_TEST_PARTY_B || 'NOT SET');
+    console.log('   DARAJA_TEST_SHORT_CODE:', process.env.DARAJA_TEST_SHORT_CODE || 'NOT SET');
+    console.log('   DARAJA_TEST_CONSUMER_KEY:', process.env.DARAJA_TEST_CONSUMER_KEY ? 'SET' : 'NOT SET');
+    console.log('   DARAJA_TEST_TRANSACTION_TYPE:', process.env.DARAJA_TEST_TRANSACTION_TYPE || 'NOT SET');
+    console.log('   NODE_ENV:', process.env.NODE_ENV);
+
+    const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
+    const suffix = `${Date.now()}`.slice(-8);
+    const externalReference = `TEST-${suffix}`;
+
+    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
+    const callbackUrl = `${callbackBase}/api/callbacks/daraja-user`;
+
+    console.log('\n💳 Payment Details:');
+    console.log('   Phone:', normalizedPhone);
+    console.log('   Amount:', amount);
+    console.log('   Reference:', externalReference);
+    console.log('   Callback URL:', callbackUrl);
+
+    // Initiate STK push directly
+    const result = await initiateAdminTestStkPush({
+      phoneNumber: normalizedPhone,
+      amount: parseFloat(amount),
+      accountReference: `TEST${suffix}`,
+      transactionDesc: 'Test deposit - check till number',
+      callbackUrl,
+    });
+
+    console.log('\n✅ STK Push Result:');
+    console.log('   CheckoutRequestID:', result.checkoutRequestId);
+    console.log('   MerchantRequestID:', result.merchantRequestId);
+    console.log('   Response:', result.responseDescription);
+
+    console.log('\n📍 IMPORTANT: Check your M-Pesa which till number the STK push is being sent to!');
+    console.log('   The till number should be: ' + (process.env.DARAJA_TEST_PARTY_B || 'NOT SET'));
+    console.log('='.repeat(80) + '\n');
+
+    res.json({
+      success: true,
+      message: 'Test deposit initiated successfully. Check your phone for STK push.',
+      data: {
+        externalReference,
+        checkoutRequestId: result.checkoutRequestId,
+        phoneNumber: normalizedPhone,
+        amount: parseFloat(amount),
+        till_number_configured: process.env.DARAJA_TEST_PARTY_B || 'NOT SET',
+        note: 'Check which till number the STK push is actually being sent to.'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Test deposit error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message,
+      till_number_configured: process.env.DARAJA_TEST_PARTY_B || 'NOT SET'
+    });
+  }
+});
+
 module.exports = router;
