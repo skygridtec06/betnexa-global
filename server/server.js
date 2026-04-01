@@ -106,8 +106,8 @@ app.listen(PORT, () => {
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`\n💳 Ready to process M-Pesa payments!\n`);
 
-  // Start match event scheduler
-  startMatchEventScheduler(5000); // Check every 5 seconds
+  // ⛔ Match event scheduler DISABLED - Admin will manually fetch matches via API only
+  // startMatchEventScheduler(5000); // Check every 5 seconds
 });
 
 module.exports = app;

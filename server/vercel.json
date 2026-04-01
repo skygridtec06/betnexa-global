@@ -14,10 +14,6 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/match-events-tick",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cron/remind-inactive",
       "schedule": "0 6 * * 1"
     }
