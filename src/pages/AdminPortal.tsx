@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -19,6 +19,7 @@ import balanceSyncService from "@/lib/balanceSyncService";
 import { formatTransactionDateInEAT, formatTimeInEAT } from "@/lib/timezoneFormatter";
 import { MatchEventEditor } from "@/components/MatchEventEditor";
 import { ActiveMembers } from "@/components/ActiveMembers";
+import { FetchGamesFetchModal } from "@/components/FetchGamesFetchModal";
 
 const marketLabels: Record<string, string> = {
   bttsYes: "BTTS Yes", bttsNo: "BTTS No",
@@ -72,6 +73,7 @@ const AdminPortal = () => {
   
   const [showAddGame, setShowAddGame] = useState(false);
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
+  const [showFetchGamesModal, setShowFetchGamesModal] = useState(false);
   const [adminTab, setAdminTab] = useState("games");
   const [editingGame, setEditingGame] = useState<string | null>(null);
   const [editMarkets, setEditMarkets] = useState<Record<string, number> | null>(null);
@@ -1983,6 +1985,9 @@ const AdminPortal = () => {
             <div className="mb-4 flex items-center justify-between">
               <h3 className="font-display text-sm font-bold uppercase tracking-wider text-foreground">Manage Games</h3>
               <div className="flex gap-2">
+                <Button variant="hero" size="sm" onClick={() => setShowFetchGamesModal(true)}>
+                  <Download className="mr-1 h-4 w-4" /> Fetch from API Football
+                </Button>
                 <Button variant="hero" size="sm" onClick={() => { setShowImageImport(!showImageImport); setShowAddGame(false); setImportResult(null); }}>
                   <ImageIcon className="mr-1 h-4 w-4" /> Import from Image
                 </Button>
@@ -3776,6 +3781,80 @@ const AdminPortal = () => {
             )}
           </TabsContent>
         </Tabs>
+
+        {/* Fetch Games Modal */}
+        <FetchGamesFetchModal
+          isOpen={showFetchGamesModal}
+          onClose={() => setShowFetchGamesModal(false)}
+          onExecute={async (games) => {
+            try {
+              const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+              
+              // Add each game using the standard admin API
+              let successCount = 0;
+              let failCount = 0;
+              
+              for (const game of games) {
+                try {
+                  // Map snake_case API response to camelCase for admin API
+                  const response = await fetch(`${apiUrl}/api/admin/games`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      phone: loggedInUser.phone,
+                      league: game.league,
+                      homeTeam: game.home_team,  // Note: API returns snake_case
+                      awayTeam: game.away_team,
+                      homeOdds: game.home_odds,
+                      drawOdds: game.draw_odds,
+                      awayOdds: game.away_odds,
+                      time: game.time_eat || game.time_utc,  // Use EAT time if available
+                      status: 'upcoming',
+                      markets: game.markets
+                    })
+                  });
+
+                  const data = await response.json();
+                  if (data.success) {
+                    successCount++;
+                    // Add to local games context
+                    const gameData: GameOdds = {
+                      id: data.game.game_id || data.game.id,
+                      league: data.game.league || '',
+                      homeTeam: data.game.home_team,
+                      awayTeam: data.game.away_team,
+                      homeOdds: parseFloat(data.game.home_odds),
+                      drawOdds: parseFloat(data.game.draw_odds),
+                      awayOdds: parseFloat(data.game.away_odds),
+                      time: data.game.time || game.time_eat,
+                      status: data.game.status || 'upcoming',
+                      markets: data.game.markets || game.markets || {},
+                    };
+                    addGame(gameData);
+                  } else {
+                    failCount++;
+                    console.error(`Failed to add ${game.home_team} vs ${game.away_team}:`, data.error);
+                  }
+                } catch (error) {
+                  failCount++;
+                  console.error(`Error adding ${game.home_team} vs ${game.away_team}:`, error);
+                }
+              }
+
+              // Show result and refresh
+              alert(`✅ Added ${successCount} games${failCount > 0 ? ` (${failCount} failed)` : ''}!`);
+              setShowFetchGamesModal(false);
+              
+              // Refresh games to sync with all users
+              setTimeout(() => {
+                refreshGames();
+              }, 500);
+            } catch (error) {
+              console.error('Error executing games:', error);
+              alert('Failed to add games. Check console for details.');
+            }
+          }}
+        />
       </div>
     </div>
   );
