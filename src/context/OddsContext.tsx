@@ -234,30 +234,31 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timerInterval);
   }, []); // No dependencies - interval runs once and uses ref for current games
 
-  // Live data polling — every 30 s, pull fresh scores + live odds from API-Football via the server.
-  useEffect(() => {
-    const syncApiGames = async () => {
-      if (!hasApiGamesNeedingSync()) return;
-
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-
-      try {
-        // 1. Trigger a server-side sync of scores + odds from API-Football
-        await fetch(`${apiUrl}/api/live/sync`, { signal: AbortSignal.timeout(15000) });
-
-        // 2. Refresh full game list so status transitions (live -> finished)
-        // are reflected immediately in the UI sections.
-        await refreshGames();
-      } catch {
-        // Silently ignore — live data will try again next cycle
-      }
-    };
-
-    syncApiGames();
-    const liveDataInterval = setInterval(syncApiGames, 30000); // Poll every 30 seconds
-
-    return () => clearInterval(liveDataInterval);
-  }, []); // No dependencies - uses ref for current games
+  // ⛔ Live data polling DISABLED — automatic sync from API-Football disabled
+  // Admin must manually trigger syncs. This prevents continuous API calls.
+  // useEffect(() => {
+  //   const syncApiGames = async () => {
+  //     if (!hasApiGamesNeedingSync()) return;
+  //
+  //     const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+  //
+  //     try {
+  //       // 1. Trigger a server-side sync of scores + odds from API-Football
+  //       await fetch(`${apiUrl}/api/live/sync`, { signal: AbortSignal.timeout(15000) });
+  //
+  //       // 2. Refresh full game list so status transitions (live -> finished)
+  //       // are reflected immediately in the UI sections.
+  //       await refreshGames();
+  //     } catch {
+  //       // Silently ignore — live data will try again next cycle
+  //     }
+  //   };
+  //
+  //   syncApiGames();
+  //   const liveDataInterval = setInterval(syncApiGames, 30000); // Poll every 30 seconds
+  //
+  //   return () => clearInterval(liveDataInterval);
+  // }, []); // No dependencies - uses ref for current games
 
   // Refresh the full game list periodically so DB-driven status changes
   // (such as scheduled kickoff events) appear for all users without a manual reload.
@@ -269,28 +270,27 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(refreshInterval);
   }, []);
 
-  // Daily schedule maintenance: DB-only check most of the time, API fetch only when stale
-  // (e.g., after midnight) to keep exactly today + tomorrow available.
-  useEffect(() => {
-    const ensureSchedule = async () => {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      try {
-        const resp = await fetch(`${apiUrl}/api/live/bootstrap-schedule`, {
-          signal: AbortSignal.timeout(45000),
-        });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        if (data?.success && data?.refreshed) {
-          await refreshGames();
-        }
-      } catch {
-        // Silent retry on next interval
-      }
-    };
-
-    const scheduleInterval = setInterval(ensureSchedule, 10 * 60 * 1000);
-    return () => clearInterval(scheduleInterval);
-  }, []);
+  // ⛔ Daily schedule maintenance DISABLED — automatic bootstrap-schedule fetch removed
+  // useEffect(() => {
+  //   const ensureSchedule = async () => {
+  //     const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+  //     try {
+  //       const resp = await fetch(`${apiUrl}/api/live/bootstrap-schedule`, {
+  //         signal: AbortSignal.timeout(45000),
+  //       });
+  //       if (!resp.ok) return;
+  //       const data = await resp.json();
+  //       if (data?.success && data?.refreshed) {
+  //         await refreshGames();
+  //       }
+  //     } catch {
+  //       // Silent retry on next interval
+  //     }
+  //   };
+  //
+  //   const scheduleInterval = setInterval(ensureSchedule, 10 * 60 * 1000);
+  //   return () => clearInterval(scheduleInterval);
+  // }, []);
 
   const refreshGames = async () => {
     try {
