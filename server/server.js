@@ -61,8 +61,8 @@ app.use((req, res, next) => {
 app.use('/api/auth', AuthRoutes);
 app.use('/api/payments', PaymentRoutes);
 app.use('/api/callbacks', CallbackRoutes);
+app.use('/api/admin/fetch-api-football', FetchApiFootballRoutes);  // Mount specific routes BEFORE general /api/admin
 app.use('/api/admin', AdminRoutes);
-app.use('/api/admin/fetch-api-football', FetchApiFootballRoutes);
 app.use('/api/bets', BetsRoutes);
 app.use('/api/live', LiveRoutes);
 app.use('/api/cron', CronRoutes);
