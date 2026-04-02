@@ -75,8 +75,6 @@ const AdminPortal = () => {
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
   const [showFetchGamesModal, setShowFetchGamesModal] = useState(false);
   const [adminTab, setAdminTab] = useState("games");
-  const [editingGame, setEditingGame] = useState<string | null>(null);
-  const [editMarkets, setEditMarkets] = useState<Record<string, number> | null>(null);
   const [selectedGameForEvents, setSelectedGameForEvents] = useState<{
     id: string;
     name: string;
@@ -891,139 +889,7 @@ const AdminPortal = () => {
     }
   };
 
-  const startEditMarkets = (game: GameOdds) => {
-    if (!ensureManualGame(game.id)) return;
-    
-    console.log(`📝 Starting market edit for game ${game.id}`);
-    console.log(`   Current database markets:`, Object.entries(game.markets || {}).length > 0 ? game.markets : 'EMPTY - will use generated');
-    
-    setEditingGame(game.id);
-    
-    // IMPORTANT: Start with actual database markets, NOT generated ones
-    // Only fill missing markets with generated odds
-    const dbMarkets = game.markets || {};
-    const dbMarketCount = Object.keys(dbMarkets).length;
-    
-    let editableMarkets: Record<string, number> = {};
-    
-    // If game has database markets, use them as the base
-    if (dbMarketCount > 0) {
-      console.log(`   ✅ Using ${dbMarketCount} database markets as base`);
-      editableMarkets = { ...dbMarkets };
-    } else {
-      console.log(`   ⚠️ Database markets empty - generating defaults`);
-      // Only generate if database is completely empty
-      const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
-      editableMarkets = { ...fullMarkets };
-    }
-    
-    // Print what we're about to edit
-    console.log(`   📋 Markets ready for editing:`, {
-      total: Object.keys(editableMarkets).length,
-      sample: Object.entries(editableMarkets).slice(0, 3)
-    });
-    
-    setEditMarkets({ ...editableMarkets });
-  };
 
-  const saveMarkets = async (id: string) => {
-    if (!ensureManualGame(id)) return;
-    if (!editMarkets) return;
-    
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const response = await fetch(`${apiUrl}/api/admin/games/${id}/markets`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          phone: loggedInUser.phone,
-          markets: editMarkets
-        })
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Use the server-returned markets to ensure we have the verified saved values
-        const savedMarkets = data.savedMarkets || editMarkets;
-        
-        console.log(`✅ Markets saved and verified:`, Object.entries(savedMarkets).slice(0, 3));
-        console.log(`✅ Update timestamp: ${data.updateTimestamp}`);
-        
-        // Verify that all markets were saved correctly
-        let allMarketsSaved = true;
-        const missingMarkets = [];
-        for (const [key, value] of Object.entries(editMarkets)) {
-          if (!savedMarkets[key]) {
-            allMarketsSaved = false;
-            missingMarkets.push(key);
-            console.warn(`⚠️ Market not found in saved data: ${key}`);
-          }
-        }
-        
-        // Check for backend verification issues
-        if (data.verificationIssues && data.verificationIssues.length > 0) {
-          console.error(`❌ Backend verification issues:`, data.verificationIssues);
-          alert(`⚠️ VERIFICATION ISSUES: ${data.verificationIssues.join('\n')}\n\nPlease verify markets in the betting slip.`);
-        }
-        
-        if (!allMarketsSaved) {
-          console.error(`❌ Some markets were not saved: ${missingMarkets.join(', ')}`);
-          alert(`⚠️ CRITICAL: Some markets may not have been saved: ${missingMarkets.slice(0, 3).join(', ')}`);
-        }
-        
-        // Update with the verified saved markets from server
-        updateGameMarkets(id, savedMarkets);
-        setEditingGame(null);
-        setEditMarkets(null);
-        
-        if (allMarketsSaved && (!data.verificationIssues || data.verificationIssues.length === 0)) {
-          alert('✅ ALL Markets successfully saved and verified! Refreshing for all users...');
-        }
-        
-        // Force immediate refresh for this game to update all users
-        console.log('🔄 IMMEDIATE REFRESH: Fetching latest game state to sync all users...');
-        const refreshResponse = await fetch(`${apiUrl}/api/admin/games/${id}`, {
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (refreshResponse.ok) {
-          const refreshData = await refreshResponse.json();
-          if (refreshData.game) {
-            const updatedGame = refreshData.game;
-            const gameOdds: GameOdds = {
-              id: updatedGame.game_id || updatedGame.id,
-              league: updatedGame.league || '',
-              homeTeam: updatedGame.home_team,
-              awayTeam: updatedGame.away_team,
-              homeOdds: parseFloat(updatedGame.home_odds) || 2.0,
-              drawOdds: parseFloat(updatedGame.draw_odds) || 3.0,
-              awayOdds: parseFloat(updatedGame.away_odds) || 3.0,
-              time: updatedGame.scheduled_time || updatedGame.time || new Date().toISOString(),
-              status: updatedGame.status || 'upcoming',
-              markets: savedMarkets,
-              homeScore: updatedGame.home_score || 0,
-              awayScore: updatedGame.away_score || 0,
-            };
-            updateGame(gameOdds.id, gameOdds);
-            console.log('✅ Game updated with verified markets');
-          }
-        }
-        
-        // Also do a full refresh after a short delay to ensure propagation to all connected clients
-        setTimeout(() => {
-          console.log('🔄 Full games refresh to notify all users of market changes...');
-          refreshGames();
-        }, 500);
-        
-      } else {
-        alert(`Error: ${data.error || 'Failed to update markets'}`);
-      }
-    } catch (error) {
-      console.error('Error saving markets:', error);
-      alert('Failed to save markets');
-    }
-  };
 
   const removeGameHandler = async (id: string) => {
     if (!confirm('Are you sure you want to delete this game?')) return;
@@ -2768,88 +2634,12 @@ const AdminPortal = () => {
                       <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => regenerateOdds(game.id)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Regenerate all market odds"}>
                         <RefreshCw className="h-4 w-4 text-primary" />
                       </Button>
-                      <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => editingGame === game.id ? saveMarkets(game.id) : startEditMarkets(game)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Edit market odds"}>
-                        {editingGame === game.id ? <Save className="h-4 w-4 text-primary" /> : <Edit2 className="h-4 w-4 text-muted-foreground" />}
-                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => removeGameHandler(game.id)} className="text-destructive hover:text-destructive">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
 
-                  {/* Expanded market odds editor */}
-                  {editingGame === game.id && editMarkets && (
-                    <div className="mt-4 border-t border-border pt-4">
-                      <p className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Edit All Market Odds</p>
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-                        {(Object.keys(marketLabels) as (keyof typeof marketLabels)[]).map((key) => {
-                          const currentDbValue = game.markets?.[key];
-                          const editValue = editMarkets[key];
-                          const hasChanged = currentDbValue && editValue && Math.abs(currentDbValue - editValue) > 0.01;
-                          
-                          return (
-                            <div key={key}>
-                              <label className="block text-[10px] text-muted-foreground mb-0.5">
-                                {marketLabels[key]}
-                                {currentDbValue && <span className="text-primary font-semibold"> ({currentDbValue.toFixed(2)})</span>}
-                              </label>
-                              <input
-                                type="number"
-                                step="0.01"
-                                className={`w-full rounded border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary ${
-                                  hasChanged ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-border'
-                                }`}
-                                value={editValue || ''}
-                                placeholder={currentDbValue?.toFixed(2) || '1.50'}
-                                onChange={(e) => setEditMarkets({ ...editMarkets, [key]: parseFloat(e.target.value) || 0 })}
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                      <div className="mt-3 flex gap-2">
-                        <Button variant="hero" size="sm" onClick={() => saveMarkets(game.id)}>
-                          <Save className="mr-1 h-3 w-3" /> Save Markets
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingGame(null); setEditMarkets(null); }}>Cancel</Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Show current markets summary when not editing */}
-                  {editingGame !== game.id && (
-                    <div className="mt-2">
-                      <p className="text-[10px] text-muted-foreground mb-1">📊 Current Markets:</p>
-                      <div className="flex flex-wrap gap-1">
-                        {/* Prioritize showing actual database markets */}
-                        {(() => {
-                          const dbMarkets = game.markets || {};
-                          const dbMarketKeys = Object.keys(dbMarkets).filter(k => dbMarkets[k] >= 1.01);
-                          
-                          if (dbMarketKeys.length > 0) {
-                            // Show actual database markets
-                            return dbMarketKeys.slice(0, 8).map((key) => (
-                              <span key={key} className="inline-block rounded bg-primary/10 px-2 py-0.5 text-[9px] text-primary font-mono">
-                                {marketLabels[key as keyof typeof marketLabels] || key}: <strong>{dbMarkets[key].toFixed(2)}</strong>
-                              </span>
-                            ));
-                          } else {
-                            // Only show generated as fallback if database is empty
-                            console.warn(`⚠️ Game ${game.id} has no database markets`);
-                            return ["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => {
-                              const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
-                              const marketOdds = fullMarkets[key];
-                              return (
-                                <span key={key} className="inline-block rounded bg-secondary/10 px-2 py-0.5 text-[9px] text-muted-foreground font-mono opacity-60">
-                                  {marketLabels[key as keyof typeof marketLabels] || key}: <strong>{marketOdds?.toFixed(2) || '--'}</strong>
-                                </span>
-                              );
-                            });
-                          }
-                        })()}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
               {games.length === 0 && (
