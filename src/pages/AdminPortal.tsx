@@ -934,16 +934,25 @@ const AdminPortal = () => {
           }
         }
         
+        // Check for backend verification issues
+        if (data.verificationIssues && data.verificationIssues.length > 0) {
+          console.error(`❌ Backend verification issues:`, data.verificationIssues);
+          alert(`⚠️ VERIFICATION ISSUES: ${data.verificationIssues.join('\n')}\n\nPlease verify markets in the betting slip.`);
+        }
+        
         if (!allMarketsSaved) {
           console.error(`❌ Some markets were not saved: ${missingMarkets.join(', ')}`);
-          alert(`⚠️ Some markets may not have been saved: ${missingMarkets.slice(0, 3).join(', ')}`);
+          alert(`⚠️ CRITICAL: Some markets may not have been saved: ${missingMarkets.slice(0, 3).join(', ')}`);
         }
         
         // Update with the verified saved markets from server
         updateGameMarkets(id, savedMarkets);
         setEditingGame(null);
         setEditMarkets(null);
-        alert('✅ Markets updated and verified successfully! Refreshing for all users...');
+        
+        if (allMarketsSaved && (!data.verificationIssues || data.verificationIssues.length === 0)) {
+          alert('✅ ALL Markets successfully saved and verified! Refreshing for all users...');
+        }
         
         // Force immediate refresh for this game to update all users
         console.log('🔄 IMMEDIATE REFRESH: Fetching latest game state to sync all users...');

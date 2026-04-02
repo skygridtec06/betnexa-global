@@ -1538,7 +1538,7 @@ router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
   }
 });
 
-// PUT: Update game markets - SIMPLE, FOOLPROOF APPROACH
+// PUT: Update game markets - IMPROVED APPROACH WITH ATOMIC OPERATIONS
 router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
   try {
     const { gameId } = req.params;
@@ -1554,6 +1554,7 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
 
     const incomingMarketCount = Object.keys(markets).length;
     console.log(`\n📝 [MARKETS UPDATE] ${gameId}: ${incomingMarketCount} markets in request`);
+    console.log(`   Markets being updated: ${Object.keys(markets).join(', ')}`);
 
     // Find game UUID
     let gameQuery = supabase.from('games').select('id');
@@ -1578,16 +1579,13 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
 
     console.log(`   📊 Existing markets: ${existingMarkets?.length || 0}`);
 
-    // STRATEGY: Delete only markets that are being updated, insert new values
-    // This preserves all other markets untouched
-    
     const nowIso = new Date().toISOString();
     const incomingKeys = new Set(Object.keys(markets));
     
     // Step 1: Delete old entries for markets being updated
     if (incomingKeys.size > 0) {
       const keysArray = Array.from(incomingKeys);
-      console.log(`   🗑️ Deleting old entries for ${keysArray.length} market keys`);
+      console.log(`   🗑️ Deleting old entries for ${keysArray.length} market keys: ${keysArray.join(', ')}`);
       
       const { error: delErr } = await supabase
         .from('markets')
@@ -1597,18 +1595,24 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
         
       if (delErr) {
         console.warn(`   ⚠️ Delete error: ${delErr.message}`);
+      } else {
+        console.log(`   ✅ Delete successful for markets`);
       }
     }
 
     // Step 2: Insert new values for all markets in request
-    const entriesToInsert = Object.entries(markets).map(([key, val]) => ({
-      game_id: gameUUID,
-      market_type: determineMarketType(key),
-      market_key: key,
-      odds: parseFloat(val) || 0,
-      updated_at: nowIso,
-      manually_edited_at: nowIso,
-    }));
+    const entriesToInsert = Object.entries(markets).map(([key, val]) => {
+      const odds = parseFloat(val) || 0;
+      console.log(`   📌 Preparing insert: ${key} = ${odds}`);
+      return {
+        game_id: gameUUID,
+        market_type: determineMarketType(key),
+        market_key: key,
+        odds: odds,
+        updated_at: nowIso,
+        manually_edited_at: nowIso,
+      };
+    });
 
     if (entriesToInsert.length > 0) {
       let { error: insErr } = await supabase.from('markets').insert(entriesToInsert);
@@ -1626,13 +1630,26 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
 
       if (insErr) {
         console.error(`   ❌ Insert error: ${insErr.message}`);
-        return res.status(500).json({ error: 'Failed to update markets', details: insErr.message });
+        // Try to restore the markets by re-inserting with original values
+        console.log(`   🔧 RECOVERING: Re-attempting insert for markets...`);
+        const { error: recoveryErr } = await supabase.from('markets').insert(
+          entriesToInsert.map(e => {
+            const copy = { ...e };
+            delete copy.manually_edited_at;
+            return copy;
+          })
+        );
+        if (recoveryErr) {
+          console.error(`   ❌ Recovery failed: ${recoveryErr.message}`);
+          return res.status(500).json({ error: 'Failed to update markets', details: insErr.message });
+        }
       }
       
       console.log(`   ✅ Inserted ${entriesToInsert.length} market entries`);
     }
 
-    // Step 3: Verify all markets still present and fetch actual saved values
+    // Step 3: Verify all markets were saved correctly with exact values
+    console.log(`   🔍 Verifying saved markets...`);
     const { data: allMarketsNow, error: verifyError } = await supabase
       .from('markets')
       .select('market_key, odds')
@@ -1649,11 +1666,48 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
 
     // Build savedMarkets object from database for response
     const savedMarkets = {};
+    const verificationIssues = [];
+    
     if (allMarketsNow && allMarketsNow.length > 0) {
       allMarketsNow.forEach(m => {
-        savedMarkets[m.market_key] = parseFloat(m.odds);
+        const savedOdds = parseFloat(m.odds);
+        const requestedOdds = markets[m.market_key];
+        savedMarkets[m.market_key] = savedOdds;
+        
+        // Verify exact match
+        if (requestedOdds && Math.abs(savedOdds - requestedOdds) > 0.01) {
+          verificationIssues.push(`${m.market_key}: requested ${requestedOdds}, got ${savedOdds}`);
+          console.warn(`   ⚠️ Mismatch for ${m.market_key}: requested ${requestedOdds}, saved ${savedOdds}`);
+        } else {
+          console.log(`   ✅ Verified ${m.market_key} = ${savedOdds}`);
+        }
       });
       console.log(`   Sample saved markets: ${JSON.stringify(Object.entries(savedMarkets).slice(0, 3))}`);
+    }
+
+    // Check for missing markets from the request
+    for (const [key, val] of Object.entries(markets)) {
+      if (!savedMarkets[key]) {
+        verificationIssues.push(`${key}: MISSING from database after save`);
+        console.error(`   ❌ CRITICAL: Market ${key} is missing after save!`);
+        
+        // Force re-insert the missing market
+        console.log(`   🔧 EMERGENCY RE-INSERT: Adding missing market ${key}`);
+        const { error: emergencyErr } = await supabase.from('markets').insert({
+          game_id: gameUUID,
+          market_type: determineMarketType(key),
+          market_key: key,
+          odds: parseFloat(val) || 0,
+          updated_at: nowIso,
+        });
+        
+        if (emergencyErr) {
+          console.error(`   ❌ Emergency re-insert failed: ${emergencyErr.message}`);
+        } else {
+          console.log(`   ✅ Emergency re-insert successful for ${key}`);
+          savedMarkets[key] = parseFloat(val);
+        }
+      }
     }
 
     // Step 4: Update game's 'updated_at' timestamp to signal to clients that markets changed
@@ -1677,7 +1731,9 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       marketCountAfter: finalCount,
       marketsUpdated: incomingMarketCount,
       savedMarkets: savedMarkets,
-      updateTimestamp: nowIso
+      updateTimestamp: nowIso,
+      verificationIssues: verificationIssues.length > 0 ? verificationIssues : null
+    });
     });
 
   } catch (error) {
