@@ -270,6 +270,95 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(refreshInterval);
   }, []);
 
+  // Fast market change detection - check for updated games every 3 seconds
+  // This ensures admins' market updates appear to all users quickly
+  useEffect(() => {
+    const marketCheckInterval = setInterval(async () => {
+      if (gamesRef.current.length === 0) return;
+      
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        const response = await fetch(`${apiUrl}/api/admin/games`, {
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && Array.isArray(data.games)) {
+            // Check each game for market changes
+            let hasMarketUpdates = false;
+            
+            for (const newGame of data.games) {
+              const gameId = newGame.game_id || newGame.id;
+              const currentGame = gamesRef.current.find(g => g.id === gameId);
+              
+              if (currentGame) {
+                // Check if markets have changed
+                const newMarketsStr = JSON.stringify(newGame.markets || {});
+                const currentMarketsStr = JSON.stringify(currentGame.markets || {});
+                
+                if (newMarketsStr !== currentMarketsStr) {
+                  console.log(`📊 Market update detected for ${gameId}: ${newGame.home_team} vs ${newGame.away_team}`);
+                  hasMarketUpdates = true;
+                  break;
+                }
+              }
+            }
+            
+            // If we detected market changes, refresh the full game list
+            if (hasMarketUpdates) {
+              console.log('🔄 Market changes detected - refreshing games for all users');
+              setGames(prev => {
+                const transformedGames: GameOdds[] = data.games.map((g: any) => ({
+                  id: g.game_id || g.id,
+                  league: g.league || '',
+                  homeTeam: g.home_team,
+                  awayTeam: g.away_team,
+                  homeOdds: parseFloat(g.home_odds) || 2.0,
+                  drawOdds: parseFloat(g.draw_odds) || 3.0,
+                  awayOdds: parseFloat(g.away_odds) || 3.0,
+                  time: g.scheduled_time || g.time || new Date().toISOString(),
+                  status: g.status || 'upcoming',
+                  markets: g.markets || {},
+                  homeScore: g.home_score || 0,
+                  awayScore: g.away_score || 0,
+                  minute: g.minute || 0,
+                  seconds: 0,
+                  kickoffStartTime: g.kickoff_start_time || undefined,
+                  isKickoffStarted: g.is_kickoff_started || false,
+                  gamePaused: g.game_paused || false,
+                  kickoffPausedAt: g.kickoff_paused_at || undefined,
+                  isHalftime: g.is_halftime || false,
+                }));
+                
+                const seenIds = new Set<string>();
+                const deduplicatedGames = transformedGames.filter(game => {
+                  if (seenIds.has(game.id)) return false;
+                  seenIds.add(game.id);
+                  return true;
+                });
+                
+                const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
+                gamesRef.current = sortedGames;
+                return sortedGames;
+              });
+            }
+          }
+        }
+      } catch (error) {
+        // Silently ignore market check errors
+      }
+    }, 3000); // Check every 3 seconds for market changes
+    
+    return () => clearInterval(marketCheckInterval);
+  }, []);
+
   // ⛔ Daily schedule maintenance DISABLED — automatic bootstrap-schedule fetch removed
   // useEffect(() => {
   //   const ensureSchedule = async () => {

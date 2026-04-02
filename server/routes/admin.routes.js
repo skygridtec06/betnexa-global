@@ -1656,13 +1656,28 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       console.log(`   Sample saved markets: ${JSON.stringify(Object.entries(savedMarkets).slice(0, 3))}`);
     }
 
+    // Step 4: Update game's 'updated_at' timestamp to signal to clients that markets changed
+    console.log(`   🔄 Updating game 'updated_at' timestamp to notify clients...`);
+    const { error: updateGameErr } = await supabase
+      .from('games')
+      .update({ updated_at: nowIso })
+      .eq('id', gameUUID);
+    
+    if (updateGameErr) {
+      console.warn(`   ⚠️ Warning: Could not update game timestamp: ${updateGameErr.message}`);
+    } else {
+      console.log(`   ✅ Game timestamp updated - clients will detect market changes`);
+    }
+
     res.json({ 
       success: true, 
       gameId,
+      gameUUID,
       marketCountBefore: existingMarkets?.length || 0,
       marketCountAfter: finalCount,
       marketsUpdated: incomingMarketCount,
-      savedMarkets: savedMarkets
+      savedMarkets: savedMarkets,
+      updateTimestamp: nowIso
     });
 
   } catch (error) {

@@ -921,6 +921,7 @@ const AdminPortal = () => {
         const savedMarkets = data.savedMarkets || editMarkets;
         
         console.log(`✅ Markets saved and verified:`, Object.entries(savedMarkets).slice(0, 3));
+        console.log(`✅ Update timestamp: ${data.updateTimestamp}`);
         
         // Verify that all markets were saved correctly
         let allMarketsSaved = true;
@@ -942,13 +943,43 @@ const AdminPortal = () => {
         updateGameMarkets(id, savedMarkets);
         setEditingGame(null);
         setEditMarkets(null);
-        alert('✅ Markets updated and verified successfully!');
+        alert('✅ Markets updated and verified successfully! Refreshing for all users...');
         
-        // Refresh games after a short delay to ensure database propagation
+        // Force immediate refresh for this game to update all users
+        console.log('🔄 IMMEDIATE REFRESH: Fetching latest game state to sync all users...');
+        const refreshResponse = await fetch(`${apiUrl}/api/admin/games/${id}`, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          if (refreshData.game) {
+            const updatedGame = refreshData.game;
+            const gameOdds: GameOdds = {
+              id: updatedGame.game_id || updatedGame.id,
+              league: updatedGame.league || '',
+              homeTeam: updatedGame.home_team,
+              awayTeam: updatedGame.away_team,
+              homeOdds: parseFloat(updatedGame.home_odds) || 2.0,
+              drawOdds: parseFloat(updatedGame.draw_odds) || 3.0,
+              awayOdds: parseFloat(updatedGame.away_odds) || 3.0,
+              time: updatedGame.scheduled_time || updatedGame.time || new Date().toISOString(),
+              status: updatedGame.status || 'upcoming',
+              markets: savedMarkets,
+              homeScore: updatedGame.home_score || 0,
+              awayScore: updatedGame.away_score || 0,
+            };
+            updateGame(gameOdds.id, gameOdds);
+            console.log('✅ Game updated with verified markets');
+          }
+        }
+        
+        // Also do a full refresh after a short delay to ensure propagation to all connected clients
         setTimeout(() => {
-          console.log('🔄 Refreshing games to verify market persistence...');
+          console.log('🔄 Full games refresh to notify all users of market changes...');
           refreshGames();
         }, 500);
+        
       } else {
         alert(`Error: ${data.error || 'Failed to update markets'}`);
       }
