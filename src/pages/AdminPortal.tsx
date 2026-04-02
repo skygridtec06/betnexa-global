@@ -893,10 +893,37 @@ const AdminPortal = () => {
 
   const startEditMarkets = (game: GameOdds) => {
     if (!ensureManualGame(game.id)) return;
+    
+    console.log(`📝 Starting market edit for game ${game.id}`);
+    console.log(`   Current database markets:`, Object.entries(game.markets || {}).length > 0 ? game.markets : 'EMPTY - will use generated');
+    
     setEditingGame(game.id);
-    // Use generateMarketOdds to fill in any missing/zero markets with proper values
-    const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
-    setEditMarkets({ ...fullMarkets });
+    
+    // IMPORTANT: Start with actual database markets, NOT generated ones
+    // Only fill missing markets with generated odds
+    const dbMarkets = game.markets || {};
+    const dbMarketCount = Object.keys(dbMarkets).length;
+    
+    let editableMarkets: Record<string, number> = {};
+    
+    // If game has database markets, use them as the base
+    if (dbMarketCount > 0) {
+      console.log(`   ✅ Using ${dbMarketCount} database markets as base`);
+      editableMarkets = { ...dbMarkets };
+    } else {
+      console.log(`   ⚠️ Database markets empty - generating defaults`);
+      // Only generate if database is completely empty
+      const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+      editableMarkets = { ...fullMarkets };
+    }
+    
+    // Print what we're about to edit
+    console.log(`   📋 Markets ready for editing:`, {
+      total: Object.keys(editableMarkets).length,
+      sample: Object.entries(editableMarkets).slice(0, 3)
+    });
+    
+    setEditMarkets({ ...editableMarkets });
   };
 
   const saveMarkets = async (id: string) => {
@@ -2657,18 +2684,30 @@ const AdminPortal = () => {
                     <div className="mt-4 border-t border-border pt-4">
                       <p className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Edit All Market Odds</p>
                       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
-                        {(Object.keys(marketLabels) as (keyof typeof marketLabels)[]).map((key) => (
-                          <div key={key}>
-                            <label className="block text-[10px] text-muted-foreground mb-0.5">{marketLabels[key]}</label>
-                            <input
-                              type="number"
-                              step="0.01"
-                              className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary"
-                              value={editMarkets[key] || 1.50}
-                              onChange={(e) => setEditMarkets({ ...editMarkets, [key]: parseFloat(e.target.value) || 0 })}
-                            />
-                          </div>
-                        ))}
+                        {(Object.keys(marketLabels) as (keyof typeof marketLabels)[]).map((key) => {
+                          const currentDbValue = game.markets?.[key];
+                          const editValue = editMarkets[key];
+                          const hasChanged = currentDbValue && editValue && Math.abs(currentDbValue - editValue) > 0.01;
+                          
+                          return (
+                            <div key={key}>
+                              <label className="block text-[10px] text-muted-foreground mb-0.5">
+                                {marketLabels[key]}
+                                {currentDbValue && <span className="text-primary font-semibold"> ({currentDbValue.toFixed(2)})</span>}
+                              </label>
+                              <input
+                                type="number"
+                                step="0.01"
+                                className={`w-full rounded border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary ${
+                                  hasChanged ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-border'
+                                }`}
+                                value={editValue || ''}
+                                placeholder={currentDbValue?.toFixed(2) || '1.50'}
+                                onChange={(e) => setEditMarkets({ ...editMarkets, [key]: parseFloat(e.target.value) || 0 })}
+                              />
+                            </div>
+                          );
+                        })}
                       </div>
                       <div className="mt-3 flex gap-2">
                         <Button variant="hero" size="sm" onClick={() => saveMarkets(game.id)}>
@@ -2681,21 +2720,36 @@ const AdminPortal = () => {
 
                   {/* Show current markets summary when not editing */}
                   {editingGame !== game.id && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => {
-                        // Prioritize actual saved markets from database; only generate if missing
-                        let marketOdds = game.markets && game.markets[key];
-                        if (!marketOdds || marketOdds < 1.01) {
-                          const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
-                          marketOdds = fullMarkets[key];
-                        }
-                        return (
-                          <span key={key} className="rounded bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground">
-                            {marketLabels[key as keyof typeof marketLabels]}: <span className="font-mono font-bold text-foreground">{(marketOdds || 1.50).toFixed(2)}</span>
-                          </span>
-                        );
-                      })}
-                      <span className="text-[10px] text-primary">+{Object.keys(marketLabels).length - 5} more</span>
+                    <div className="mt-2">
+                      <p className="text-[10px] text-muted-foreground mb-1">📊 Current Markets:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {/* Prioritize showing actual database markets */}
+                        {(() => {
+                          const dbMarkets = game.markets || {};
+                          const dbMarketKeys = Object.keys(dbMarkets).filter(k => dbMarkets[k] >= 1.01);
+                          
+                          if (dbMarketKeys.length > 0) {
+                            // Show actual database markets
+                            return dbMarketKeys.slice(0, 8).map((key) => (
+                              <span key={key} className="inline-block rounded bg-primary/10 px-2 py-0.5 text-[9px] text-primary font-mono">
+                                {marketLabels[key as keyof typeof marketLabels] || key}: <strong>{dbMarkets[key].toFixed(2)}</strong>
+                              </span>
+                            ));
+                          } else {
+                            // Only show generated as fallback if database is empty
+                            console.warn(`⚠️ Game ${game.id} has no database markets`);
+                            return ["bttsYes", "over25", "doubleChanceHomeOrDraw", "htftHomeHome", "cs10"].map((key) => {
+                              const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+                              const marketOdds = fullMarkets[key];
+                              return (
+                                <span key={key} className="inline-block rounded bg-secondary/10 px-2 py-0.5 text-[9px] text-muted-foreground font-mono opacity-60">
+                                  {marketLabels[key as keyof typeof marketLabels] || key}: <strong>{marketOdds?.toFixed(2) || '--'}</strong>
+                                </span>
+                              );
+                            });
+                          }
+                        })()}
+                      </div>
                     </div>
                   )}
                 </div>
