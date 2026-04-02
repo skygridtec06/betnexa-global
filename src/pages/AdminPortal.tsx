@@ -1424,6 +1424,7 @@ const AdminPortal = () => {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       console.log(`✏️  Updating game details: ${gameId}`);
       
+      // Update game details (league, teams, kickoff, 1X2 odds)
       const response = await fetch(`${apiUrl}/api/admin/games/${gameId}/details`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1442,25 +1443,64 @@ const AdminPortal = () => {
       const data = await response.json();
       console.log('📊 Update details response:', data);
 
-      if (data.success) {
-        updateGame(gameId, {
-          league: details.league || game.league,
-          homeTeam: details.homeTeam || game.homeTeam,
-          awayTeam: details.awayTeam || game.awayTeam,
-          homeOdds: details.homeOdds ? parseFloat(details.homeOdds) : game.homeOdds,
-          drawOdds: details.drawOdds ? parseFloat(details.drawOdds) : game.drawOdds,
-          awayOdds: details.awayOdds ? parseFloat(details.awayOdds) : game.awayOdds,
-          time: details.kickoffTime || game.time
-        });
-        setEditingGameDetails(null);
-        const newEdit = { ...gameDetailsEdit };
-        delete newEdit[gameId];
-        setGameDetailsEdit(newEdit);
-        alert('✅ Game details updated!');
-      } else {
+      if (!data.success) {
         console.error('❌ Update error:', data);
         alert(`Error: ${data.details || data.error || 'Failed to update game details'}`);
+        return;
       }
+
+      // If markets are provided, also save them
+      if (details.markets && Object.keys(details.markets).length > 0) {
+        console.log(`📊 Saving markets for game ${gameId}`);
+        const marketsToSave = Object.fromEntries(
+          Object.entries(details.markets).filter(([_, v]) => v && parseFloat(v as any) > 0)
+        );
+        
+        if (Object.keys(marketsToSave).length > 0) {
+          const marketsResponse = await fetch(`${apiUrl}/api/admin/games/${gameId}/markets`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              phone: loggedInUser.phone,
+              markets: Object.fromEntries(
+                Object.entries(marketsToSave).map(([k, v]) => [k, parseFloat(v as any)])
+              )
+            })
+          });
+
+          const marketsData = await marketsResponse.json();
+          console.log('📊 Markets save response:', marketsData);
+          
+          if (!marketsData.success) {
+            console.error('❌ Markets save error:', marketsData);
+            alert(`⚠️ Game details saved but markets failed: ${marketsData.error || 'Unknown error'}`);
+          }
+        }
+      }
+
+      // Update UI
+      updateGame(gameId, {
+        league: details.league || game.league,
+        homeTeam: details.homeTeam || game.homeTeam,
+        awayTeam: details.awayTeam || game.awayTeam,
+        homeOdds: details.homeOdds ? parseFloat(details.homeOdds) : game.homeOdds,
+        drawOdds: details.drawOdds ? parseFloat(details.drawOdds) : game.drawOdds,
+        awayOdds: details.awayOdds ? parseFloat(details.awayOdds) : game.awayOdds,
+        time: details.kickoffTime || game.time,
+        ...(details.markets && Object.keys(details.markets).length > 0 && {
+          markets: Object.fromEntries(
+            Object.entries(details.markets)
+              .filter(([_, v]) => v && parseFloat(v as any) > 0)
+              .map(([k, v]) => [k, parseFloat(v as any)])
+          )
+        })
+      });
+
+      setEditingGameDetails(null);
+      const newEdit = { ...gameDetailsEdit };
+      delete newEdit[gameId];
+      setGameDetailsEdit(newEdit);
+      alert('✅ Game details and markets updated!');
     } catch (error) {
       console.error('Error updating game details:', error);
       alert('Failed to update game details: ' + error.message);
@@ -2285,6 +2325,17 @@ const AdminPortal = () => {
                                 kickoffTimeStr = new Date().toISOString();
                               }
                               
+                              // Initialize markets from database or generate them
+                              const dbMarkets = game.markets || {};
+                              let editableMarkets: Record<string, number> = {};
+                              
+                              if (Object.keys(dbMarkets).length > 0) {
+                                editableMarkets = { ...dbMarkets };
+                              } else {
+                                const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+                                editableMarkets = { ...fullMarkets };
+                              }
+                              
                               setGameDetailsEdit({
                                 ...gameDetailsEdit,
                                 [game.id]: {
@@ -2294,7 +2345,8 @@ const AdminPortal = () => {
                                   homeOdds: game.homeOdds.toString(),
                                   drawOdds: game.drawOdds.toString(),
                                   awayOdds: game.awayOdds.toString(),
-                                  kickoffTime: kickoffTimeStr
+                                  kickoffTime: kickoffTimeStr,
+                                  markets: editableMarkets
                                 }
                               });
                             }
@@ -2405,6 +2457,52 @@ const AdminPortal = () => {
                               />
                             </div>
                           </div>
+
+                          {/* Market Odds Editor */}
+                          {gameDetailsEdit[game.id]?.markets && (
+                            <div className="mt-3 border-t border-border/30 pt-3">
+                              <p className="mb-2 text-xs font-semibold text-muted-foreground uppercase">All Market Odds</p>
+                              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 lg:grid-cols-6">
+                                {(Object.keys(marketLabels) as (keyof typeof marketLabels)[]).map((key) => {
+                                  const currentDbValue = game.markets?.[key];
+                                  const editValue = gameDetailsEdit[game.id]?.markets?.[key];
+                                  const hasChanged = currentDbValue && editValue && Math.abs(currentDbValue - editValue) > 0.01;
+                                  
+                                  return (
+                                    <div key={key}>
+                                      <label className="block text-[10px] text-muted-foreground mb-0.5">
+                                        {marketLabels[key]}
+                                        {currentDbValue && <span className="text-primary font-semibold"> ({currentDbValue.toFixed(2)})</span>}
+                                      </label>
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        className={`w-full rounded border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary ${
+                                          hasChanged ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-border'
+                                        }`}
+                                        value={editValue || ''}
+                                        placeholder={currentDbValue?.toFixed(2) || '1.50'}
+                                        onChange={(e) => {
+                                          const newValue = parseFloat(e.target.value) || 0;
+                                          setGameDetailsEdit({
+                                            ...gameDetailsEdit,
+                                            [game.id]: {
+                                              ...gameDetailsEdit[game.id],
+                                              markets: {
+                                                ...gameDetailsEdit[game.id]?.markets,
+                                                [key]: newValue
+                                              }
+                                            }
+                                          });
+                                        }}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex gap-1">
                             <Button
                               size="sm"
