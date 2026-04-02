@@ -699,24 +699,38 @@ router.get('/games', async (req, res) => {
           if (!marketsError && markets && markets.length > 0) {
             console.log(`✅ Retrieved ${markets.length} market entries`);
             
-            // Group markets by game_id (UUID)
+            // Group markets by game_id (UUID) and log for debugging
             const marketsByGame = {};
             markets.forEach((market) => {
               const gameId = market.game_id;
               if (!marketsByGame[gameId]) {
                 marketsByGame[gameId] = {};
               }
-              // Store market with its key (e.g., 'correct_score:3:1')
+              // Store market with its key (e.g., 'cs00', 'cs01', etc.)
               if (market.market_key && market.odds !== null && market.odds !== undefined) {
                 marketsByGame[gameId][market.market_key] = parseFloat(market.odds);
+                
+                // Log CS markets specifically for visibility
+                if (market.market_key.startsWith('cs')) {
+                  console.log(`   📌 ${market.market_key} = ${market.odds}`);
+                }
               }
             });
 
+            console.log(`📋 Grouped into ${Object.keys(marketsByGame).length} games with markets`);
+
             // Attach markets to each game using the UUID id field
-            gamesWithMarkets = gamesWithMarkets.map((game) => ({
-              ...game,
-              markets: marketsByGame[game.id] || {}
-            }));
+            gamesWithMarkets = gamesWithMarkets.map((game) => {
+              const gameMarkets = marketsByGame[game.id] || {};
+              const marketCount = Object.keys(gameMarkets).length;
+              if (marketCount > 0) {
+                console.log(`   Game ${game.game_id}: ${marketCount} markets attached`);
+              }
+              return {
+                ...game,
+                markets: gameMarkets
+              };
+            });
           } else if (marketsError) {
             console.warn('⚠️ Failed to fetch markets:', marketsError.message);
             // Continue without markets data
@@ -726,6 +740,7 @@ router.get('/games', async (req, res) => {
             }));
           } else {
             // No markets found, add empty markets object
+            console.log('⚠️ No markets found in database');
             gamesWithMarkets = gamesWithMarkets.map((game) => ({
               ...game,
               markets: {}
@@ -748,6 +763,7 @@ router.get('/games', async (req, res) => {
       }
     }
 
+    console.log(`✅ [GET /api/admin/games] Response ready: ${gamesWithMarkets.length} games with markets`);
     res.json({ success: true, games: gamesWithMarkets });
   } catch (error) {
     console.error('❌ Get games error:', error.message || error);

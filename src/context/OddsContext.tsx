@@ -270,7 +270,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(refreshInterval);
   }, []);
 
-  // Fast market change detection - check for updated games every 3 seconds
+  // Fast market change detection - check for updated games every 2 seconds (faster than before)
   // This ensures admins' market updates appear to all users quickly
   useEffect(() => {
     const marketCheckInterval = setInterval(async () => {
@@ -299,21 +299,32 @@ export function OddsProvider({ children }: { children: ReactNode }) {
               const currentGame = gamesRef.current.find(g => g.id === gameId);
               
               if (currentGame) {
-                // Check if markets have changed
-                const newMarketsStr = JSON.stringify(newGame.markets || {});
-                const currentMarketsStr = JSON.stringify(currentGame.markets || {});
+                // Check if markets have changed (use JSON stringify for deep comparison)
+                const newMarketsStr = JSON.stringify((newGame.markets || {}) || {});
+                const currentMarketsStr = JSON.stringify((currentGame.markets || {}) || {});
                 
                 if (newMarketsStr !== currentMarketsStr) {
-                  console.log(`📊 Market update detected for ${gameId}: ${newGame.home_team} vs ${newGame.away_team}`);
+                  console.log(`📊 [MARKET UPDATE] Market change detected for ${gameId}: ${newGame.home_team} vs ${newGame.away_team}`);
+                  console.log(`   Old markets keys: ${Object.keys(currentGame.markets || {}).length}`);
+                  console.log(`   New markets keys: ${Object.keys(newGame.markets || {}).length}`);
+                  
+                  // Log specific market changes for debugging
+                  for (const [key, value] of Object.entries(newGame.markets || {})) {
+                    const oldValue = currentGame.markets?.[key];
+                    if (oldValue !== value) {
+                      console.log(`   ${key}: ${oldValue} → ${value}`);
+                    }
+                  }
+                  
                   hasMarketUpdates = true;
-                  break;
+                  break; // Found an update, proceed with refresh
                 }
               }
             }
             
-            // If we detected market changes, refresh the full game list
+            // If we detected market changes, refresh the full game list immediately
             if (hasMarketUpdates) {
-              console.log('🔄 Market changes detected - refreshing games for all users');
+              console.log('🔄 [MARKET UPDATE] Market changes detected - refreshing games for all users');
               setGames(prev => {
                 const transformedGames: GameOdds[] = data.games.map((g: any) => ({
                   id: g.game_id || g.id,
@@ -345,6 +356,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
                 });
                 
                 const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
+                console.log(`✅ [MARKET UPDATE] Updated ${sortedGames.length} games with new market data`);
                 gamesRef.current = sortedGames;
                 return sortedGames;
               });
@@ -354,7 +366,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         // Silently ignore market check errors
       }
-    }, 3000); // Check every 3 seconds for market changes
+    }, 2000); // Check every 2 seconds for market changes (faster detection)
     
     return () => clearInterval(marketCheckInterval);
   }, []);
