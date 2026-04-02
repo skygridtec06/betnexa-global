@@ -92,7 +92,59 @@ const AdminPortal = () => {
     time: string;
     kickoffDateTime: string;
     status: "upcoming" | "live" | "finished";
-  }>({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" });
+    markets: Record<string, string>;
+  }>({
+    league: "",
+    homeTeam: "",
+    awayTeam: "",
+    homeOdds: "",
+    drawOdds: "",
+    awayOdds: "",
+    time: "",
+    kickoffDateTime: "",
+    status: "upcoming",
+    markets: {
+      bttsYes: "",
+      bttsNo: "",
+      over25: "",
+      under25: "",
+      over15: "",
+      under15: "",
+      doubleChanceHomeOrDraw: "",
+      doubleChanceAwayOrDraw: "",
+      doubleChanceHomeOrAway: "",
+      htftHomeHome: "",
+      htftDrawDraw: "",
+      htftAwayAway: "",
+      htftDrawHome: "",
+      htftDrawAway: "",
+      cs10: "",
+      cs20: "",
+      cs11: "",
+      cs00: "",
+      cs01: "",
+      cs21: "",
+      cs12: "",
+      cs02: "",
+      cs22: "",
+      cs30: "",
+      cs03: "",
+      cs31: "",
+      cs13: "",
+      cs32: "",
+      cs23: "",
+      cs40: "",
+      cs04: "",
+      cs33: "",
+      cs41: "",
+      cs14: "",
+      cs42: "",
+      cs24: "",
+      cs43: "",
+      cs34: "",
+      cs44: ""
+    }
+  });
   const [scoreUpdate, setScoreUpdate] = useState<Record<string, { home: number; away: number }>>({});
   const [selectionOutcomes, setSelectionOutcomes] = useState<Record<string, Record<number, "won" | "lost">>>({});
   const [sendingBetSmsId, setSendingBetSmsId] = useState<string | null>(null);
@@ -469,7 +521,22 @@ const AdminPortal = () => {
     const h = parseFloat(newGame.homeOdds) || 2.0;
     const d = parseFloat(newGame.drawOdds) || 3.0;
     const a = parseFloat(newGame.awayOdds) || 3.0;
-    const markets = generateMarketOdds(h, d, a);
+
+    // Build markets object from form input (no auto-generation)
+    const markets: Record<string, number> = {};
+    
+    // Add 1X2 odds (always included)
+    if (h) markets.home = h;
+    if (d) markets.draw = d;
+    if (a) markets.away = a;
+    
+    // Add all user-entered market odds (only if they entered a value)
+    for (const [key, value] of Object.entries(newGame.markets)) {
+      const numValue = parseFloat(value as string);
+      if (numValue && numValue > 0) {
+        markets[key] = numValue;
+      }
+    }
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
@@ -507,9 +574,60 @@ const AdminPortal = () => {
           markets: data.game.markets || {},
         };
         addGame(gameData);
-        setNewGame({ league: "", homeTeam: "", awayTeam: "", homeOdds: "", drawOdds: "", awayOdds: "", time: "", kickoffDateTime: "", status: "upcoming" });
+        setNewGame({
+          league: "",
+          homeTeam: "",
+          awayTeam: "",
+          homeOdds: "",
+          drawOdds: "",
+          awayOdds: "",
+          time: "",
+          kickoffDateTime: "",
+          status: "upcoming",
+          markets: {
+            bttsYes: "",
+            bttsNo: "",
+            over25: "",
+            under25: "",
+            over15: "",
+            under15: "",
+            doubleChanceHomeOrDraw: "",
+            doubleChanceAwayOrDraw: "",
+            doubleChanceHomeOrAway: "",
+            htftHomeHome: "",
+            htftDrawDraw: "",
+            htftAwayAway: "",
+            htftDrawHome: "",
+            htftDrawAway: "",
+            cs10: "",
+            cs20: "",
+            cs11: "",
+            cs00: "",
+            cs01: "",
+            cs21: "",
+            cs12: "",
+            cs02: "",
+            cs22: "",
+            cs30: "",
+            cs03: "",
+            cs31: "",
+            cs13: "",
+            cs32: "",
+            cs23: "",
+            cs40: "",
+            cs04: "",
+            cs33: "",
+            cs41: "",
+            cs14: "",
+            cs42: "",
+            cs24: "",
+            cs43: "",
+            cs34: "",
+            cs44: ""
+          }
+        });
         setShowAddGame(false);
-        alert("✅ Game added successfully!");
+        alert("✅ Game added with your custom market odds!");
         
         // Refresh games to sync with all users
         setTimeout(() => {
@@ -2117,27 +2235,131 @@ const AdminPortal = () => {
             {showAddGame && (
               <div className="mb-6 animate-fade-up rounded-xl border border-primary/30 bg-card p-6 neon-border">
                 <h4 className="mb-2 font-display text-sm font-bold uppercase text-foreground">New Fixture</h4>
-                <p className="mb-4 text-xs text-muted-foreground">Enter 1X2 odds and all other markets will be auto-generated. You can edit them after.</p>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <input className={inputClass} placeholder="League (e.g. Premier League)" value={newGame.league} onChange={(e) => setNewGame({ ...newGame, league: e.target.value })} />
-                  <div>
-                    <label className="text-xs text-muted-foreground">Kickoff Date & Time</label>
-                    <input type="datetime-local" className={inputClass} value={newGame.kickoffDateTime} onChange={(e) => setNewGame({ ...newGame, kickoffDateTime: e.target.value })} />
+                <p className="mb-4 text-xs text-muted-foreground">Enter 1X2 odds and optionally set all other market odds. Leave market fields empty to skip them.</p>
+                
+                {/* Basic Game Info */}
+                <div className="mb-4 pb-4 border-b border-border/50">
+                  <h5 className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Match Details</h5>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <input className={inputClass} placeholder="League (e.g. Premier League)" value={newGame.league} onChange={(e) => setNewGame({ ...newGame, league: e.target.value })} />
+                    <div>
+                      <label className="text-xs text-muted-foreground">Kickoff Date & Time</label>
+                      <input type="datetime-local" className={inputClass} value={newGame.kickoffDateTime} onChange={(e) => setNewGame({ ...newGame, kickoffDateTime: e.target.value })} />
+                    </div>
+                    <input className={inputClass} placeholder="Home Team" value={newGame.homeTeam} onChange={(e) => setNewGame({ ...newGame, homeTeam: e.target.value })} />
+                    <input className={inputClass} placeholder="Away Team" value={newGame.awayTeam} onChange={(e) => setNewGame({ ...newGame, awayTeam: e.target.value })} />
+                    <select className={inputClass} value={newGame.status} onChange={(e) => setNewGame({ ...newGame, status: e.target.value as "upcoming" | "live" | "finished" })}>
+                      <option value="upcoming">Upcoming</option>
+                      <option value="live">Live</option>
+                      <option value="finished">Finished</option>
+                    </select>
                   </div>
-                  <input className={inputClass} placeholder="Home Team" value={newGame.homeTeam} onChange={(e) => setNewGame({ ...newGame, homeTeam: e.target.value })} />
-                  <input className={inputClass} placeholder="Away Team" value={newGame.awayTeam} onChange={(e) => setNewGame({ ...newGame, awayTeam: e.target.value })} />
-                  <input className={inputClass} placeholder="Home Odds (1)" value={newGame.homeOdds} onChange={(e) => setNewGame({ ...newGame, homeOdds: e.target.value })} />
-                  <input className={inputClass} placeholder="Draw Odds (X)" value={newGame.drawOdds} onChange={(e) => setNewGame({ ...newGame, drawOdds: e.target.value })} />
-                  <input className={inputClass} placeholder="Away Odds (2)" value={newGame.awayOdds} onChange={(e) => setNewGame({ ...newGame, awayOdds: e.target.value })} />
-                  <select className={inputClass} value={newGame.status} onChange={(e) => setNewGame({ ...newGame, status: e.target.value as "upcoming" | "live" | "finished" })}>
-                    <option value="upcoming">Upcoming</option>
-                    <option value="live">Live</option>
-                    <option value="finished">Finished</option>
-                  </select>
                 </div>
+
+                {/* 1X2 Odds (Required) */}
+                <div className="mb-4 pb-4 border-b border-border/50">
+                  <h5 className="mb-3 text-xs font-semibold text-muted-foreground uppercase">1X2 Odds (Required)</h5>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <input className={inputClass} type="number" placeholder="Home Odds (1)" value={newGame.homeOdds} onChange={(e) => setNewGame({ ...newGame, homeOdds: e.target.value })} step="0.01" min="1" />
+                    <input className={inputClass} type="number" placeholder="Draw Odds (X)" value={newGame.drawOdds} onChange={(e) => setNewGame({ ...newGame, drawOdds: e.target.value })} step="0.01" min="1" />
+                    <input className={inputClass} type="number" placeholder="Away Odds (2)" value={newGame.awayOdds} onChange={(e) => setNewGame({ ...newGame, awayOdds: e.target.value })} step="0.01" min="1" />
+                  </div>
+                </div>
+
+                {/* Additional Markets (Optional) */}
+                <div>
+                  <h5 className="mb-3 text-xs font-semibold text-muted-foreground uppercase">Additional Markets (Optional)</h5>
+                  <p className="mb-3 text-[10px] text-muted-foreground">Leave fields empty to skip these markets</p>
+                  <div className="grid gap-3 md:grid-cols-4 lg:grid-cols-6">
+                    {/* BTTS */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">BTTS Yes</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.bttsYes || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, bttsYes: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">BTTS No</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.bttsNo || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, bttsNo: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    
+                    {/* Over/Under 2.5 */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Over 2.5</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.over25 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, over25: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Under 2.5</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.under25 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, under25: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    
+                    {/* Over/Under 1.5 */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Over 1.5</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.over15 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, over15: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">Under 1.5</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.under15 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, under15: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    
+                    {/* Double Chance */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">DC 1X</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.doubleChanceHomeOrDraw || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, doubleChanceHomeOrDraw: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">DC X2</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.doubleChanceAwayOrDraw || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, doubleChanceAwayOrDraw: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">DC 12</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.doubleChanceHomeOrAway || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, doubleChanceHomeOrAway: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    
+                    {/* HT/FT */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">HT/FT H/H</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.htftHomeHome || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, htftHomeHome: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">HT/FT D/D</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.htftDrawDraw || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, htftDrawDraw: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">HT/FT A/A</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.htftAwayAway || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, htftAwayAway: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    
+                    {/* Correct Score - sample few for space */}
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 0-0</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs00 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs00: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 1-0</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs10 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs10: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 1-1</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs11 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs11: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 2-0</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs20 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs20: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 2-1</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs21 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs21: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-muted-foreground mb-1">CS 2-2</label>
+                      <input type="number" className={inputClass} value={newGame.markets?.cs22 || ""} onChange={(e) => setNewGame({ ...newGame, markets: { ...newGame.markets, cs22: e.target.value } })} placeholder="1.50" step="0.01" min="1" />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mt-4 flex gap-2">
                   <Button variant="hero" size="sm" onClick={addGameHandler}>
-                    <Plus className="mr-1 h-3 w-3" /> Save & Generate Odds
+                    <Plus className="mr-1 h-3 w-3" /> Add Fixture
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setShowAddGame(false)}>Cancel</Button>
                 </div>
