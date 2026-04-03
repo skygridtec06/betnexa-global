@@ -261,6 +261,17 @@ router.get('/', (req, res) => {
   res.json({ success: true, message: 'Fetch API Football service is running' });
 });
 
+// Simple test endpoint to verify router is working
+router.post('/test', (req, res) => {
+  console.log('✅ Test endpoint called - router is working!');
+  res.json({ 
+    success: true, 
+    message: 'Router is working',
+    route: 'POST /api/admin/fetch-api-football/test',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // POST: Fetch prematch games from API Football (preview only, no save)
 // POST: Fetch preview - Get games from API Football
 router.post('/fetch-preview', checkAdmin, async (req, res) => {
