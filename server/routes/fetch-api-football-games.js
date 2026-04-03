@@ -265,27 +265,51 @@ router.get('/', (req, res) => {
 // POST: Fetch preview - Get games from API Football
 router.post('/fetch-preview', checkAdmin, async (req, res) => {
   try {
-    console.log('\n🔍 [API Football Fetch Preview] Fetching prematch games...');
+    console.log('\n🔍 [API Football Fetch Preview] Fetching prematch games (TEST MODE - 10 games max)...');
 
-    if (!API_KEY) {
+    // Use the test API key for this fetch preview endpoint
+    const TEST_API_KEY = '49f4155b78d58351ed95b5c3bbcebd9e';
+    
+    if (!TEST_API_KEY) {
       return res.status(500).json({
         success: false,
         error: 'API_FOOTBALL_KEY not configured'
       });
     }
 
-    // Fetch next 5 days of fixtures
+    // Helper function for API calls with test key
+    async function apiGetTest(path, params = {}) {
+      const qs = new URLSearchParams(params).toString();
+      const url = `${API_BASE}${path}${qs ? `?${qs}` : ''}`;
+
+      const resp = await fetch(url, {
+        headers: {
+          'x-apisports-key': TEST_API_KEY
+        }
+      });
+
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`API ${resp.status} on ${path}: ${body}`);
+      }
+
+      const json = await resp.json();
+      return json.response || [];
+    }
+
+    // Fetch next 5 days of fixtures, but stop after 10 games
     const games = [];
+    const MAX_GAMES = 10;
     const today = new Date();
 
-    for (let dayOffset = 1; dayOffset <= 5; dayOffset++) {
+    for (let dayOffset = 1; dayOffset <= 5 && games.length < MAX_GAMES; dayOffset++) {
       const date = new Date(today);
       date.setDate(date.getDate() + dayOffset);
       const dateStr = date.toISOString().split('T')[0];
 
       try {
         console.log(`   Fetching fixtures for ${dateStr}...`);
-        const fixtures = await apiGet('/fixtures', {
+        const fixtures = await apiGetTest('/fixtures', {
           date: dateStr,
           timezone: TZ
         });
@@ -297,6 +321,12 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
 
         // Process each fixture
         for (const fixture of fixtures) {
+          // Stop if we've reached 10 games
+          if (games.length >= MAX_GAMES) {
+            console.log(`   ⏸️ Reached ${MAX_GAMES} games limit for testing`);
+            break;
+          }
+
           try {
             const fixtureId = fixture?.fixture?.id;
             const status = fixture?.fixture?.status?.short;
@@ -315,7 +345,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
 
             // Fetch odds for this fixture
             console.log(`   Fetching odds for ${homeTeam} vs ${awayTeam}...`);
-            const oddsRows = await apiGet('/odds', { fixture: String(fixtureId) });
+            const oddsRows = await apiGetTest('/odds', { fixture: String(fixtureId) });
             const marketOdds = chooseBestOddsSet(oddsRows);
 
             if (!marketOdds || !marketOdds.home || !marketOdds.draw || !marketOdds.away) {
@@ -339,7 +369,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
               markets: marketOdds
             });
 
-            console.log(`   ✅ ${homeTeam} vs ${awayTeam} added`);
+            console.log(`   ✅ ${homeTeam} vs ${awayTeam} added (${games.length}/${MAX_GAMES})`);
           } catch (fixtureErr) {
             console.warn(`   ⚠️ Error processing fixture:`, fixtureErr.message);
             continue;
@@ -349,14 +379,20 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
         console.warn(`   ⚠️ Error fetching fixtures for ${dateStr}:`, dateErr.message);
         continue;
       }
+
+      // Stop outer loop if we've reached max games
+      if (games.length >= MAX_GAMES) {
+        break;
+      }
     }
 
-    console.log(`\n✅ Fetched ${games.length} prematch games from API Football`);
+    console.log(`\n✅ Fetched ${games.length} prematch games from API Football (TEST MODE - 10 MAX)`);
 
     res.json({
       success: true,
-      message: `Found ${games.length} prematch games ready to add`,
+      message: `Found ${games.length} prematch games ready to add (TEST MODE - limited to 10)`,
       game_count: games.length,
+      test_mode: true,
       games: games,
       next_step: 'Call /api/admin/fetch-api-football/execute with the games to add them to the site'
     });
