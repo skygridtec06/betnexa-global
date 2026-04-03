@@ -94,13 +94,12 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
           {step === 'idle' && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Click the button below to fetch the next 5 days of prematch games from API Football. 
-                We'll fetch games with markets: 1x2, BTTS, HT/FT, O/U, DC, and CS.
-                Times will be converted to East African Time (EAT).
+                Click the button below to fetch today's prematch games from API Football in TEST MODE.
+                Will fetch maximum 10 games for testing purposes.
               </p>
               <Button onClick={handleFetch} className="w-full" size="lg">
                 <Download className="w-4 h-4 mr-2" />
-                Fetch Games
+                Fetch Today's Matches (Max 10)
               </Button>
             </div>
           )}
@@ -108,7 +107,8 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
           {step === 'fetching' && (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p>Fetching games from API Football...</p>
+              <p>Fetching today's games from API Football...</p>
+              <p className="text-xs text-muted-foreground">Maximum 10 matches for testing</p>
             </div>
           )}
 
@@ -116,10 +116,13 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
             <div className="space-y-4">
               <div className="bg-blue-500/10 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <p className="text-lg font-semibold text-blue-700 dark:text-blue-300">
-                  ✅ Found {games.length} games ready to add
+                  ✅ Fetched {games.length} games
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Click the Execute button below to add these games to the site.
+                  {games.length === 10 ? '(Maximum test limit reached)' : '(Test mode - limited to 10)'}
+                </p>
+                <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
+                  Click Execute below to add these {games.length} games to the site.
                 </p>
               </div>
 
@@ -160,7 +163,31 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
                 </Button>
                 <Button onClick={handleExecute} className="flex-1" size="lg">
                   <CheckCircle className="w-4 h-4 mr-2" />
-                  Execute: Add {games.length} Games
+                  Execute: Add {games.length} Matches
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === 'preview' && games.length === 0 && (
+            <div className="space-y-4">
+              <div className="bg-yellow-500/10 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <p className="text-lg font-semibold text-yellow-700 dark:text-yellow-300">
+                  ℹ️ No games found
+                </p>
+                <p className="text-sm text-yellow-600 dark:text-yellow-400 mt-2">
+                  No prematch games with valid odds were found for today.
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Try again tomorrow or check API Football for available matches.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <Button onClick={() => setStep('idle')} variant="outline" className="flex-1">
+                  Try Again
+                </Button>
+                <Button onClick={handleClose} className="flex-1">
+                  Close
                 </Button>
               </div>
             </div>
@@ -169,7 +196,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
           {step === 'executing' && (
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
-              <p>Adding games to the site...</p>
+              <p>Adding {games.length} games to the site...</p>
             </div>
           )}
 
@@ -178,7 +205,10 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
               <div className="bg-green-500/10 border border-green-200 dark:border-green-800 rounded-lg p-4">
                 <p className="text-lg font-semibold text-green-700 dark:text-green-300 flex items-center gap-2">
                   <CheckCircle className="w-5 h-5" />
-                  Success! Added {games.length} games
+                  Success! Added {games.length} matches
+                </p>
+                <p className="text-sm text-green-600 dark:text-green-400 mt-2">
+                  {games.length === 10 ? 'Test limit reached. All 10 test matches added.' : `${games.length} matches added successfully.`}
                 </p>
               </div>
               <Button onClick={handleClose} className="w-full">
