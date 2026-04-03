@@ -37,13 +37,29 @@ app.use(cors({
   origin: (origin, callback) => {
     // Allow non-browser clients or same-origin requests without Origin header.
     if (!origin) {
+      console.log('[CORS] No origin provided, allowing');
       return callback(null, true);
     }
 
+    // Allow specific whitelisted origins
     if (allowedOrigins.includes(origin)) {
+      console.log(`[CORS] ✅ Origin allowed (in whitelist): ${origin}`);
       return callback(null, true);
     }
 
+    // Allow all vercel.app subdomains (for preview deployments)
+    if (origin.includes('.vercel.app') || origin.includes('vercel.app')) {
+      console.log(`[CORS] ✅ Origin allowed (Vercel domain): ${origin}`);
+      return callback(null, true);
+    }
+
+    // Allow localhost for development
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+      console.log(`[CORS] ✅ Origin allowed (localhost): ${origin}`);
+      return callback(null, true);
+    }
+
+    console.log(`[CORS] ❌ Origin blocked: ${origin}`);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true
