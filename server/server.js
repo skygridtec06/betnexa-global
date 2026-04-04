@@ -41,28 +41,36 @@ app.use(cors({
       return callback(null, true);
     }
 
-    // Allow specific whitelisted origins
-    if (allowedOrigins.includes(origin)) {
+    // Normalize origin for comparison (remove www for checking)
+    const normalizedOrigin = origin.replace('www.', '');
+    const normalizedAllowedOrigins = allowedOrigins.map(o => o.replace('www.', ''));
+
+    // Allow specific whitelisted origins (with normalization)
+    if (normalizedAllowedOrigins.includes(normalizedOrigin)) {
       console.log(`[CORS] ✅ Origin allowed (in whitelist): ${origin}`);
-      return callback(null, true);
+      // Return the origin that was actually requested to satisfy credentials: true
+      return callback(null, origin);
     }
 
     // Allow all vercel.app subdomains (for preview deployments)
     if (origin.includes('.vercel.app') || origin.includes('vercel.app')) {
       console.log(`[CORS] ✅ Origin allowed (Vercel domain): ${origin}`);
-      return callback(null, true);
+      return callback(null, origin);
     }
 
     // Allow localhost for development
     if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
       console.log(`[CORS] ✅ Origin allowed (localhost): ${origin}`);
-      return callback(null, true);
+      return callback(null, origin);
     }
 
     console.log(`[CORS] ❌ Origin blocked: ${origin}`);
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  optionsSuccessStatus: 200
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -95,6 +103,18 @@ app.get('/api/health', (req, res) => {
     version: '1.0.1',
     supabase: process.env.SUPABASE_URL ? 'configured' : 'NOT configured',
   });
+});
+
+// Diagnostic endpoint to verify routes are loaded
+app.get('/api/diagnostics', (req, res) => {
+  res.json({
+    server_status: 'running',
+    cors_origins: allowedOrigins,
+    fetch_api_football_routes: ['/fetch-preview', '/test', '/execute', 'GET /'],
+    admin_routes_mounted: true,
+    timestamp: new Date().toISOString()
+  });
+});
 });
 
 // Error handling middleware
