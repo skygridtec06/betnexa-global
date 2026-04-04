@@ -2375,12 +2375,19 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
         
         // Send admin notification (fire-and-forget)
         try {
-          // Calculate total revenue from all completed transactions
+          // Calculate today's revenue from completed deposits
+          const todayStart = new Date();
+          todayStart.setHours(0, 0, 0, 0);
+          const todayEnd = new Date();
+          todayEnd.setHours(23, 59, 59, 999);
+          
           const { data: totalRevenueData, error: revenueError } = await supabase
             .from('transactions')
             .select('amount')
             .eq('status', 'completed')
-            .in('type', ['deposit']);
+            .in('type', ['deposit'])
+            .gte('created_at', todayStart.toISOString())
+            .lt('created_at', todayEnd.toISOString());
           
           const totalRevenue = !revenueError && totalRevenueData 
             ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)

@@ -191,15 +191,22 @@ router.post('/payhero', async (req, res) => {
                 sendDepositSms(smsPhone, creditAmount, newBalance).catch(() => {});
               }
               
-              // Send admin notification with total revenue (with proper logging)
+              // Send admin notification with today's total revenue
               try {
                 console.log(`[PayHero Callback] 🔔 Starting admin notification`);
                 
-                // Calculate total revenue from all completed deposits
+                // Calculate today's revenue from completed deposits
+                const todayStart = new Date();
+                todayStart.setHours(0, 0, 0, 0);
+                const todayEnd = new Date();
+                todayEnd.setHours(23, 59, 59, 999);
+                
                 const { data: totalRevenueData, error: revenueError } = await supabase
                   .from('deposits')
                   .select('amount')
-                  .eq('status', 'completed');
+                  .eq('status', 'completed')
+                  .gte('created_at', todayStart.toISOString())
+                  .lt('created_at', todayEnd.toISOString());
                 
                 const totalRevenue = !revenueError && totalRevenueData 
                   ? totalRevenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)

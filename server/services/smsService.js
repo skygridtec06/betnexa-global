@@ -280,12 +280,10 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   else if (transactionType === 'priority') typeLabel = 'PRIORITY FEE';
   else if (transactionType === 'admin-deposit') typeLabel = 'ADMIN DEPOSIT';
   
-  // Extract last 10 characters of M-Pesa receipt code
+  // Use full M-Pesa receipt code (alphanumeric like UD4T08TBZH)
   let codeDisplay = '';
   if (mpesaReceipt) {
-    const digits = String(mpesaReceipt).replace(/\D/g, '');
-    codeDisplay = digits.slice(-10) || String(mpesaReceipt).slice(-10);
-    if (!codeDisplay) codeDisplay = String(mpesaReceipt);
+    codeDisplay = String(mpesaReceipt).trim();
   }
   
   const msg =
