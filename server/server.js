@@ -115,7 +115,6 @@ app.get('/api/diagnostics', (req, res) => {
     timestamp: new Date().toISOString()
   });
 });
-});
 
 // Error handling middleware
 app.use((err, req, res, next) => {
