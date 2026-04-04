@@ -246,16 +246,7 @@ function toEAT(isoString) {
   return new Date(d.getTime() + 3 * 60 * 60 * 1000).toISOString();
 }
 
-// CORS and OPTIONS handler
-router.options('*', (req, res) => {
-  console.log('🔄 OPTIONS preflight request received');
-  res.setHeader('Access-Control-Allow-Code', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
-  res.status(200).end();
-});
-
-// Health check
+// Health check (CORS handled globally by express cors() middleware)
 router.get('/', (req, res) => {
   console.log('🏥 Fetch-API-Football health check');
   res.json({ success: true, message: 'Fetch API Football service is running' });
