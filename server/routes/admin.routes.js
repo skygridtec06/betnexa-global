@@ -1750,7 +1750,6 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
       updateTimestamp: nowIso,
       verificationIssues: verificationIssues.length > 0 ? verificationIssues : null
     });
-    });
 
   } catch (error) {
     console.error('❌ Markets update error:', error.message);
