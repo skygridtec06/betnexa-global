@@ -296,6 +296,7 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
     `Total Revenue: KSH ${formattedRevenue}`;
   
   console.log(`[ADMIN_SMS] Message prepared (${msg.length} chars). Admin phone to send to: ${adminPhone}`);
+  console.log(`[ADMIN_SMS] ✅ FULL MESSAGE:\n${msg}`);
   
   try {
     const result = await sendSms(adminPhone, msg);
