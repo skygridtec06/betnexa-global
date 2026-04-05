@@ -20,6 +20,7 @@ import { formatTransactionDateInEAT, formatTimeInEAT } from "@/lib/timezoneForma
 import { MatchEventEditor } from "@/components/MatchEventEditor";
 import { ActiveMembers } from "@/components/ActiveMembers";
 import { FetchGamesFetchModal } from "@/components/FetchGamesFetchModal";
+import { EarningsCalculator } from "@/components/EarningsCalculator";
 
 const marketLabels: Record<string, string> = {
   bttsYes: "BTTS Yes", bttsNo: "BTTS No",
@@ -2048,7 +2049,7 @@ const AdminPortal = () => {
         </div>
 
         <Tabs value={adminTab} onValueChange={setAdminTab}>
-          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-7">
+          <TabsList className="mb-6 bg-secondary grid w-full grid-cols-8">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
             </TabsTrigger>
@@ -2060,6 +2061,9 @@ const AdminPortal = () => {
             </TabsTrigger>
             <TabsTrigger value="broadcast" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Megaphone className="mr-1 h-4 w-4" /> Broadcast
+            </TabsTrigger>
+            <TabsTrigger value="earnings" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <BarChart3 className="mr-1 h-4 w-4" /> Earnings
             </TabsTrigger>
             <TabsTrigger value="transactions" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <DollarSign className="mr-1 h-4 w-4" /> Transactions
@@ -3331,6 +3335,10 @@ const AdminPortal = () => {
                 </div>
               )}
             </Card>
+          </TabsContent>
+
+          <TabsContent value="earnings" className="space-y-6">
+            <EarningsCalculator />
           </TabsContent>
 
           <TabsContent value="transactions" className="space-y-6">

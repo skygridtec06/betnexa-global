@@ -5476,4 +5476,174 @@ router.post('/match-events/:gameId/execute-pending', checkAdmin, async (req, res
   }
 });
 
+// GET /api/admin/earnings - Fetch earnings statistics with date filtering
+router.get('/earnings', checkAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    console.log(`[EARNINGS] Fetching earnings stats. Start: ${startDate}, End: ${endDate}`);
+    
+    // Parse dates
+    let queryStartDate = new Date();
+    let queryEndDate = new Date();
+    
+    if (startDate) {
+      queryStartDate = new Date(startDate);
+      queryStartDate.setHours(0, 0, 0, 0);
+    } else {
+      queryStartDate.setHours(0, 0, 0, 0);
+    }
+    
+    if (endDate) {
+      queryEndDate = new Date(endDate);
+      queryEndDate.setHours(23, 59, 59, 999);
+    } else {
+      queryEndDate.setHours(23, 59, 59, 999);
+    }
+    
+    console.log(`[EARNINGS] Query range: ${queryStartDate.toISOString()} to ${queryEndDate.toISOString()}`);
+    
+    // Fetch deposits
+    const { data: deposits, error: depositsError } = await supabase
+      .from('deposits')
+      .select('amount')
+      .eq('status', 'completed')
+      .gte('created_at', queryStartDate.toISOString())
+      .lte('created_at', queryEndDate.toISOString());
+    
+    // Fetch transactions (for activation fees and priority fees)
+    const { data: transactions, error: transactionsError } = await supabase
+      .from('transactions')
+      .select('amount, type')
+      .eq('status', 'completed')
+      .in('type', ['activation', 'priority'])
+      .gte('created_at', queryStartDate.toISOString())
+      .lte('created_at', queryEndDate.toISOString());
+    
+    if (depositsError) {
+      console.error('[EARNINGS] Error fetching deposits:', depositsError);
+      return res.status(500).json({ success: false, error: 'Failed to fetch deposits' });
+    }
+    
+    if (transactionsError) {
+      console.error('[EARNINGS] Error fetching transactions:', transactionsError);
+      return res.status(500).json({ success: false, error: 'Failed to fetch transactions' });
+    }
+    
+    // Calculate totals
+    const totalDeposits = deposits && deposits.length > 0
+      ? deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
+      : 0;
+    
+    let totalActivationFees = 0;
+    let totalPriorityFees = 0;
+    
+    if (transactions && transactions.length > 0) {
+      transactions.forEach(tx => {
+        const amount = parseFloat(tx.amount || 0);
+        if (tx.type === 'activation') {
+          totalActivationFees += amount;
+        } else if (tx.type === 'priority') {
+          totalPriorityFees += amount;
+        }
+      });
+    }
+    
+    const masterTotal = totalDeposits + totalActivationFees + totalPriorityFees;
+    
+    console.log(`[EARNINGS] Results - Deposits: KSH ${totalDeposits}, Activation Fees: KSH ${totalActivationFees}, Priority Fees: KSH ${totalPriorityFees}, Total: KSH ${masterTotal}`);
+    
+    res.json({
+      success: true,
+      data: {
+        startDate: queryStartDate.toISOString(),
+        endDate: queryEndDate.toISOString(),
+        totalDeposits: Math.round(totalDeposits),
+        totalActivationFees: Math.round(totalActivationFees),
+        totalPriorityFees: Math.round(totalPriorityFees),
+        masterTotal: Math.round(masterTotal),
+        depositCount: deposits ? deposits.length : 0,
+        activationFeeCount: transactions ? transactions.filter(t => t.type === 'activation').length : 0,
+        priorityFeeCount: transactions ? transactions.filter(t => t.type === 'priority').length : 0,
+      }
+    });
+  } catch (error) {
+    console.error('[EARNINGS] Unexpected error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/admin/earnings/daily - Fetch daily earnings breakdown for calendar
+router.get('/earnings/daily', checkAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    let queryStartDate = new Date(startDate || new Date());
+    let queryEndDate = new Date(endDate || new Date());
+    
+    queryStartDate.setHours(0, 0, 0, 0);
+    queryEndDate.setHours(23, 59, 59, 999);
+    
+    console.log(`[EARNINGS_DAILY] Fetching daily breakdown. Range: ${queryStartDate.toISOString()} to ${queryEndDate.toISOString()}`);
+    
+    // Fetch all completed deposits and transactions in date range
+    const { data: deposits } = await supabase
+      .from('deposits')
+      .select('amount, created_at')
+      .eq('status', 'completed')
+      .gte('created_at', queryStartDate.toISOString())
+      .lte('created_at', queryEndDate.toISOString());
+    
+    const { data: transactions } = await supabase
+      .from('transactions')
+      .select('amount, type, created_at')
+      .eq('status', 'completed')
+      .in('type', ['activation', 'priority'])
+      .gte('created_at', queryStartDate.toISOString())
+      .lte('created_at', queryEndDate.toISOString());
+    
+    // Group by date
+    const dailyEarnings: Record<string, any> = {};
+    
+    if (deposits && deposits.length > 0) {
+      deposits.forEach(d => {
+        const date = new Date(d.created_at).toISOString().split('T')[0];
+        if (!dailyEarnings[date]) {
+          dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
+        }
+        dailyEarnings[date].deposits += parseFloat(d.amount || 0);
+      });
+    }
+    
+    if (transactions && transactions.length > 0) {
+      transactions.forEach(tx => {
+        const date = new Date(tx.created_at).toISOString().split('T')[0];
+        if (!dailyEarnings[date]) {
+          dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
+        }
+        const amount = parseFloat(tx.amount || 0);
+        if (tx.type === 'activation') {
+          dailyEarnings[date].activation += amount;
+        } else if (tx.type === 'priority') {
+          dailyEarnings[date].priority += amount;
+        }
+      });
+    }
+    
+    // Calculate totals for each day
+    Object.keys(dailyEarnings).forEach(date => {
+      const day = dailyEarnings[date];
+      day.total = day.deposits + day.activation + day.priority;
+    });
+    
+    res.json({
+      success: true,
+      data: dailyEarnings
+    });
+  } catch (error) {
+    console.error('[EARNINGS_DAILY] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
