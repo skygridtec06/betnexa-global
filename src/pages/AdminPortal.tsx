@@ -414,8 +414,8 @@ const AdminPortal = () => {
           withdrawalActivationDate: new Date().toISOString()
         });
         
-        // Show success message
-        alert(`✅ Withdrawal activated for ${userName}\n\nKSH ${data.activationFeeCharged || 1000} activation fee charged.`);
+        // Show success message - NO FEE DEDUCTION ANYMORE
+        alert(`✅ Withdrawal activated for ${userName}`);
         
         // Refresh user list to reflect changes
         await fetchUsersFromBackend(loggedInUser?.phone);
