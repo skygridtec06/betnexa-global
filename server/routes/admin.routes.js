@@ -2297,9 +2297,7 @@ router.post('/payments/:paymentId/resolve', checkAdmin, async (req, res) => {
 router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) => {
   try {
     const { userId } = req.params;
-    const ACTIVATION_FEE = 1000; // KSH (production amount)
     console.log(`\n🔓 [Admin Activate Withdrawal] User ID: ${userId}`);
-    console.log(`   Activation Fee: KSH ${ACTIVATION_FEE}`);
     console.log(`   Admin Phone: ${req.user.phone}`);
 
     // Step 1: Mark user as withdrawal activated
@@ -2327,8 +2325,8 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
     const user = updatedUser[0];
     console.log(`✅ User marked as withdrawal activated`);
 
-    // Step 2: Record activation fee as transaction
-    console.log(`\n💳 Step 2: Recording activation fee transaction...`);
+    // Step 2: Record activation in transaction history
+    console.log(`\n📋 Step 2: Recording activation transaction...`);
     try {
       const { data: txData, error: txError } = await supabase
         .from('transactions')
@@ -2336,7 +2334,7 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
           transaction_id: `ACT-ADMIN-${Date.now()}-${userId}`,
           user_id: userId,
           type: 'admin_adjustment',
-          amount: ACTIVATION_FEE,
+          amount: 0,
           status: 'completed',
           method: 'Admin Activation',
           external_reference: `ACT-ADMIN-${Date.now()}-${userId}`,
@@ -2348,64 +2346,14 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
       if (txError) {
         console.warn('⚠️ Failed to record activation transaction:', txError.message);
       } else {
-        console.log(`✅ Activation fee transaction recorded:`, txData?.[0]?.id);
+        console.log(`✅ Activation transaction recorded:`, txData?.[0]?.id);
       }
     } catch (txError) {
-      console.warn('⚠️ Error recording activation fee:', txError.message);
+      console.warn('⚠️ Error recording activation transaction:', txError.message);
     }
 
-    // Step 3: Deduct activation fee from user balance
-    console.log(`\n💰 Step 3: Deducting activation fee from user balance...`);
-    try {
-      const currentBalance = parseFloat(user.account_balance || 0);
-      const newBalance = Math.max(0, currentBalance - ACTIVATION_FEE);
-      
-      const { error: balanceError } = await supabase
-        .from('users')
-        .update({ 
-          account_balance: newBalance, 
-          updated_at: new Date().toISOString() 
-        })
-        .eq('id', userId);
-
-      if (balanceError) {
-        console.warn('⚠️ Failed to deduct activation fee:', balanceError.message);
-      } else {
-        console.log(`✅ Activation fee deducted. New balance: KSH ${newBalance}`);
-        
-        // Send admin notification (fire-and-forget)
-        try {
-          // Calculate today's revenue from completed deposits
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-          const todayEnd = new Date();
-          todayEnd.setHours(23, 59, 59, 999);
-          
-          const { data: totalRevenueData, error: revenueError } = await supabase
-            .from('transactions')
-            .select('amount')
-            .eq('status', 'completed')
-            .in('type', ['deposit'])
-            .gte('created_at', todayStart.toISOString())
-            .lt('created_at', todayEnd.toISOString());
-          
-          const totalRevenue = !revenueError && totalRevenueData 
-            ? totalRevenueData.reduce((sum, tx) => sum + parseFloat(tx.amount || 0), 0)
-            : 0;
-          
-          const userPhone = user.phone_number || 'Unknown';
-          const username = user.username || 'Unknown User';
-          sendAdminDepositNotification(userPhone, username, ACTIVATION_FEE, 'activation', totalRevenue).catch(() => {});
-        } catch (adminNotifErr) {
-          console.warn('⚠️ Admin notification error:', adminNotifErr.message);
-        }
-      }
-    } catch (err) {
-      console.warn('⚠️ Error updating user balance for activation fee:', err.message);
-    }
-
-    // Step 4: Log admin action
-    console.log(`\n📋 Step 4: Logging admin action...`);
+    // Step 3: Log admin action
+    console.log(`\n📋 Step 3: Logging admin action...`);
     try {
       if (req.user.id && req.user.id !== 'unknown') {
         const { data: logData, error: logError } = await supabase
@@ -2417,10 +2365,9 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
             target_type: 'user',
             target_id: userId,
             changes: { 
-              withdrawal_activated: true, 
-              activation_fee: ACTIVATION_FEE 
+              withdrawal_activated: true
             },
-            description: `Withdrawal account activated - KSH ${ACTIVATION_FEE} activation fee charged`,
+            description: `Withdrawal account activated by admin`,
             created_at: new Date().toISOString()
           }])
           .select();
@@ -2445,7 +2392,6 @@ router.put('/users/:userId/activate-withdrawal', checkAdmin, async (req, res) =>
     res.json({ 
       success: true, 
       user,
-      activationFeeCharged: ACTIVATION_FEE,
       message: 'User withdrawal account activated successfully'
     });
   } catch (error) {
