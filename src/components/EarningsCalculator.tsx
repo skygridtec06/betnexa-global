@@ -51,27 +51,42 @@ export function EarningsCalculator() {
       const adminPhone = localStorage.getItem('adminPhone') || localStorage.getItem('userPhone') || '';
 
       // Fetch summary
-      const summaryResponse = await fetch(
-        `${apiUrl}/api/admin/earnings?startDate=${start}&endDate=${end}&phone=${adminPhone}`,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-      const summaryData = await summaryResponse.json();
-
-      // Fetch daily breakdown
-      const dailyResponse = await fetch(
-        `${apiUrl}/api/admin/earnings/daily?startDate=${start}&endDate=${end}&phone=${adminPhone}`,
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-      const dailyData = await dailyResponse.json();
-
-      if (summaryData.success) {
-        setEarnings(summaryData.data);
+      try {
+        const summaryResponse = await fetch(
+          `${apiUrl}/api/admin/earnings?startDate=${start}&endDate=${end}&phone=${adminPhone}`,
+          { headers: { 'Content-Type': 'application/json' }, method: 'GET' }
+        );
+        
+        if (summaryResponse.ok) {
+          const summaryData = await summaryResponse.json();
+          if (summaryData.success) {
+            setEarnings(summaryData.data);
+          }
+        } else {
+          console.warn(`[Earnings] Earnings endpoint returned status ${summaryResponse.status}`);
+        }
+      } catch (err) {
+        console.warn('[Earnings] Failed to fetch earnings summary:', err);
       }
-      if (dailyData.success) {
-        setDailyEarnings(dailyData.data);
+
+      // Fetch daily breakdown (optional)
+      try {
+        const dailyResponse = await fetch(
+          `${apiUrl}/api/admin/earnings/daily?startDate=${start}&endDate=${end}&phone=${adminPhone}`,
+          { headers: { 'Content-Type': 'application/json' }, method: 'GET' }
+        );
+        
+        if (dailyResponse.ok) {
+          const dailyData = await dailyResponse.json();
+          if (dailyData.success) {
+            setDailyEarnings(dailyData.data);
+          }
+        }
+      } catch (err) {
+        console.warn('[Earnings] Failed to fetch daily breakdown:', err);
       }
     } catch (error) {
-      console.error('Error fetching earnings:', error);
+      console.error('Error in fetchEarnings:', error);
     } finally {
       setLoading(false);
     }

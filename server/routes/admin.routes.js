@@ -5662,3 +5662,5 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
 });
 
 module.exports = router;
+
+module.exports = router;
