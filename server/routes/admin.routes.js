@@ -5603,7 +5603,7 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
       .lte('created_at', queryEndDate.toISOString());
     
     // Group by date
-    const dailyEarnings: Record<string, any> = {};
+    const dailyEarnings = {};
     
     if (deposits && deposits.length > 0) {
       deposits.forEach(d => {
