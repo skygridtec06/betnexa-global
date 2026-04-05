@@ -5483,71 +5483,63 @@ router.get('/earnings', checkAdmin, async (req, res) => {
     
     console.log(`[EARNINGS] Fetching earnings stats. Start: ${startDate}, End: ${endDate}`);
     
+    if (!supabase) {
+      console.error('[EARNINGS] Supabase not initialized');
+      return res.status(500).json({ success: false, error: 'Database not initialized' });
+    }
+    
     // Parse dates
-    let queryStartDate = new Date();
-    let queryEndDate = new Date();
+    let queryStartDate = startDate ? new Date(startDate + 'T00:00:00Z') : new Date();
+    let queryEndDate = endDate ? new Date(endDate + 'T23:59:59Z') : new Date();
     
-    if (startDate) {
-      queryStartDate = new Date(startDate);
-      queryStartDate.setHours(0, 0, 0, 0);
-    } else {
-      queryStartDate.setHours(0, 0, 0, 0);
-    }
+    if (!startDate) queryStartDate.setHours(0, 0, 0, 0);
+    if (!endDate) queryEndDate.setHours(23, 59, 59, 999);
     
-    if (endDate) {
-      queryEndDate = new Date(endDate);
-      queryEndDate.setHours(23, 59, 59, 999);
-    } else {
-      queryEndDate.setHours(23, 59, 59, 999);
-    }
-    
-    console.log(`[EARNINGS] Query range: ${queryStartDate.toISOString()} to ${queryEndDate.toISOString()}`);
+    const startIso = queryStartDate.toISOString();
+    const endIso = queryEndDate.toISOString();
+    console.log(`[EARNINGS] Query range: ${startIso} to ${endIso}`);
     
     // Fetch deposits
+    console.log('[EARNINGS] Fetching deposits...');
     const { data: deposits, error: depositsError } = await supabase
       .from('deposits')
       .select('amount')
       .eq('status', 'completed')
-      .gte('created_at', queryStartDate.toISOString())
-      .lte('created_at', queryEndDate.toISOString());
-    
-    // Fetch transactions (for activation fees and priority fees)
-    const { data: transactions, error: transactionsError } = await supabase
-      .from('transactions')
-      .select('amount, type')
-      .eq('status', 'completed')
-      .in('type', ['activation', 'priority'])
-      .gte('created_at', queryStartDate.toISOString())
-      .lte('created_at', queryEndDate.toISOString());
+      .gte('created_at', startIso)
+      .lte('created_at', endIso);
     
     if (depositsError) {
       console.error('[EARNINGS] Error fetching deposits:', depositsError);
-      return res.status(500).json({ success: false, error: 'Failed to fetch deposits' });
+      return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
     }
+    console.log(`[EARNINGS] Deposits found: ${deposits ? deposits.length : 0}`);
     
-    if (transactionsError) {
-      console.error('[EARNINGS] Error fetching transactions:', transactionsError);
-      return res.status(500).json({ success: false, error: 'Failed to fetch transactions' });
+    // Fetch activation fees from activation_fees table
+    console.log('[EARNINGS] Fetching activation fees...');
+    const { data: activationFees, error: activationFeesError } = await supabase
+      .from('activation_fees')
+      .select('amount')
+      .eq('status', 'completed')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso);
+    
+    if (activationFeesError) {
+      console.warn('[EARNINGS] Warning fetching activation fees:', activationFeesError);
+      // Don't fail, just treat as empty
     }
+    console.log(`[EARNINGS] Activation fees found: ${activationFees ? activationFees.length : 0}`);
     
     // Calculate totals
     const totalDeposits = deposits && deposits.length > 0
       ? deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
       : 0;
     
-    let totalActivationFees = 0;
-    let totalPriorityFees = 0;
+    const totalActivationFees = activationFees && activationFees.length > 0
+      ? activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0)
+      : 0;
     
-    if (transactions && transactions.length > 0) {
-      transactions.forEach(tx => {
-        const amount = parseFloat(tx.amount || 0);
-        if (tx.type === 'activation') {
-          totalActivationFees += amount;
-        } else if (tx.type === 'priority') {
-          totalPriorityFees += amount;
-        }
-      });
-    }
+    // TODO: Add priority fees when available in database
+    const totalPriorityFees = 0;
     
     const masterTotal = totalDeposits + totalActivationFees + totalPriorityFees;
     
@@ -5563,8 +5555,8 @@ router.get('/earnings', checkAdmin, async (req, res) => {
         totalPriorityFees: Math.round(totalPriorityFees),
         masterTotal: Math.round(masterTotal),
         depositCount: deposits ? deposits.length : 0,
-        activationFeeCount: transactions ? transactions.filter(t => t.type === 'activation').length : 0,
-        priorityFeeCount: transactions ? transactions.filter(t => t.type === 'priority').length : 0,
+        activationFeeCount: activationFees ? activationFees.length : 0,
+        priorityFeeCount: 0,
       }
     });
   } catch (error) {
@@ -5578,29 +5570,51 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
-    let queryStartDate = new Date(startDate || new Date());
-    let queryEndDate = new Date(endDate || new Date());
+    console.log('[EARNINGS_DAILY] Fetching daily breakdown...');
     
-    queryStartDate.setHours(0, 0, 0, 0);
-    queryEndDate.setHours(23, 59, 59, 999);
+    if (!supabase) {
+      console.error('[EARNINGS_DAILY] Supabase not initialized');
+      return res.status(500).json({ success: false, error: 'Database not initialized' });
+    }
     
-    console.log(`[EARNINGS_DAILY] Fetching daily breakdown. Range: ${queryStartDate.toISOString()} to ${queryEndDate.toISOString()}`);
+    let queryStartDate = startDate ? new Date(startDate + 'T00:00:00Z') : new Date();
+    let queryEndDate = endDate ? new Date(endDate + 'T23:59:59Z') : new Date();
     
-    // Fetch all completed deposits and transactions in date range
-    const { data: deposits } = await supabase
+    if (!startDate) queryStartDate.setHours(0, 0, 0, 0);
+    if (!endDate) queryEndDate.setHours(23, 59, 59, 999);
+    
+    const startIso = queryStartDate.toISOString();
+    const endIso = queryEndDate.toISOString();
+    console.log(`[EARNINGS_DAILY] Range: ${startIso} to ${endIso}`);
+    
+    // Fetch all completed deposits and activation fees in date range
+    console.log('[EARNINGS_DAILY] Fetching deposits...');
+    const { data: deposits, error: depositsError } = await supabase
       .from('deposits')
       .select('amount, created_at')
       .eq('status', 'completed')
-      .gte('created_at', queryStartDate.toISOString())
-      .lte('created_at', queryEndDate.toISOString());
+      .gte('created_at', startIso)
+      .lte('created_at', endIso);
     
-    const { data: transactions } = await supabase
-      .from('transactions')
-      .select('amount, type, created_at')
+    if (depositsError) {
+      console.error('[EARNINGS_DAILY] Error fetching deposits:', depositsError);
+      return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
+    }
+    console.log(`[EARNINGS_DAILY] Deposits found: ${deposits ? deposits.length : 0}`);
+    
+    console.log('[EARNINGS_DAILY] Fetching activation fees...');
+    const { data: activationFees, error: activationFeesError } = await supabase
+      .from('activation_fees')
+      .select('amount, created_at')
       .eq('status', 'completed')
-      .in('type', ['activation', 'priority'])
-      .gte('created_at', queryStartDate.toISOString())
-      .lte('created_at', queryEndDate.toISOString());
+      .gte('created_at', startIso)
+      .lte('created_at', endIso);
+    
+    if (activationFeesError) {
+      console.warn('[EARNINGS_DAILY] Warning fetching activation fees:', activationFeesError);
+      // Don't fail, just treat as empty
+    }
+    console.log(`[EARNINGS_DAILY] Activation fees found: ${activationFees ? activationFees.length : 0}`);
     
     // Group by date
     const dailyEarnings = {};
@@ -5615,18 +5629,14 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
       });
     }
     
-    if (transactions && transactions.length > 0) {
-      transactions.forEach(tx => {
-        const date = new Date(tx.created_at).toISOString().split('T')[0];
+    if (activationFees && activationFees.length > 0) {
+      activationFees.forEach(af => {
+        const date = new Date(af.created_at).toISOString().split('T')[0];
         if (!dailyEarnings[date]) {
           dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
         }
-        const amount = parseFloat(tx.amount || 0);
-        if (tx.type === 'activation') {
-          dailyEarnings[date].activation += amount;
-        } else if (tx.type === 'priority') {
-          dailyEarnings[date].priority += amount;
-        }
+        const amount = parseFloat(af.amount || 0);
+        dailyEarnings[date].activation += amount;
       });
     }
     
