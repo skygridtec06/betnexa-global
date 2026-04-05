@@ -5476,6 +5476,11 @@ router.post('/match-events/:gameId/execute-pending', checkAdmin, async (req, res
   }
 });
 
+// Simple test endpoint to verify admin routes are loaded
+router.get('/test', (req, res) => {
+  res.json({ success: true, message: 'Admin routes are working', timestamp: new Date().toISOString() });
+});
+
 // GET /api/admin/earnings - Fetch earnings statistics with date filtering
 router.get('/earnings', checkAdmin, async (req, res) => {
   try {
