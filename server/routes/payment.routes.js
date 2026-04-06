@@ -116,12 +116,12 @@ router.post('/initiate', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Amount must be at least KSH 1' });
     }
 
-    // If withdrawal, enforce only winnings_balance can be withdrawn
+    // If withdrawal, enforce only withdrawable_balance can be withdrawn (winnings)
     if (resolvedPaymentType === 'withdrawal') {
-      // Fetch user's winnings_balance
+      // Fetch user's withdrawable_balance (winnings only)
       const { data: user, error: userError } = await supabase
         .from('users')
-        .select('winnings_balance')
+        .select('withdrawable_balance, stakeable_balance')
         .eq('id', userId)
         .single();
 
@@ -133,30 +133,43 @@ router.post('/initiate', async (req, res) => {
         });
       }
 
-      if (parseFloat(user.winnings_balance) < numAmount) {
-        console.log('❌ Withdrawal failed: Insufficient winnings balance');
+      const withdrawableBalance = parseFloat(user.withdrawable_balance || 0);
+      const stakeableBalance = parseFloat(user.stakeable_balance || 0);
+      
+      if (withdrawableBalance < numAmount) {
+        console.log('❌ Withdrawal failed: Insufficient withdrawable balance (winnings)');
+        console.log(`   Requested: KSH ${numAmount}`);
+        console.log(`   Withdrawable (winnings): KSH ${withdrawableBalance}`);
+        console.log(`   Stakeable (deposits): KSH ${stakeableBalance} [Not withdrawal available]`);
         return res.status(400).json({
           success: false,
-          message: 'Insufficient winnings balance for withdrawal',
-          winnings_balance: user.winnings_balance
+          message: 'Insufficient withdrawable balance (winnings only)',
+          withdrawable_balance: withdrawableBalance,
+          stakeable_balance: stakeableBalance,
+          requested: numAmount
         });
       }
 
-      // Deduct from winnings_balance
-      const newWinningsBalance = parseFloat(user.winnings_balance) - numAmount;
+      // Deduct from withdrawable_balance only
+      const newWithdrawableBalance = withdrawableBalance - numAmount;
+      const newTotalBalance = stakeableBalance + newWithdrawableBalance;
+      
       const { error: updateError } = await supabase
         .from('users')
-        .update({ winnings_balance: newWinningsBalance, updated_at: new Date().toISOString() })
+        .update({ withdrawable_balance: newWithdrawableBalance, account_balance: newTotalBalance, updated_at: new Date().toISOString() })
         .eq('id', userId);
 
       if (updateError) {
-        console.log('❌ Withdrawal failed: Could not update winnings_balance');
+        console.log('❌ Withdrawal failed: Could not update withdrawable_balance');
         return res.status(500).json({
           success: false,
-          message: 'Failed to update winnings balance for withdrawal',
+          message: 'Failed to update withdrawable balance for withdrawal',
           details: updateError.message
         });
       }
+      
+      console.log(`✅ Withdrawal deducted from withdrawable balance`);
+      console.log(`   Withdrawable: KSH ${withdrawableBalance} → KSH ${newWithdrawableBalance}`);
     }
 
     // Generate reference

@@ -2104,10 +2104,10 @@ router.put('/users/:userId/balance', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Balance amount required' });
     }
 
-    // Get user's current balance
+    // Get user's current balances
     const { data: users, error: userError } = await supabase
       .from('users')
-      .select('account_balance')
+      .select('stakeable_balance, withdrawable_balance, account_balance')
       .eq('id', userId);
 
     if (userError) {
@@ -2121,16 +2121,27 @@ router.put('/users/:userId/balance', checkAdmin, async (req, res) => {
     }
 
     const user = users[0];
+    const stakeableBalance = parseFloat(user.stakeable_balance) || 0;
+    const withdrawableBalance = parseFloat(user.withdrawable_balance) || 0;
+    const previousWithdrawable = withdrawableBalance;
+    
+    // Calculate new withdrawable balance (add reason amount to withdrawable)
+    const amountChange = parseFloat(balance) - (stakeableBalance + withdrawableBalance);
+    const newWithdrawable = withdrawableBalance + amountChange;
+    const newTotalBalance = stakeableBalance + newWithdrawable;
 
-    const previousBalance = user.account_balance;
-    const balanceChange = balance - previousBalance;
+    console.log(`   Previous balance: Stakeable=${stakeableBalance}, Withdrawable=${previousWithdrawable}, Total=${stakeableBalance + withdrawableBalance}`);
+    console.log(`   Change: +${amountChange} → Withdrawable=${newWithdrawable}, Total=${newTotalBalance}`);
+    console.log(`   ℹ️ Admin updates add to WITHDRAWABLE balance (winnings/rewards)`);
 
-    console.log(`   Previous balance: ${previousBalance}, Change: ${balanceChange}`);
-
-    // Update user balance
+    // Update user balance - ADD TO WITHDRAWABLE_BALANCE
     const { data: updatedUsers, error: updateError } = await supabase
       .from('users')
-      .update({ account_balance: balance, updated_at: new Date().toISOString() })
+      .update({ 
+        withdrawable_balance: newWithdrawable, 
+        account_balance: newTotalBalance,
+        updated_at: new Date().toISOString() 
+      })
       .eq('id', userId)
       .select();
 
@@ -2147,14 +2158,16 @@ router.put('/users/:userId/balance', checkAdmin, async (req, res) => {
     const updatedUser = updatedUsers[0];
 
     console.log(`✅ Balance updated successfully`);
+    console.log(`   Withdrawable: ${previousWithdrawable} → ${newWithdrawable}`);
+    console.log(`   Total: ${stakeableBalance + previousWithdrawable} → ${newTotalBalance}`);
 
     // Record balance history
     await supabase.from('balance_history').insert([{
       user_id: userId,
-      balance_before: previousBalance,
-      balance_after: balance,
-      change: balanceChange,
-      reason: reason || 'Admin adjustment',
+      balance_before: stakeableBalance + previousWithdrawable,
+      balance_after: newTotalBalance,
+      change: amountChange,
+      reason: (reason || 'Admin adjustment') + ' [Added to WITHDRAWABLE]',
       created_by: req.user.phone,
       created_at: new Date().toISOString(),
     }]);

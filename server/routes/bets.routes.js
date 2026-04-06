@@ -62,7 +62,7 @@ router.post('/place', async (req, res) => {
     if (userId) {
       const byIdResult = await supabase
         .from('users')
-        .select('id, account_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
         .eq('id', userId)
         .maybeSingle();
       user = byIdResult.data;
@@ -72,7 +72,7 @@ router.post('/place', async (req, res) => {
     if (!user && phoneNumber) {
       const byPhoneResult = await supabase
         .from('users')
-        .select('id, account_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
         .eq('phone_number', phoneNumber)
         .maybeSingle();
       user = byPhoneResult.data;
@@ -96,24 +96,37 @@ router.post('/place', async (req, res) => {
       });
     }
 
-    // Check if user has sufficient main account balance
-    const currentBalance = parseFloat(user.account_balance || 0);
-    if (currentBalance < stake) {
-      console.warn('⚠️ Insufficient account balance for user:', phoneNumber || userId);
+    // CHECK STAKEABLE BALANCE (deposits/betting funds only, NOT winnings)
+    const stakeableBalance = parseFloat(user.stakeable_balance || 0);
+    if (stakeableBalance < stake) {
+      console.warn('⚠️ Insufficient stakeable balance for user:', phoneNumber || userId);
+      console.warn(`   Stakeable: KSH ${stakeableBalance}, Stake required: KSH ${stake}`);
+      console.warn(`   Withdrawable (winnings): KSH ${user.withdrawable_balance || 0} [Cannot be used for betting]`);
       return res.status(400).json({
         success: false,
-        error: 'Insufficient balance',
-        balance: currentBalance,
-        required: stake
+        error: 'Insufficient balance for betting',
+        stakeableBalance: stakeableBalance,
+        withdrawableBalance: user.withdrawable_balance || 0,
+        required: stake,
+        message: 'Winnings cannot be used for betting - only deposits (stakeable balance) can be staked'
       });
     }
 
-    // Deduct stake from account_balance
-    const newBalance = currentBalance - parseFloat(stake);
+    // DEDUCT STAKE FROM STAKEABLE BALANCE ONLY
+    const newStakeable = stakeableBalance - parseFloat(stake);
+    const withdrawableBalance = parseFloat(user.withdrawable_balance || 0);
+    const newAccountBalance = newStakeable + withdrawableBalance; // Total for display
+
+    console.log(`🎮 Bet placed - Deducting stake from stakeable balance`);
+    console.log(`   Stakeable: KSH ${stakeableBalance} → KSH ${newStakeable}`);
+    console.log(`   Withdrawable (unchanged): KSH ${withdrawableBalance}`);
+    console.log(`   Total: KSH ${newAccountBalance}`);
+
     const { error: updateError } = await supabase
       .from('users')
       .update({
-        account_balance: newBalance,
+        stakeable_balance: newStakeable,
+        account_balance: newAccountBalance,
         total_bets: (user.total_bets || 0) + 1,
         updated_at: new Date().toISOString()
       })
@@ -216,7 +229,9 @@ router.post('/place', async (req, res) => {
         totalOdds: parseFloat(totalOdds),
         status: 'Open'
       },
-      newBalance
+      stakeableBalance: newStakeable,
+      withdrawableBalance: withdrawableBalance,
+      newBalance: newAccountBalance
     });
   } catch (error) {
     console.error('❌ Place bet error:', error);

@@ -162,10 +162,10 @@ router.post('/payhero', async (req, res) => {
         if (alreadyDone || completedDeposit) {
           console.log('⚠️ Transaction already completed for this reference — skipping double credit');
         } else {
-          // --- Credit user account_balance ---
+          // --- Credit user stakeable_balance (deposits go to stakeable) ---
           const { data: userRow, error: userFetchErr } = await supabase
             .from('users')
-            .select('account_balance, phone_number')
+            .select('stakeable_balance, withdrawable_balance, phone_number')
             .eq('id', user_id)
             .single();
 
@@ -173,22 +173,24 @@ router.post('/payhero', async (req, res) => {
             console.warn('⚠️ Could not fetch user for balance credit:', userFetchErr?.message);
           } else {
             const creditAmount = parseFloat(amount);
-            const prevBalance = parseFloat(userRow.account_balance) || 0;
-            const newBalance = prevBalance + creditAmount;
+            const prevStakeable = parseFloat(userRow.stakeable_balance) || 0;
+            const newStakeable = prevStakeable + creditAmount;
+            const totalBalance = newStakeable + (parseFloat(userRow.withdrawable_balance) || 0);
 
             const { error: balanceErr } = await supabase
               .from('users')
-              .update({ account_balance: newBalance, updated_at: new Date().toISOString() })
+              .update({ stakeable_balance: newStakeable, account_balance: totalBalance, updated_at: new Date().toISOString() })
               .eq('id', user_id);
 
             if (balanceErr) {
               console.warn('⚠️ Failed to credit user balance:', balanceErr.message);
             } else {
-              console.log(`✅ Balance credited: KSH ${prevBalance} → KSH ${newBalance} (user ${user_id})`);
+              console.log(`✅ Stakeable balance credited: KSH ${prevStakeable} → KSH ${newStakeable} (user ${user_id}) [Deposits only for betting]`);
+              console.log(`   Total balance (stakeable + withdrawable): KSH ${totalBalance}`);
               // Send deposit confirmed SMS (fire-and-forget)
               const smsPhone = userRow.phone_number || paymentData?.phone_number;
               if (smsPhone) {
-                sendDepositSms(smsPhone, creditAmount, newBalance).catch(() => {});
+                sendDepositSms(smsPhone, creditAmount, totalBalance).catch(() => {});
               }
               
               // Send admin notification with today's total revenue
