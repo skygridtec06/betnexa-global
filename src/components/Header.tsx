@@ -22,7 +22,7 @@ export function Header() {
   const [downloadNotification, setDownloadNotification] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { balance } = useBets();
+  const { balance, stakeableBalance, withdrawableBalance } = useBets();
   const { isLoggedIn, logout, user } = useUser();
 
   const handleLogout = () => {
@@ -110,9 +110,12 @@ export function Header() {
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[160px]">
+              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[180px] group relative" title={`Stakeable: KSH ${(stakeableBalance || 0).toLocaleString()}\nWithdrawable: KSH ${(withdrawableBalance || 0).toLocaleString()}`}>
                 <Wallet className="h-3.5 w-3.5 text-primary shrink-0" />
-                <span className="text-xs font-bold text-foreground whitespace-nowrap truncate">KSH {balance.toLocaleString()}</span>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-xs font-bold text-foreground whitespace-nowrap truncate">KSH {(balance || 0).toLocaleString()}</span>
+                  <span className="text-[10px] text-foreground/70 whitespace-nowrap">S: {(stakeableBalance || 0).toLocaleString()} | W: {(withdrawableBalance || 0).toLocaleString()}</span>
+                </div>
               </div>
             )}
             {isLoggedIn && user?.isAdmin && (
@@ -139,9 +142,12 @@ export function Header() {
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[145px] min-w-0">
+              <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[145px] min-w-0 group relative" title={`Stakeable: KSH ${(stakeableBalance || 0).toLocaleString()}\nWithdrawable: KSH ${(withdrawableBalance || 0).toLocaleString()}`}>
                 <Wallet className="h-3 w-3 text-primary shrink-0" />
-                <span className="text-[10px] font-bold text-foreground whitespace-nowrap truncate">KSH {balance.toLocaleString()}</span>
+                <div className="flex flex-col min-w-0 text-[10px]">
+                  <span className="font-bold text-foreground whitespace-nowrap truncate">KSH {(balance || 0).toLocaleString()}</span>
+                  <span className="text-foreground/70 whitespace-nowrap">S:{(stakeableBalance || 0).toLocaleString()}</span>
+                </div>
               </div>
             )}
             <button

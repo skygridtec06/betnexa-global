@@ -1800,7 +1800,6 @@ const AdminPortal = () => {
   const stats: Array<{ icon: any; label: string; value: string; color: string; note?: string }> = [
     { icon: Users, label: "Total Users", value: totalUsers.toLocaleString(), color: "text-primary" },
     { icon: UserPlus, label: "Signed Up Today", value: todaySignups.toLocaleString(), color: "text-primary" },
-    { icon: DollarSign, label: "Revenue Today", value: `KSH ${todayRevenue.toLocaleString()}`, color: "text-gold" },
     { icon: BarChart3, label: "Active Bets", value: activeBets.toLocaleString(), color: "text-primary" },
     { icon: Trophy, label: "Games Today", value: games.length.toString(), color: "text-gold" },
   ];
@@ -3655,6 +3654,17 @@ const AdminPortal = () => {
                 </Card>
               ))}
             </div>
+
+            {/* Revenue Today Card */}
+            <Card className="mt-8 border-gold/30 bg-card p-6 neon-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm text-muted-foreground">Revenue Today</p>
+                  <p className="mt-4 text-3xl font-bold text-gold">KSH {todayRevenue.toLocaleString()}</p>
+                </div>
+                <div className="text-6xl text-gold/30">💰</div>
+              </div>
+            </Card>
           </TabsContent>
 
           <TabsContent value="bets" className="space-y-6">

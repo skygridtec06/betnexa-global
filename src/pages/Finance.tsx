@@ -38,11 +38,15 @@ export default function Finance() {
   const [isActivating, setIsActivating] = useState(false);
   const [pendingWithdrawalAmount, setPendingWithdrawalAmount] = useState<number | null>(null);
   const [secondsUntilProceed, setSecondsUntilProceed] = useState(20);
-  const { deposit, withdraw, balance, setBalance } = useBets();
+  const { deposit, withdraw, balance, stakeableBalance, withdrawableBalance, setBalance, setStakeableBalance, setWithdrawableBalance } = useBets();
   const { user, updateUser, refreshUserData } = useUser();
   const { getUserTransactions, addTransaction, fetchTransactions } = useTransactions();
   const actualUserId = user?.id || "user1";
   const userTransactions = getUserTransactions(actualUserId);
+  
+  // Calculate available and locked balances
+  const availableBalance = stakeableBalance;
+  const lockedBalance = Math.max(0, balance - stakeableBalance);
 
   // Fetch transactions from database on component mount and when user changes
   useEffect(() => {
@@ -112,6 +116,22 @@ export default function Finance() {
       balanceSyncService.stopAutoSync();
     };
   }, [user?.id, setBalance, updateUser]);
+
+  // Sync split balances from user data
+  useEffect(() => {
+    if (user) {
+      console.log('💰 Syncing split balances from user data');
+      if (user.stakeableBalance !== undefined) {
+        setStakeableBalance(user.stakeableBalance);
+      }
+      if (user.withdrawableBalance !== undefined) {
+        setWithdrawableBalance(user.withdrawableBalance);
+      }
+      if (user.accountBalance !== undefined) {
+        setBalance(user.accountBalance);
+      }
+    }
+  }, [user?.id, user?.stakeableBalance, user?.withdrawableBalance, user?.accountBalance, setBalance, setStakeableBalance, setWithdrawableBalance]);
 
   // Clean up polling interval on unmount
   useEffect(() => {
@@ -612,11 +632,11 @@ export default function Finance() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Available to Bet</p>
-              <p className="mt-2 text-2xl font-bold text-foreground">KSH {balance.toLocaleString()}</p>
+              <p className="mt-2 text-2xl font-bold text-foreground">KSH {availableBalance.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Pending Bets</p>
-              <p className="mt-2 text-2xl font-bold text-gold">KSH 0.00</p>
+              <p className="text-sm text-muted-foreground">Locked in Bets</p>
+              <p className="mt-2 text-2xl font-bold text-gold">KSH {lockedBalance.toLocaleString()}</p>
             </div>
           </div>
         </Card>

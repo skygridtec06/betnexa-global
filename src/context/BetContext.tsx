@@ -27,11 +27,15 @@ interface BetContextType {
   addBet: (bet: PlacedBet) => void;
   removeBet: (betId: string) => void;
   balance: number;
+  stakeableBalance: number;
+  withdrawableBalance: number;
   deposit: (amount: number) => void;
   withdraw: (amount: number) => boolean;
   placeBet: (betAmount: number) => boolean;
   updateBetStatus: (betId: string, status: PlacedBet["status"], amountWon?: number) => Promise<{ success: boolean; error?: string; data?: any }>;
   setBalance: (amount: number) => void;
+  setStakeableBalance: (amount: number) => void;
+  setWithdrawableBalance: (amount: number) => void;
   syncBalance: (newBalance: number) => void;
   setBets: (bets: PlacedBet[]) => void;
   fetchAllBets: () => Promise<{ success: boolean; error?: string }>;
@@ -42,7 +46,7 @@ const BetContext = createContext<BetContextType | undefined>(undefined);
 export function BetProvider({ children }: { children: ReactNode }) {
   const [bets, setBets] = useState<PlacedBet[]>([]);
 
-  // Initialize balance from localStorage user data on mount
+  // Initialize balances from localStorage user data on mount
   const [balance, setBalance] = useState<number>(() => {
     try {
       const savedUser = sessionStorage.getItem('betnexa_user') || localStorage.getItem('betnexa_user');
@@ -52,6 +56,32 @@ export function BetProvider({ children }: { children: ReactNode }) {
       }
     } catch (error) {
       console.warn('⚠️ Failed to initialize balance from localStorage');
+    }
+    return 0;
+  });
+
+  const [stakeableBalance, setStakeableBalance] = useState<number>(() => {
+    try {
+      const savedUser = sessionStorage.getItem('betnexa_user') || localStorage.getItem('betnexa_user');
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+        return user.stakeableBalance || user.accountBalance || 0;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to initialize stakeable balance from localStorage');
+    }
+    return 0;
+  });
+
+  const [withdrawableBalance, setWithdrawableBalance] = useState<number>(() => {
+    try {
+      const savedUser = sessionStorage.getItem('betnexa_user') || localStorage.getItem('betnexa_user');
+      if (savedUser) {
+        const user = JSON.parse(savedUser);
+        return user.withdrawableBalance || 0;
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to initialize withdrawable balance from localStorage');
     }
     return 0;
   });
@@ -253,7 +283,24 @@ export function BetProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <BetContext.Provider value={{ bets, addBet, removeBet, balance, deposit, withdraw, placeBet, updateBetStatus, setBalance: setBalanceHandler, syncBalance, setBets, fetchAllBets }}>
+    <BetContext.Provider value={{ 
+      bets, 
+      addBet, 
+      removeBet, 
+      balance, 
+      stakeableBalance,
+      withdrawableBalance,
+      deposit, 
+      withdraw, 
+      placeBet, 
+      updateBetStatus, 
+      setBalance: setBalanceHandler, 
+      setStakeableBalance,
+      setWithdrawableBalance,
+      syncBalance, 
+      setBets, 
+      fetchAllBets 
+    }}>
       {children}
     </BetContext.Provider>
   );
