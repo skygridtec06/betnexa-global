@@ -110,12 +110,9 @@ export function Header() {
               </Link>
             )}
             {isLoggedIn && (
-              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[180px] group relative" title={`Stakeable: KSH ${(stakeableBalance || 0).toLocaleString()}\nWithdrawable: KSH ${(withdrawableBalance || 0).toLocaleString()}`}>
+              <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[180px] group relative">
                 <Wallet className="h-3.5 w-3.5 text-primary shrink-0" />
-                <div className="flex flex-col min-w-0">
-                  <span className="text-xs font-bold text-foreground whitespace-nowrap truncate">KSH {(balance || 0).toLocaleString()}</span>
-                  <span className="text-[10px] text-foreground/70 whitespace-nowrap">S: {(stakeableBalance || 0).toLocaleString()} | W: {(withdrawableBalance || 0).toLocaleString()}</span>
-                </div>
+                <span className="text-xs font-bold text-foreground whitespace-nowrap truncate">KSH {(balance || 0).toLocaleString()}</span>
               </div>
             )}
             {isLoggedIn && user?.isAdmin && (
