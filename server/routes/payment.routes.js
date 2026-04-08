@@ -1275,6 +1275,22 @@ router.post('/daraja/initiate', async (req, res) => {
       return res.status(400).json({ success: false, message: `Minimum deposit is KSH ${minDeposit}` });
     }
 
+    // Fetch user to get username
+    let username = 'user';
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('username, account_name')
+        .eq('id', userId)
+        .single();
+      
+      if (!userError && userData) {
+        username = userData.account_name || userData.username || 'user';
+      }
+    } catch (userFetchError) {
+      console.warn('⚠️ Could not fetch user data:', userFetchError.message);
+    }
+
     const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
     const suffix = `${Date.now()}`.slice(-8);
     const externalReference = `DUSER-${paymentType.toUpperCase().slice(0, 3)}-${suffix}`;
@@ -1291,7 +1307,7 @@ router.post('/daraja/initiate', async (req, res) => {
     const result = await initiateAdminTestStkPush({
       phoneNumber: normalizedPhone,
       amount: parsedAmount,
-      accountReference: `BX${suffix}`,
+      accountReference: `BETNEXA ${username}`,
       transactionDesc: descriptionMap[paymentType] || 'Betnexa payment',
       callbackUrl,
     });
