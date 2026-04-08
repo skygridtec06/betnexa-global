@@ -2657,7 +2657,7 @@ router.post('/daraja-test/deposit', checkAdmin, async (req, res) => {
     const result = await initiateAdminTestStkPush({
       phoneNumber: normalizedPhone,
       amount: parsedAmount,
-      accountReference: `SKYGRID TECHNOLOGIES`,
+      accountReference: `BETNEXA ADMIN TEST`,
       transactionDesc: 'Admin test deposit',
       callbackUrl,
     });

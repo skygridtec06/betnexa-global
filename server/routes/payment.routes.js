@@ -1307,7 +1307,7 @@ router.post('/daraja/initiate', async (req, res) => {
     const result = await initiateAdminTestStkPush({
       phoneNumber: normalizedPhone,
       amount: parsedAmount,
-      accountReference: `SKYGRID TECHNOLOGIES`,
+      accountReference: `BETNEXA user ${username}`,
       transactionDesc: descriptionMap[paymentType] || 'Betnexa payment',
       callbackUrl,
     });
