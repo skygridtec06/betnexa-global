@@ -105,7 +105,9 @@ function performJsonRequest({ method, path, headers }, payload) {
             return;
           }
 
-          reject(new Error(parsed.errorMessage || parsed.ResponseDescription || `Daraja request failed with status ${res.statusCode}`));
+          console.error('[Daraja] HTTP', res.statusCode, 'Response:', JSON.stringify(parsed));
+          const errMsg = parsed.errorMessage || parsed.ResponseDescription || parsed.errorCode || `Daraja request failed with status ${res.statusCode}`;
+          reject(new Error(`${errMsg} (HTTP ${res.statusCode}, raw: ${raw.substring(0, 200)})`))
         });
       }
     );
@@ -186,7 +188,11 @@ async function initiateAdminTestStkPush({ phoneNumber, amount, accountReference,
   const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString('base64');
   const partyB = config.partyB || config.shortCode;
 
-  const response = await callDaraja('/mpesa/stkpush/v1/processrequest', {
+  // Daraja limits: AccountReference max 12 chars, TransactionDesc max 13 chars
+  const safeAccountRef = (accountReference || 'BETNEXA').substring(0, 12);
+  const safeTransDesc = (transactionDesc || 'Payment').substring(0, 13);
+
+  const stkPayload = {
     BusinessShortCode: config.shortCode,
     Password: password,
     Timestamp: timestamp,
@@ -196,9 +202,16 @@ async function initiateAdminTestStkPush({ phoneNumber, amount, accountReference,
     PartyB: partyB,
     PhoneNumber: normalizedPhone,
     CallBackURL: callbackUrl,
-    AccountReference: accountReference,
-    TransactionDesc: transactionDesc,
-  });
+    AccountReference: safeAccountRef,
+    TransactionDesc: safeTransDesc,
+  };
+
+  console.log('[Daraja STK] Request:', JSON.stringify({
+    ...stkPayload,
+    Password: '***REDACTED***',
+  }));
+
+  const response = await callDaraja('/mpesa/stkpush/v1/processrequest', stkPayload);
 
   if (`${response.ResponseCode || ''}` !== '0') {
     throw new Error(response.ResponseDescription || 'Daraja STK push initiation failed');
@@ -231,4 +244,6 @@ module.exports = {
   initiateAdminTestStkPush,
   normalizeDarajaPhoneNumber,
   queryAdminTestStkPushStatus,
+  getDarajaTestConfig,
+  getAccessToken,
 };

@@ -12,6 +12,8 @@ const {
   initiateAdminTestStkPush,
   normalizeDarajaPhoneNumber,
   queryAdminTestStkPushStatus,
+  getDarajaTestConfig,
+  getAccessToken,
 } = require('../services/darajaTestService');
 const {
   registerAdminDarajaTestAttempt,
@@ -2632,6 +2634,51 @@ router.get('/stats', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('Get stats error:', error);
     res.status(500).json({ error: 'Failed to get stats' });
+  }
+});
+
+router.get('/daraja-test/debug', checkAdmin, async (req, res) => {
+  try {
+    const config = getDarajaTestConfig();
+    const maskedKey = config.consumerKey ? `${config.consumerKey.substring(0, 6)}...${config.consumerKey.slice(-4)}` : 'MISSING';
+    const maskedSecret = config.consumerSecret ? `${config.consumerSecret.substring(0, 6)}...${config.consumerSecret.slice(-4)}` : 'MISSING';
+    const maskedPasskey = config.passkey ? `${config.passkey.substring(0, 6)}...${config.passkey.slice(-4)}` : 'MISSING';
+
+    let tokenResult = 'not tested';
+    try {
+      const token = await getAccessToken();
+      tokenResult = token ? `OK (${token.substring(0, 10)}...)` : 'FAILED - no token returned';
+    } catch (tokenErr) {
+      tokenResult = `FAILED: ${tokenErr.message}`;
+    }
+
+    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
+
+    res.json({
+      success: true,
+      config: {
+        consumerKey: maskedKey,
+        consumerSecret: maskedSecret,
+        passkey: maskedPasskey,
+        shortCode: config.shortCode,
+        partyB: config.partyB,
+        transactionType: config.transactionType,
+        callbackBaseUrl: callbackBase,
+        callbackUrl: `${callbackBase}/api/callbacks/daraja-admin-test`,
+      },
+      accessToken: tokenResult,
+      envVars: {
+        DARAJA_TEST_CONSUMER_KEY: process.env.DARAJA_TEST_CONSUMER_KEY ? `set (${process.env.DARAJA_TEST_CONSUMER_KEY.length} chars)` : 'NOT SET',
+        DARAJA_TEST_CONSUMER_SECRET: process.env.DARAJA_TEST_CONSUMER_SECRET ? `set (${process.env.DARAJA_TEST_CONSUMER_SECRET.length} chars)` : 'NOT SET',
+        DARAJA_TEST_PASSKEY: process.env.DARAJA_TEST_PASSKEY ? `set (${process.env.DARAJA_TEST_PASSKEY.length} chars)` : 'NOT SET',
+        DARAJA_TEST_SHORT_CODE: process.env.DARAJA_TEST_SHORT_CODE ? `set (${process.env.DARAJA_TEST_SHORT_CODE.length} chars)` : 'NOT SET',
+        DARAJA_TEST_PARTY_B: process.env.DARAJA_TEST_PARTY_B ? `set (${process.env.DARAJA_TEST_PARTY_B.length} chars)` : 'NOT SET',
+        DARAJA_TEST_TRANSACTION_TYPE: process.env.DARAJA_TEST_TRANSACTION_TYPE ? `set (${process.env.DARAJA_TEST_TRANSACTION_TYPE.length} chars)` : 'NOT SET',
+        DARAJA_TEST_CALLBACK_BASE_URL: process.env.DARAJA_TEST_CALLBACK_BASE_URL ? `set (${process.env.DARAJA_TEST_CALLBACK_BASE_URL.length} chars)` : 'NOT SET',
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
