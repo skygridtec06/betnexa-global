@@ -62,7 +62,7 @@ router.post('/place', async (req, res) => {
     if (userId) {
       const byIdResult = await supabase
         .from('users')
-        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, winnings_balance, total_bets, phone_number')
         .eq('id', userId)
         .maybeSingle();
       user = byIdResult.data;
@@ -72,7 +72,7 @@ router.post('/place', async (req, res) => {
     if (!user && phoneNumber) {
       const byPhoneResult = await supabase
         .from('users')
-        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, winnings_balance, total_bets, phone_number')
         .eq('phone_number', phoneNumber)
         .maybeSingle();
       user = byPhoneResult.data;
@@ -115,7 +115,9 @@ router.post('/place', async (req, res) => {
     // DEDUCT STAKE FROM STAKEABLE BALANCE ONLY
     const newStakeable = stakeableBalance - parseFloat(stake);
     const withdrawableBalance = parseFloat(user.withdrawable_balance || 0);
-    const newAccountBalance = newStakeable + withdrawableBalance; // Total for display
+    const winningsBalance = parseFloat(user.winnings_balance || 0);
+    const totalNonStakeable = Math.max(withdrawableBalance, winningsBalance);
+    const newAccountBalance = newStakeable + totalNonStakeable; // Total for display
 
     console.log(`🎮 Bet placed - Deducting stake from stakeable balance`);
     console.log(`   Stakeable: KSH ${stakeableBalance} → KSH ${newStakeable}`);
@@ -211,12 +213,12 @@ router.post('/place', async (req, res) => {
 
     console.log('✅ Bet placed successfully:', betId);
     console.log('   Database ID (UUID):', bet.id);
-    console.log('   Account Balance After: KSH', newBalance);
+    console.log('   Account Balance After: KSH', newAccountBalance);
 
     // Send bet placed SMS (fire-and-forget)
     const smsPhone = phoneNumber || user.phone_number;
     if (smsPhone) {
-      sendBetPlacedSms(smsPhone, betId, stake, potentialWin, newBalance).catch(() => {});
+      sendBetPlacedSms(smsPhone, betId, stake, potentialWin, newAccountBalance).catch(() => {});
     }
 
     res.json({
