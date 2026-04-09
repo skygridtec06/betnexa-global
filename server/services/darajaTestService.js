@@ -138,8 +138,14 @@ async function getAccessToken() {
     return accessTokenPromise;
   }
 
-  const { consumerKey, consumerSecret } = getDarajaTestConfig();
+  const config = getDarajaTestConfig();
+  const { consumerKey, consumerSecret } = config;
   const auth = Buffer.from(`${consumerKey}:${consumerSecret}`).toString('base64');
+
+  console.log('[Daraja Auth] Key length:', consumerKey.length, 'Secret length:', consumerSecret.length);
+  console.log('[Daraja Auth] Key starts:', consumerKey.substring(0, 8), 'ends:', consumerKey.slice(-4));
+  console.log('[Daraja Auth] Host:', DARAJA_HOST);
+  console.log('[Daraja Auth] Base64 auth length:', auth.length);
 
   accessTokenPromise = performJsonRequest({
     method: 'GET',
