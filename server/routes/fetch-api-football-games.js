@@ -212,9 +212,9 @@ function chooseBestOddsSet(oddsRows) {
     }
   }
 
-  // Check if we have all required markets
-  const hasAll = allRequiredMarketKeys.every(k => !!merged[k]);
-  return hasAll ? merged : null;
+  // Only require 1X2 (home/draw/away) as minimum — other markets are optional
+  const has1x2 = merged.home && merged.draw && merged.away;
+  return has1x2 ? merged : null;
 }
 
 // API helper
@@ -267,7 +267,8 @@ router.post('/test', (req, res) => {
 // POST: Fetch preview - Get games from API Football
 router.post('/fetch-preview', checkAdmin, async (req, res) => {
   try {
-    console.log('\n🔍 [API Football Fetch Preview] Fetching TODAY\'S prematch games (TEST MODE - 10 games max)...');
+    const MAX_GAMES = 100;
+    console.log(`\n🔍 [API Football Fetch Preview] Fetching TODAY'S prematch games (Max ${MAX_GAMES})...`);
 
     // Use the test API key for this fetch preview endpoint
     const TEST_API_KEY = '49f4155b78d58351ed95b5c3bbcebd9e';
@@ -303,13 +304,12 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       return json.response || [];
     }
 
-    // Fetch ONLY TODAY's fixtures, stop after 10 games
     const games = [];
-    const MAX_GAMES = 10;
     const today = new Date();
     const dateStr = today.toISOString().split('T')[0];
 
     try {
+      // Step 1: Fetch today's fixtures
       console.log(`\n📅 Fetching fixtures for TODAY (${dateStr})...`);
       const fixtures = await apiGetTest('/fixtures', {
         date: dateStr,
@@ -324,59 +324,96 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
           success: true,
           message: `No prematch games found for today (${dateStr})`,
           game_count: 0,
-          test_mode: true,
           games: [],
           next_step: 'Try again tomorrow or check API Football for available matches'
         });
       }
 
-      // Process each fixture from today
-      for (const fixture of fixtures) {
-        // Stop if we've reached 10 games
+      // Filter to only Not Started (prematch) fixtures
+      const prematchFixtures = fixtures.filter(f => f?.fixture?.status?.short === 'NS');
+      console.log(`   ⚽ ${prematchFixtures.length} prematch (NS) fixtures`);
+
+      if (prematchFixtures.length === 0) {
+        return res.json({
+          success: true,
+          message: `No prematch games found for today (${dateStr}) — all matches already started or finished`,
+          game_count: 0,
+          games: [],
+          next_step: 'Try again tomorrow or check API Football for available matches'
+        });
+      }
+
+      // Step 2: Fetch odds in bulk by date (single API call instead of per-fixture)
+      console.log(`\n📈 Fetching odds in bulk for ${dateStr}...`);
+      let allOddsPages = [];
+      let currentPage = 1;
+      let totalPages = 1;
+
+      // Paginate through odds results
+      do {
+        const oddsUrl = `${API_BASE}/odds?date=${dateStr}&timezone=${TZ}&page=${currentPage}`;
+        console.log(`   🔗 Fetching odds page ${currentPage}/${totalPages}...`);
+        const oddsResp = await fetch(oddsUrl, {
+          headers: { 'x-apisports-key': TEST_API_KEY }
+        });
+
+        if (!oddsResp.ok) {
+          console.warn(`   ⚠️ Odds fetch page ${currentPage} failed: ${oddsResp.status}`);
+          break;
+        }
+
+        const oddsJson = await oddsResp.json();
+        const pageData = oddsJson.response || [];
+        allOddsPages = allOddsPages.concat(pageData);
+        totalPages = oddsJson.paging?.total || 1;
+        console.log(`   ✅ Got ${pageData.length} odds entries (page ${currentPage}/${totalPages})`);
+        currentPage++;
+      } while (currentPage <= totalPages);
+
+      console.log(`   📊 Total odds entries fetched: ${allOddsPages.length}`);
+
+      // Build a map: fixtureId -> odds rows
+      const oddsByFixture = new Map();
+      for (const entry of allOddsPages) {
+        const fid = entry?.fixture?.id;
+        if (!fid) continue;
+        if (!oddsByFixture.has(fid)) oddsByFixture.set(fid, []);
+        oddsByFixture.get(fid).push(entry);
+      }
+
+      // Step 3: Process each prematch fixture and match with odds
+      for (const fixture of prematchFixtures) {
         if (games.length >= MAX_GAMES) {
-          console.log(`\n   ⏸️ Reached ${MAX_GAMES} games limit for testing`);
+          console.log(`\n   ⏸️ Reached ${MAX_GAMES} games limit`);
           break;
         }
 
         try {
           const fixtureId = fixture?.fixture?.id;
-          const status = fixture?.fixture?.status?.short;
-
-          // Only get prematch (NS = Not Started)
-          if (status !== 'NS') {
-            console.log(`   ⏭️ Skipping ${fixture?.teams?.home?.name} vs ${fixture?.teams?.away?.name} (status: ${status})`);
-            continue;
-          }
-
-          if (!fixtureId) {
-            console.warn(`   ⚠️ Missing fixture ID`);
-            continue;
-          }
+          if (!fixtureId) continue;
 
           const homeTeam = fixture?.teams?.home?.name;
           const awayTeam = fixture?.teams?.away?.name;
           const leagueName = fixture?.league?.name || 'Football';
           const kickoffTime = fixture?.fixture?.date;
 
-          if (!homeTeam || !awayTeam) {
-            console.warn(`   ⚠️ Missing team names`);
-            continue;
-          }
+          if (!homeTeam || !awayTeam) continue;
 
-          // Fetch odds for this fixture
-          console.log(`\n   🎯 Fetching odds for ${homeTeam} vs ${awayTeam} (ID: ${fixtureId})...`);
-          const oddsRows = await apiGetTest('/odds', { fixture: String(fixtureId) });
-          console.log(`   📈 Odds data received, processing...`);
-          
+          // Get odds from the bulk fetch
+          const oddsRows = oddsByFixture.get(fixtureId) || [];
           const marketOdds = chooseBestOddsSet(oddsRows);
 
           if (!marketOdds || !marketOdds.home || !marketOdds.draw || !marketOdds.away) {
-            console.log(`   ⚠️ Insufficient odds for ${homeTeam} vs ${awayTeam}`);
+            console.log(`   ⚠️ No 1X2 odds for ${homeTeam} vs ${awayTeam} — skipping`);
             continue;
           }
 
           // Convert kickoff time to EAT
           const kickoffEAT = toEAT(kickoffTime);
+
+          // Count how many markets have odds
+          const allMarketKeys = Object.values(REQUIRED_MARKETS).flat();
+          const marketsWithOdds = allMarketKeys.filter(k => !!marketOdds[k]).length;
 
           games.push({
             api_fixture_id: fixtureId,
@@ -388,10 +425,11 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
             away_odds: marketOdds.away,
             time_utc: kickoffTime,
             time_eat: kickoffEAT,
-            markets: marketOdds
+            markets: marketOdds,
+            markets_count: marketsWithOdds
           });
 
-          console.log(`   ✅ Added: ${homeTeam} vs ${awayTeam} (${games.length}/${MAX_GAMES})`);
+          console.log(`   ✅ Added: ${homeTeam} vs ${awayTeam} (${games.length}/${MAX_GAMES}) — ${marketsWithOdds} market odds`);
         } catch (fixtureErr) {
           console.warn(`   ⚠️ Error processing fixture:`, fixtureErr.message);
           continue;
@@ -402,19 +440,17 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       return res.status(500).json({
         success: false,
         error: `Failed to fetch today's fixtures`,
-        details: dateErr.message,
-        test_mode: true
+        details: dateErr.message
       });
     }
 
-    console.log(`\n✅ Fetched ${games.length} prematch games from API Football (TODAY ONLY - 10 MAX)`);
+    console.log(`\n✅ Fetched ${games.length} prematch games from API Football (Max ${MAX_GAMES})`);
 
     if (games.length === 0) {
       return res.json({
         success: true,
         message: `No prematch games found for today with valid odds`,
         game_count: 0,
-        test_mode: true,
         games: [],
         next_step: 'Try again tomorrow or check API Football for available matches'
       });
@@ -422,9 +458,8 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
 
     res.json({
       success: true,
-      message: `Found ${games.length} prematch games ready to add (TEST MODE - Limited to 10)`,
+      message: `Found ${games.length} prematch games ready to add`,
       game_count: games.length,
-      test_mode: true,
       matches_fetched: games.length,
       max_limit: MAX_GAMES,
       games: games,

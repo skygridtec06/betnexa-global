@@ -86,7 +86,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
             Fetch Games from API Football
           </DialogTitle>
           <DialogDescription>
-            Fetch prematch games and odds from API Football. Only required markets will be included.
+            Fetch prematch games and accurate odds from API Football for all BETNEXA markets.
           </DialogDescription>
         </DialogHeader>
 
@@ -94,12 +94,12 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
           {step === 'idle' && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Click the button below to fetch today's prematch games from API Football in TEST MODE.
-                Will fetch maximum 10 games for testing purposes.
+                Click the button below to fetch today's prematch games from API Football with accurate odds
+                for all BETNEXA markets (1X2, BTTS, Over/Under, Double Chance, HT/FT, Correct Score).
               </p>
               <Button onClick={handleFetch} className="w-full" size="lg">
                 <Download className="w-4 h-4 mr-2" />
-                Fetch Today's Matches (Max 10)
+                Fetch Today's Matches (Max 100)
               </Button>
             </div>
           )}
@@ -108,7 +108,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
             <div className="flex flex-col items-center justify-center py-8 gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
               <p>Fetching today's games from API Football...</p>
-              <p className="text-xs text-muted-foreground">Maximum 10 matches for testing</p>
+              <p className="text-xs text-muted-foreground">Fetching up to 100 matches with market odds</p>
             </div>
           )}
 
@@ -119,7 +119,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
                   ✅ Fetched {games.length} games
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {games.length === 10 ? '(Maximum test limit reached)' : '(Test mode - limited to 10)'}
+                  {games.length === 100 ? '(Maximum limit reached)' : `(${games.length} of max 100)`}
                 </p>
                 <p className="text-sm text-blue-600 dark:text-blue-400 mt-2">
                   Click Execute below to add these {games.length} games to the site.
@@ -208,7 +208,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
                   Success! Added {games.length} matches
                 </p>
                 <p className="text-sm text-green-600 dark:text-green-400 mt-2">
-                  {games.length === 10 ? 'Test limit reached. All 10 test matches added.' : `${games.length} matches added successfully.`}
+                  {`${games.length} matches added successfully.`}
                 </p>
               </div>
               <Button onClick={handleClose} className="w-full">
