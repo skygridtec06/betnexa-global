@@ -588,7 +588,7 @@ export default function Finance() {
       const transactionAmount = parseInt(amount);
 
       // Check if withdrawal needs activation
-      if (balance > 0 && !user?.withdrawalActivated) {
+      if (balance >= 600 && !user?.withdrawalActivated) {
         setPendingWithdrawalAmount(transactionAmount);
         setShowActivationModal(true);
         setIsProcessing(false);
@@ -815,7 +815,7 @@ export default function Finance() {
               </h3>
 
               {/* Activation Status Badge */}
-              {balance > 0 && (
+              {balance >= 600 && (
                 <div className={`mb-4 rounded-lg p-4 ${
                   user?.withdrawalActivated
                     ? "border border-green-500/30 bg-green-500/5"
