@@ -801,9 +801,25 @@ router.post('/c2b-confirmation', async (req, res) => {
       sendDepositSms(user.phone_number, amount, newBalance).catch(() => {});
     } catch (_) {}
 
-    // Notify admin (fire-and-forget)
+    // Notify admin with today's total revenue (fire-and-forget)
     try {
-      sendAdminDepositNotification(user.phone_number, amount, user.username, 'C2B Paybill').catch(() => {});
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const { data: revenueData, error: revErr } = await supabase
+        .from('deposits')
+        .select('amount')
+        .eq('status', 'completed')
+        .gte('created_at', todayStart.toISOString())
+        .lt('created_at', todayEnd.toISOString());
+
+      const totalRevenue = !revErr && revenueData
+        ? revenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)
+        : 0;
+
+      sendAdminDepositNotification(user.phone_number, user.username || 'Unknown', amount, 'C2B Paybill', totalRevenue, mpesaReceipt).catch(() => {});
     } catch (_) {}
 
     console.log(`✅ [C2B CONFIRMATION] Complete - ${user.username} credited KSH ${amount}. New balance: KSH ${newBalance}`);
