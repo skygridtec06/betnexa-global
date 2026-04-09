@@ -20,6 +20,7 @@ export interface UserProfile {
   withdrawalActivated: boolean;
   withdrawalActivationDate: string | null;
   isAdmin?: boolean;
+  betnexaId?: string | null;
 }
 
 interface UserContextType {
@@ -53,6 +54,7 @@ const DEFAULT_USER: UserProfile = {
   withdrawableBalance: 0,
   withdrawalActivated: false,
   withdrawalActivationDate: null,
+  betnexaId: null,
 };
 
 export function UserProvider({ children }: { children: ReactNode }) {

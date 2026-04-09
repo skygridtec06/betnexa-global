@@ -17,6 +17,8 @@ import {
   CheckCircle,
   Wallet,
   Download,
+  Copy,
+  Hash,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useUser } from "@/context/UserContext";
@@ -120,6 +122,37 @@ export default function Profile() {
             </Button>
           </div>
         </Card>
+
+        {/* BETNEXA Account Number Card */}
+        {user?.betnexaId && (
+          <Card className="mb-8 border-primary/30 bg-card p-6 neon-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <Hash className="h-5 w-5 text-primary" />
+                  <p className="text-sm font-medium text-muted-foreground">Your BETNEXA Account Number</p>
+                </div>
+                <p className="text-3xl font-bold font-mono tracking-widest text-primary">
+                  {user.betnexaId}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Use this as your Account Number when depositing via M-Pesa Paybill <span className="font-bold text-foreground">4046271</span>
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary/30 text-primary"
+                onClick={() => {
+                  navigator.clipboard.writeText(user.betnexaId || '');
+                  alert('Account number copied!');
+                }}
+              >
+                <Copy className="mr-2 h-4 w-4" /> Copy
+              </Button>
+            </div>
+          </Card>
+        )}
 
         <Tabs defaultValue="account">
           <TabsList className="grid w-full grid-cols-1">

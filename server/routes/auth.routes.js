@@ -7,6 +7,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../services/database.js');
 const { sendWelcomeSms } = require('../services/smsService.js');
+const { generateUniqueBetnexaId } = require('../services/betnexaIdService.js');
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -163,14 +164,8 @@ router.post('/login', async (req, res) => {
         withdrawalActivated: user.withdrawal_activated || false,
         withdrawalActivationDate: user.withdrawal_activation_date,
         isAdmin: user.is_admin || false,
+        betnexaId: user.betnexa_id || null,
       }
-    });
-  } catch (error) {
-    console.error('Login error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Login failed',
-      error: error.message
     });
   }
 });
@@ -208,6 +203,16 @@ router.post('/signup', async (req, res) => {
       });
     }
 
+    // Generate unique BETNEXA ID for this user
+    let betnexaId;
+    try {
+      betnexaId = await generateUniqueBetnexaId();
+      console.log(`🆔 Generated BETNEXA ID: ${betnexaId}`);
+    } catch (idError) {
+      console.warn('⚠️ Failed to generate betnexa_id, will assign later:', idError.message);
+      betnexaId = null;
+    }
+
     // Create new user
     const { data: newUser, error: createError } = await supabase
       .from('users')
@@ -224,6 +229,7 @@ router.post('/signup', async (req, res) => {
           is_admin: false,
           role: 'user',
           status: 'active',
+          betnexa_id: betnexaId,
         },
       ])
       .select()
@@ -256,9 +262,12 @@ router.post('/signup', async (req, res) => {
         totalBets: 0,
         totalWinnings: 0,
         accountBalance: 0,
+        stakeableBalance: 0,
+        withdrawableBalance: 0,
         withdrawalActivated: false,
         withdrawalActivationDate: null,
         isAdmin: false,
+        betnexaId: newUser.betnexa_id || null,
       }
     });
   } catch (error) {
@@ -326,6 +335,7 @@ router.get('/profile/:phone', async (req, res) => {
         withdrawalActivated: user.withdrawal_activated || false,
         withdrawalActivationDate: user.withdrawal_activation_date,
         isAdmin: user.is_admin || false,
+        betnexaId: user.betnexa_id || null,
       }
     });
   } catch (error) {

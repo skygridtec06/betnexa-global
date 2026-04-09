@@ -670,6 +670,26 @@ export default function Finance() {
               <h3 className="mb-4 font-display text-lg font-bold uppercase text-foreground">
                 Deposit via M-Pesa
               </h3>
+
+              {/* Offline Deposit Instructions */}
+              {user?.betnexaId && (
+                <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <p className="text-sm font-bold text-primary mb-2">💡 Deposit Offline via Paybill</p>
+                  <div className="space-y-1 text-sm text-foreground">
+                    <p>1. Go to M-Pesa → Lipa na M-Pesa → Pay Bill</p>
+                    <p>2. Business Number: <span className="font-bold text-primary">4046271</span></p>
+                    <p>3. Account Number: <span className="font-bold font-mono text-primary tracking-wider">{user.betnexaId}</span>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(user.betnexaId || ''); }}
+                        className="ml-2 text-xs text-muted-foreground hover:text-primary underline"
+                      >copy</button>
+                    </p>
+                    <p>4. Enter amount and confirm with M-Pesa PIN</p>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">Your account will be credited automatically.</p>
+                </div>
+              )}
+
               <div className="space-y-4">
                 {/* Status Messages */}
                 {statusMessage && (

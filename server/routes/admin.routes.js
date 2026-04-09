@@ -15,6 +15,8 @@ const {
   getDarajaTestConfig,
   getAccessToken,
 } = require('../services/darajaTestService');
+const { registerC2BUrls } = require('../services/c2bService');
+const { backfillBetnexaIds } = require('../services/betnexaIdService');
 const {
   registerAdminDarajaTestAttempt,
   ensureAdminDarajaTestFunding,
@@ -5579,6 +5581,40 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
   }
 });
 
-module.exports = router;
+// ─────────────────────────────────────────────────────────────────
+// C2B URL REGISTRATION & BETNEXA ID MANAGEMENT
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/c2b/register-urls
+ * Register C2B validation and confirmation URLs with Safaricom.
+ * Must be called once after deployment or URL changes.
+ */
+router.post('/c2b/register-urls', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n📡 [C2B] Admin registering C2B URLs with Safaricom...');
+    const result = await registerC2BUrls();
+    console.log('✅ [C2B] URLs registered successfully:', result);
+    return res.json({ success: true, message: 'C2B URLs registered successfully', result });
+  } catch (error) {
+    console.error('❌ [C2B] URL registration failed:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/betnexa-ids/backfill
+ * Assign BETNEXA IDs to all existing users who don't have one.
+ */
+router.post('/betnexa-ids/backfill', checkAdmin, async (req, res) => {
+  try {
+    console.log('\n🆔 [BACKFILL] Admin triggered BETNEXA ID backfill...');
+    const result = await backfillBetnexaIds();
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('❌ [BACKFILL] Error:', error.message);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 module.exports = router;

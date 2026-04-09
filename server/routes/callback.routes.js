@@ -10,6 +10,7 @@ const paymentCache = require('../services/paymentCache.js');
 const { ensureAdminDarajaTestFunding } = require('../services/adminDarajaTestFundingService');
 const { ensureUserDarajaFunding, persistUserDarajaTerminalStatus } = require('../services/userDarajaFundingService');
 const { sendDepositSms, sendAdminDepositNotification } = require('../services/smsService.js');
+const { findUserByBetnexaId } = require('../services/betnexaIdService.js');
 
 /**
  * POST /api/callbacks/payhero
@@ -604,6 +605,213 @@ router.post('/daraja-user', async (req, res) => {
   } catch (error) {
     console.error('Daraja user callback error:', error.message || error);
     res.status(200).json({ ResponseCode: '00000000', ResponseDesc: 'Accepted with error' });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// C2B (CUSTOMER TO BUSINESS) OFFLINE PAYMENT CALLBACKS
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/callbacks/c2b-validation
+ * Safaricom sends this BEFORE completing the transaction.
+ * We validate the account number (BETNEXA ID) exists.
+ */
+router.post('/c2b-validation', async (req, res) => {
+  try {
+    console.log('\n🔔 [C2B VALIDATION] Request received:', JSON.stringify(req.body, null, 2));
+
+    const { BillRefNumber, TransAmount, MSISDN, TransID } = req.body;
+    const accountNumber = (BillRefNumber || '').trim().toUpperCase();
+    const amount = parseFloat(TransAmount) || 0;
+
+    if (!accountNumber) {
+      console.log('❌ [C2B VALIDATION] No account number provided');
+      return res.json({ ResultCode: 'C2B00012', ResultDesc: 'Invalid Account Number' });
+    }
+
+    // Look up user by BETNEXA ID
+    const user = await findUserByBetnexaId(accountNumber);
+
+    if (!user) {
+      console.log(`❌ [C2B VALIDATION] No user found for BETNEXA ID: ${accountNumber}`);
+      return res.json({ ResultCode: 'C2B00012', ResultDesc: 'Invalid Account Number' });
+    }
+
+    if (amount < 1) {
+      console.log(`❌ [C2B VALIDATION] Invalid amount: ${amount}`);
+      return res.json({ ResultCode: 'C2B00013', ResultDesc: 'Invalid Amount' });
+    }
+
+    console.log(`✅ [C2B VALIDATION] Valid - User: ${user.username}, BETNEXA ID: ${accountNumber}, Amount: ${amount}, Phone: ${MSISDN}, TransID: ${TransID}`);
+
+    // Accept the transaction
+    return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+  } catch (error) {
+    console.error('❌ [C2B VALIDATION] Error:', error.message);
+    // Accept on error to avoid blocking payments
+    return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+  }
+});
+
+/**
+ * POST /api/callbacks/c2b-confirmation
+ * Safaricom sends this AFTER the transaction is completed.
+ * We credit the user's account and record the transaction.
+ */
+router.post('/c2b-confirmation', async (req, res) => {
+  try {
+    console.log('\n🔔 [C2B CONFIRMATION] Payment received:', JSON.stringify(req.body, null, 2));
+
+    const {
+      TransactionType,
+      TransID,
+      TransTime,
+      TransAmount,
+      BusinessShortCode,
+      BillRefNumber,
+      InvoiceNumber,
+      OrgAccountBalance,
+      ThirdPartyTransID,
+      MSISDN,
+      FirstName,
+      MiddleName,
+      LastName,
+    } = req.body;
+
+    const accountNumber = (BillRefNumber || '').trim().toUpperCase();
+    const amount = parseFloat(TransAmount) || 0;
+    const phoneNumber = MSISDN || '';
+    const mpesaReceipt = TransID || '';
+    const payerName = [FirstName, MiddleName, LastName].filter(Boolean).join(' ');
+
+    console.log(`📋 [C2B] Account: ${accountNumber}, Amount: KSH ${amount}, Phone: ${phoneNumber}, Receipt: ${mpesaReceipt}, Payer: ${payerName}`);
+
+    if (!accountNumber || amount <= 0) {
+      console.log('❌ [C2B CONFIRMATION] Invalid data - skipping');
+      return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+    }
+
+    // Idempotency check - don't process same TransID twice
+    const { data: existingTx } = await supabase
+      .from('transactions')
+      .select('id')
+      .eq('mpesa_receipt', mpesaReceipt)
+      .limit(1);
+
+    if (existingTx && existingTx.length > 0) {
+      console.log(`⚠️ [C2B] Transaction ${mpesaReceipt} already processed - idempotency guard`);
+      return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+    }
+
+    // Find user by BETNEXA ID
+    const user = await findUserByBetnexaId(accountNumber);
+
+    if (!user) {
+      console.error(`❌ [C2B CONFIRMATION] No user found for BETNEXA ID: ${accountNumber}. Cannot credit.`);
+      // Still log the unmatched payment for admin review
+      try {
+        await supabase.from('transactions').insert({
+          transaction_id: `C2B-UNMATCHED-${mpesaReceipt}`,
+          user_id: null,
+          type: 'deposit',
+          amount,
+          status: 'failed',
+          method: 'M-Pesa C2B Paybill',
+          phone_number: phoneNumber,
+          mpesa_receipt: mpesaReceipt,
+          description: `UNMATCHED C2B deposit - Account: ${accountNumber}, Payer: ${payerName}`,
+          admin_notes: `No user found for BETNEXA ID "${accountNumber}". Manual resolution needed.`,
+          created_at: new Date().toISOString(),
+        });
+      } catch (logErr) {
+        console.error('❌ Failed to log unmatched C2B transaction:', logErr.message);
+      }
+      return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+    }
+
+    console.log(`✅ [C2B] User found: ${user.username} (ID: ${user.id})`);
+
+    // Credit the user's balance
+    const prevBalance = parseFloat(user.account_balance) || 0;
+    const prevStakeable = parseFloat(user.stakeable_balance) || 0;
+    const newBalance = prevBalance + amount;
+    const newStakeable = prevStakeable + amount;
+
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        account_balance: newBalance,
+        stakeable_balance: newStakeable,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error(`❌ [C2B] Failed to update balance for user ${user.id}:`, updateError.message);
+      return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+    }
+
+    console.log(`✅ [C2B] Balance updated: KSH ${prevBalance} → KSH ${newBalance} (stakeable: ${prevStakeable} → ${newStakeable})`);
+
+    // Record the transaction
+    const externalRef = `C2B-${mpesaReceipt}`;
+    try {
+      await supabase.from('transactions').insert({
+        transaction_id: externalRef,
+        user_id: user.id,
+        type: 'deposit',
+        amount,
+        balance_before: prevBalance,
+        balance_after: newBalance,
+        status: 'completed',
+        method: 'M-Pesa C2B Paybill',
+        phone_number: phoneNumber,
+        mpesa_receipt: mpesaReceipt,
+        external_reference: externalRef,
+        description: `Offline M-Pesa deposit via Paybill (Account: ${accountNumber}, Payer: ${payerName})`,
+        created_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+      console.log(`✅ [C2B] Transaction record created: ${externalRef}`);
+    } catch (txErr) {
+      console.error('⚠️ [C2B] Failed to create transaction record:', txErr.message);
+    }
+
+    // Also insert into deposits table for consistency
+    try {
+      await supabase.from('deposits').insert({
+        user_id: user.id,
+        amount,
+        phone_number: phoneNumber,
+        external_reference: externalRef,
+        status: 'completed',
+        method: 'M-Pesa C2B Paybill',
+        description: `Offline deposit - Account: ${accountNumber}, Payer: ${payerName}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      console.log(`✅ [C2B] Deposit record created`);
+    } catch (depErr) {
+      console.warn('⚠️ [C2B] Failed to create deposit record:', depErr.message);
+    }
+
+    // Send SMS notification to user (fire-and-forget)
+    try {
+      sendDepositSms(user.phone_number, amount, newBalance).catch(() => {});
+    } catch (_) {}
+
+    // Notify admin (fire-and-forget)
+    try {
+      sendAdminDepositNotification(user.phone_number, amount, user.username, 'C2B Paybill').catch(() => {});
+    } catch (_) {}
+
+    console.log(`✅ [C2B CONFIRMATION] Complete - ${user.username} credited KSH ${amount}. New balance: KSH ${newBalance}`);
+    return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
+  } catch (error) {
+    console.error('❌ [C2B CONFIRMATION] Error:', error.message);
+    // Always return success to Safaricom to acknowledge
+    return res.json({ ResultCode: '0', ResultDesc: 'Accepted' });
   }
 });
 
