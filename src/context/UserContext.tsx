@@ -264,8 +264,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       // Create session for this device
       await login(data.user);
       return data.user;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Login error:', error);
+      if (error?.message === 'ACCOUNT_BANNED') throw error;
       return null;
     }
   };
