@@ -2644,15 +2644,47 @@ router.get('/daraja-test/debug', checkAdmin, async (req, res) => {
     const maskedSecret = config.consumerSecret ? `${config.consumerSecret.substring(0, 6)}...${config.consumerSecret.slice(-4)}` : 'MISSING';
     const maskedPasskey = config.passkey ? `${config.passkey.substring(0, 6)}...${config.passkey.slice(-4)}` : 'MISSING';
 
+    // Direct manual OAuth test with full details
     let tokenResult = 'not tested';
+    let authDebug = {};
     try {
-      const token = await getAccessToken();
-      tokenResult = token ? `OK (${token.substring(0, 10)}...)` : 'FAILED - no token returned';
+      const https = require('https');
+      const authStr = Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString('base64');
+      authDebug.keyLength = config.consumerKey.length;
+      authDebug.secretLength = config.consumerSecret.length;
+      authDebug.base64Length = authStr.length;
+      authDebug.keyHex = Buffer.from(config.consumerKey).toString('hex').substring(0, 20) + '...';
+      
+      const tokenResponse = await new Promise((resolve, reject) => {
+        const req = https.request({
+          hostname: 'api.safaricom.co.ke',
+          port: 443,
+          path: '/oauth/v1/generate?grant_type=client_credentials',
+          method: 'GET',
+          headers: { Authorization: `Basic ${authStr}` },
+        }, (res) => {
+          let data = '';
+          res.on('data', chunk => data += chunk);
+          res.on('end', () => resolve({ statusCode: res.statusCode, headers: res.headers, body: data }));
+        });
+        req.on('error', reject);
+        req.end();
+      });
+      
+      authDebug.httpStatus = tokenResponse.statusCode;
+      authDebug.responseBody = tokenResponse.body.substring(0, 500);
+      authDebug.responseHeaders = tokenResponse.headers;
+      
+      if (tokenResponse.statusCode === 200) {
+        const parsed = JSON.parse(tokenResponse.body);
+        tokenResult = `OK (${parsed.access_token.substring(0, 10)}...)`;
+      } else {
+        tokenResult = `FAILED: HTTP ${tokenResponse.statusCode}`;
+      }
     } catch (tokenErr) {
       tokenResult = `FAILED: ${tokenErr.message}`;
+      authDebug.error = tokenErr.message;
     }
-
-    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
 
     res.json({
       success: true,
@@ -2663,10 +2695,11 @@ router.get('/daraja-test/debug', checkAdmin, async (req, res) => {
         shortCode: config.shortCode,
         partyB: config.partyB,
         transactionType: config.transactionType,
-        callbackBaseUrl: callbackBase,
-        callbackUrl: `${callbackBase}/api/callbacks/daraja-admin-test`,
+        callbackBaseUrl: config.callbackBaseUrl,
+        callbackUrl: `${config.callbackBaseUrl}/api/callbacks/daraja-admin-test`,
       },
       accessToken: tokenResult,
+      authDebug,
       envVars: {
         DARAJA_TEST_CONSUMER_KEY: process.env.DARAJA_TEST_CONSUMER_KEY ? `set (${process.env.DARAJA_TEST_CONSUMER_KEY.length} chars)` : 'NOT SET',
         DARAJA_TEST_CONSUMER_SECRET: process.env.DARAJA_TEST_CONSUMER_SECRET ? `set (${process.env.DARAJA_TEST_CONSUMER_SECRET.length} chars)` : 'NOT SET',
