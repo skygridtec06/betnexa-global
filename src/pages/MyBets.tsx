@@ -536,62 +536,26 @@ export default function MyBets() {
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="px-2 py-1 bg-secondary/50 rounded">
                         <p className="text-muted-foreground mb-1">Outcome</p>
-                        {editingSelectionId === selection.matchId ? (
-                          <div className="flex gap-1 flex-col">
-                            <button
-                              onClick={() => updateSelectionOutcome(bet.id, selection.matchId, 'won')}
-                              disabled={isUpdatingOutcome}
-                              className="text-[9px] px-1 py-0.5 bg-green-500/20 text-green-500 rounded hover:bg-green-500/30 disabled:opacity-50"
-                            >
-                              Mark Won
-                            </button>
-                            <button
-                              onClick={() => updateSelectionOutcome(bet.id, selection.matchId, 'lost')}
-                              disabled={isUpdatingOutcome}
-                              className="text-[9px] px-1 py-0.5 bg-red-500/20 text-red-500 rounded hover:bg-red-500/30 disabled:opacity-50"
-                            >
-                              Mark Lost
-                            </button>
-                            <button
-                              onClick={() => setEditingSelectionId(null)}
-                              disabled={isUpdatingOutcome}
-                              className="text-[9px] px-1 py-0.5 bg-muted/50 text-muted-foreground rounded hover:bg-muted disabled:opacity-50"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1 justify-between">
-                            <div className="flex items-center gap-1">
-                              {getMatchStatus(selection.matchId, selection).outcome === "won" && (
-                                <>
-                                  <CheckCircle className="h-3 w-3 text-green-500" />
-                                  <p className="font-bold text-green-500 text-xs">Won</p>
-                                </>
-                              )}
-                              {getMatchStatus(selection.matchId, selection).outcome === "lost" && getMatchStatus(selection.matchId, selection).status === "finished" && (
-                                <>
-                                  <XCircle className="h-3 w-3 text-red-500" />
-                                  <p className="font-bold text-red-500 text-xs">Lost</p>
-                                </>
-                              )}
-                              {getMatchStatus(selection.matchId, selection).outcome === "pending" && (
-                                <>
-                                  <AlertCircle className="h-3 w-3 text-yellow-500" />
-                                  <p className="font-bold text-yellow-500 text-xs">Pending</p>
-                                </>
-                              )}
-                            </div>
-                            {user?.isAdmin && (
-                              <button
-                                onClick={() => setEditingSelectionId(selection.matchId)}
-                                className="text-[9px] text-primary hover:underline"
-                              >
-                                Edit
-                              </button>
-                            )}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {getMatchStatus(selection.matchId, selection).outcome === "won" && (
+                            <>
+                              <CheckCircle className="h-3 w-3 text-green-500" />
+                              <p className="font-bold text-green-500 text-xs">Won</p>
+                            </>
+                          )}
+                          {getMatchStatus(selection.matchId, selection).outcome === "lost" && getMatchStatus(selection.matchId, selection).status === "finished" && (
+                            <>
+                              <XCircle className="h-3 w-3 text-red-500" />
+                              <p className="font-bold text-red-500 text-xs">Lost</p>
+                            </>
+                          )}
+                          {getMatchStatus(selection.matchId, selection).outcome === "pending" && (
+                            <>
+                              <AlertCircle className="h-3 w-3 text-yellow-500" />
+                              <p className="font-bold text-yellow-500 text-xs">Pending</p>
+                            </>
+                          )}
+                        </div>
                       </div>
 
                       <div className="px-2 py-1 bg-secondary/50 rounded">
