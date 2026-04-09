@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowUp, ArrowDown, Phone, CheckCircle, Clock, AlertCircle, Loader, Lock, Zap } from "lucide-react";
+import { ArrowUp, ArrowDown, Phone, CheckCircle, Clock, AlertCircle, Loader, Lock, Zap, ChevronDown, ChevronUp, Copy } from "lucide-react";
 import { useBets } from "@/context/BetContext";
 import { useUser } from "@/context/UserContext";
 import { useTransactions, type Transaction } from "@/context/TransactionContext";
@@ -17,6 +17,56 @@ import { formatTransactionDateInEAT } from "@/lib/timezoneFormatter";
 
 const TEST_MIN_DEPOSIT_AMOUNT = 500;
 const TEST_ACTIVATION_FEE = 1000;
+
+function OfflineDepositSection({ betnexaId }: { betnexaId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
+  const handleCopy = (text: string, field: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 1500);
+  };
+
+  return (
+    <div className="mb-6">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-4 py-3 text-sm font-bold text-primary hover:bg-primary/10 transition-colors"
+      >
+        <span>💡 Deposit Offline via Paybill</span>
+        {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+      </button>
+      {expanded && (
+        <div className="mt-2 rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-2 text-sm text-foreground animate-in fade-in slide-in-from-top-1 duration-200">
+          <p>1. Go to M-Pesa → Lipa na M-Pesa → Pay Bill</p>
+          <p className="flex items-center gap-2 flex-wrap">
+            2. Business Number: <span className="font-bold font-mono text-primary">4046271</span>
+            <button
+              onClick={() => handleCopy('4046271', 'paybill')}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Copy className="h-3 w-3" />
+              {copiedField === 'paybill' ? 'copied!' : 'copy'}
+            </button>
+          </p>
+          <p className="flex items-center gap-2 flex-wrap">
+            3. Account Number: <span className="font-bold font-mono text-primary tracking-wider">{betnexaId}</span>
+            <button
+              onClick={() => handleCopy(betnexaId, 'account')}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Copy className="h-3 w-3" />
+              {copiedField === 'account' ? 'copied!' : 'copy'}
+            </button>
+          </p>
+          <p>4. Enter amount and confirm with M-Pesa PIN</p>
+          <p className="text-xs text-muted-foreground pt-1">Your account will be credited automatically.</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Finance() {
   const navigate = useNavigate();
@@ -673,21 +723,7 @@ export default function Finance() {
 
               {/* Offline Deposit Instructions */}
               {user?.betnexaId && (
-                <div className="mb-6 rounded-lg border border-primary/30 bg-primary/5 p-4">
-                  <p className="text-sm font-bold text-primary mb-2">💡 Deposit Offline via Paybill</p>
-                  <div className="space-y-1 text-sm text-foreground">
-                    <p>1. Go to M-Pesa → Lipa na M-Pesa → Pay Bill</p>
-                    <p>2. Business Number: <span className="font-bold text-primary">4046271</span></p>
-                    <p>3. Account Number: <span className="font-bold font-mono text-primary tracking-wider">{user.betnexaId}</span>
-                      <button
-                        onClick={() => { navigator.clipboard.writeText(user.betnexaId || ''); }}
-                        className="ml-2 text-xs text-muted-foreground hover:text-primary underline"
-                      >copy</button>
-                    </p>
-                    <p>4. Enter amount and confirm with M-Pesa PIN</p>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">Your account will be credited automatically.</p>
-                </div>
+                <OfflineDepositSection betnexaId={user.betnexaId} />
               )}
 
               <div className="space-y-4">
