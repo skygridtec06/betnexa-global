@@ -2477,21 +2477,38 @@ router.get('/users', checkAdmin, async (req, res) => {
       });
     }
 
-    // Fetch all users from users table
-    const { data: users, error: usersError } = await supabase
-      .from('users')
-      .select('*')
-      .order('created_at', { ascending: false });
+    // Fetch all users from users table (paginated to bypass Supabase 1000-row default limit)
+    let allUsers = [];
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    let keepFetching = true;
 
-    if (usersError) {
-      console.error('❌ Database query error:', usersError.message);
-      return res.status(500).json({ 
-        success: false, 
-        error: usersError.message 
-      });
+    while (keepFetching) {
+      const { data: batch, error: batchError } = await supabase
+        .from('users')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (batchError) {
+        console.error('❌ Database query error:', batchError.message);
+        return res.status(500).json({ 
+          success: false, 
+          error: batchError.message 
+        });
+      }
+
+      if (batch && batch.length > 0) {
+        allUsers = allUsers.concat(batch);
+        from += PAGE_SIZE;
+        if (batch.length < PAGE_SIZE) keepFetching = false;
+      } else {
+        keepFetching = false;
+      }
     }
 
-    console.log(`✅ Retrieved ${users?.length || 0} users successfully`);
+    const users = allUsers;
+    console.log(`✅ Retrieved ${users.length} users successfully (paginated)`);
 
     res.json({ success: true, users: users || [] });
   } catch (error) {
