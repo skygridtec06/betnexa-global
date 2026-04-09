@@ -264,7 +264,7 @@ async function ensureUserDarajaFunding({
   // Fetch user for balance update
   const { data: user, error: userError } = await supabase
     .from('users')
-    .select('account_balance, username, phone_number')
+    .select('account_balance, stakeable_balance, withdrawable_balance, username, phone_number')
     .eq('id', completedTx.user_id)
     .single();
 
@@ -277,14 +277,16 @@ async function ensureUserDarajaFunding({
   }
 
   const previousBalance = parseFloat(user.account_balance) || 0;
+  const prevStakeable = parseFloat(user.stakeable_balance) || 0;
   const creditedAmount = parseFloat(completedTx.amount) || 0;
-  const newBalance = previousBalance + creditedAmount;
+  const newStakeable = prevStakeable + creditedAmount;
+  const newBalance = newStakeable + (parseFloat(user.withdrawable_balance) || 0);
 
   // Read payment type from cache to decide activation
   const cached = paymentCache.getPayment(checkoutRequestId);
   const paymentType = cached?.payment_type || 'deposit';
 
-  const userUpdate = { account_balance: newBalance, updated_at: nowIso() };
+  const userUpdate = { account_balance: newBalance, stakeable_balance: newStakeable, updated_at: nowIso() };
   if (paymentType === 'activation') {
     userUpdate.withdrawal_activated = true;
     userUpdate.withdrawal_activation_date = timestamp;
