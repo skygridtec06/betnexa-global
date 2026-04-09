@@ -131,6 +131,16 @@ router.post('/login', async (req, res) => {
       });
     }
 
+    // Check if user is banned
+    if (user.is_banned) {
+      console.error(`🚫 Banned user attempted login: ${phone}`);
+      return res.status(403).json({
+        success: false,
+        banned: true,
+        message: 'Your account has been banned. Please contact support for assistance.'
+      });
+    }
+
     console.log(`✅ Login successful for ${phone}`);
     console.log(`   Balance from DB: KSH ${user.account_balance}`);
     console.log(`   Total Winnings from DB: KSH ${user.total_winnings}`);

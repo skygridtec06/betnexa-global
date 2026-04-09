@@ -2095,6 +2095,44 @@ router.put('/games/:gameId/set-time', checkAdmin, async (req, res) => {
   }
 });
 
+// PUT: Ban/Unban user
+router.put('/users/:userId/ban', checkAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { banned } = req.body;
+
+    console.log(`\n🚫 [PUT /api/admin/users/${userId}/ban] Setting banned=${banned}`);
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ is_banned: !!banned })
+      .eq('id', userId)
+      .select('id, username, is_banned')
+      .single();
+
+    if (error) {
+      console.error('❌ Ban update error:', error.message);
+      return res.status(500).json({ success: false, error: error.message });
+    }
+
+    // Delete all sessions for banned user to force logout
+    if (banned) {
+      const { error: sessionError } = await supabase
+        .from('sessions')
+        .delete()
+        .eq('user_id', userId);
+      if (sessionError) console.error('⚠️ Failed to clear sessions:', sessionError.message);
+      else console.log(`✅ Cleared all sessions for banned user ${userId}`);
+    }
+
+    console.log(`✅ User ${data.username} ${banned ? 'banned' : 'unbanned'}`);
+    return res.json({ success: true, user: data });
+  } catch (error) {
+    console.error('❌ Ban error:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // PUT: Edit user balance
 router.put('/users/:userId/balance', checkAdmin, async (req, res) => {
   try {

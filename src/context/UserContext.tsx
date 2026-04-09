@@ -221,6 +221,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       
       if (!response.ok || !data.success) {
         console.error('❌ Login failed:', data.message);
+        if (data.banned) {
+          throw new Error('ACCOUNT_BANNED');
+        }
         return null;
       }
 

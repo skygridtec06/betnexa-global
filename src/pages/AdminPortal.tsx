@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download, Ban } from "lucide-react";
 import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -3129,6 +3129,9 @@ const AdminPortal = () => {
                             <p><strong>Email:</strong> {user.email}</p>
                             <p><strong>Phone:</strong> {user.phone}</p>
                             <p><strong>Password:</strong> <span className="font-mono font-bold text-primary">{user.password}</span></p>
+                            {user.isBanned && (
+                              <p><Badge className="bg-red-500/20 text-red-500 flex items-center gap-1 w-fit"><Ban className="h-3 w-3" /> BANNED</Badge></p>
+                            )}
                             <p><strong>Balance:</strong> <span className="text-primary">KSH {user.accountBalance.toLocaleString()}</span></p>
                             <p><strong>Total Bets:</strong> {user.totalBets} | <strong>Winnings:</strong> KSH {user.totalWinnings.toLocaleString()}</p>
                             <p><strong>Verified:</strong> <Badge className={user.verified ? "bg-green-500/20 text-green-500" : "bg-red-500/20 text-red-500"}>{user.verified ? "Yes" : "No"}</Badge></p>
@@ -3195,6 +3198,33 @@ const AdminPortal = () => {
                                 )}
                               </Button>
                             )}
+                            <Button
+                              size="sm"
+                              variant={user.isBanned ? "hero" : "destructive"}
+                              onClick={async () => {
+                                const action = user.isBanned ? 'unban' : 'ban';
+                                if (!window.confirm(`Are you sure you want to ${action} ${user.name}?`)) return;
+                                try {
+                                  const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+                                  const res = await fetch(`${apiUrl}/api/admin/users/${user.id}/ban`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ banned: !user.isBanned }),
+                                  });
+                                  const data = await res.json();
+                                  if (data.success) {
+                                    updateUser(user.id, { isBanned: !user.isBanned });
+                                    alert(`${user.name} has been ${action}ned successfully.${!user.isBanned ? ' All their sessions have been terminated.' : ''}`);
+                                  } else {
+                                    alert(`Failed to ${action} user: ${data.error}`);
+                                  }
+                                } catch (e: any) {
+                                  alert(`Error: ${e.message}`);
+                                }
+                              }}
+                            >
+                              <Ban className="mr-1 h-3 w-3" /> {user.isBanned ? 'Unban User' : 'Ban User'}
+                            </Button>
                             <Button
                               size="sm"
                               variant="destructive"

@@ -23,6 +23,7 @@ export default function Login() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalError, setGlobalError] = useState("");
+  const [isBanned, setIsBanned] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,11 +134,16 @@ export default function Login() {
       syncBalance(localUser.accountBalance);
       setIsSubmitting(false);
       navigate("/");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Login error:", error);
-      setGlobalError(
-        "Login failed. Please check your credentials and try again."
-      );
+      if (error?.message === 'ACCOUNT_BANNED') {
+        setIsBanned(true);
+        setGlobalError("");
+      } else {
+        setGlobalError(
+          "Login failed. Please check your credentials and try again."
+        );
+      }
       setIsSubmitting(false);
     }
   };
@@ -165,6 +171,24 @@ export default function Login() {
               Welcome back to BETNEXA
             </p>
           </div>
+
+          {isBanned && (
+            <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-5 text-center">
+              <div className="text-3xl mb-2">🚫</div>
+              <h3 className="text-base font-bold text-red-500 mb-1">Account Banned</h3>
+              <p className="text-sm text-red-400 mb-4">
+                Your account has been banned. Please contact support for assistance.
+              </p>
+              <a
+                href="https://wa.me/17012000780"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-green-700 transition-colors"
+              >
+                💬 Contact Support
+              </a>
+            </div>
+          )}
 
           {globalError && (
             <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">

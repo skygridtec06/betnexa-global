@@ -17,6 +17,7 @@ export interface User {
   withdrawalActivated?: boolean;
   withdrawalActivationDate?: string | null;
   betnexaId?: string | null;
+  isBanned?: boolean;
 }
 
 interface UserManagementContextType {
@@ -93,6 +94,7 @@ export function UserManagementProvider({ children }: { children: ReactNode }) {
             withdrawalActivated: u.withdrawal_activated || false,
             withdrawalActivationDate: u.withdrawal_activation_date || null,
             betnexaId: u.betnexa_id || null,
+            isBanned: u.is_banned || false,
           };
         });
 
