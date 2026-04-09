@@ -4044,25 +4044,55 @@ const AdminPortal = () => {
             try {
               const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
               
+              // Step 1: Fetch existing games to check for duplicates
+              let existingGameIds = new Set<string>();
+              try {
+                const existingRes = await fetch(`${apiUrl}/api/admin/games`);
+                const existingData = await existingRes.json();
+                if (existingData.success && existingData.games) {
+                  for (const g of existingData.games) {
+                    // Check game_id for af- prefix (API Football sourced)
+                    if (g.game_id) existingGameIds.add(g.game_id);
+                    // Also check by team names + date to catch manually added duplicates
+                    const matchKey = `${g.home_team}|${g.away_team}|${(g.time || '').split('T')[0]}`.toLowerCase();
+                    existingGameIds.add(matchKey);
+                  }
+                }
+              } catch (e) {
+                console.warn('Could not fetch existing games for dedup check:', e);
+              }
+
               // Add each game using the standard admin API
               let successCount = 0;
               let failCount = 0;
+              let skipCount = 0;
               
               for (const game of games) {
                 try {
+                  // Check for duplicates by api_fixture_id and team+date
+                  const afGameId = `af-${game.api_fixture_id}`;
+                  const matchKey = `${game.home_team}|${game.away_team}|${(game.time_utc || game.time_eat || '').split('T')[0]}`.toLowerCase();
+                  
+                  if (existingGameIds.has(afGameId) || existingGameIds.has(matchKey)) {
+                    skipCount++;
+                    console.log(`⏭️ Skipping duplicate: ${game.home_team} vs ${game.away_team}`);
+                    continue;
+                  }
+
                   // Map snake_case API response to camelCase for admin API
                   const response = await fetch(`${apiUrl}/api/admin/games`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       phone: loggedInUser.phone,
+                      gameId: afGameId,
                       league: game.league,
-                      homeTeam: game.home_team,  // Note: API returns snake_case
+                      homeTeam: game.home_team,
                       awayTeam: game.away_team,
                       homeOdds: game.home_odds,
                       drawOdds: game.draw_odds,
                       awayOdds: game.away_odds,
-                      time: game.time_eat || game.time_utc,  // Use EAT time if available
+                      time: game.time_eat || game.time_utc,
                       status: 'upcoming',
                       markets: game.markets
                     })
@@ -4071,6 +4101,9 @@ const AdminPortal = () => {
                   const data = await response.json();
                   if (data.success) {
                     successCount++;
+                    // Track so we don't re-add in same batch
+                    existingGameIds.add(afGameId);
+                    existingGameIds.add(matchKey);
                     // Add to local games context
                     const gameData: GameOdds = {
                       id: data.game.game_id || data.game.id,
@@ -4096,7 +4129,10 @@ const AdminPortal = () => {
               }
 
               // Show result and refresh
-              alert(`✅ Added ${successCount} games${failCount > 0 ? ` (${failCount} failed)` : ''}!`);
+              const parts = [`✅ Added ${successCount} games`];
+              if (skipCount > 0) parts.push(`${skipCount} duplicates skipped`);
+              if (failCount > 0) parts.push(`${failCount} failed`);
+              alert(parts.join(', ') + '!');
               setShowFetchGamesModal(false);
               
               // Refresh games to sync with all users

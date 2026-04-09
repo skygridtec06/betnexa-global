@@ -381,6 +381,10 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       }
 
       // Step 3: Process each prematch fixture and match with odds
+      // First pass: games WITH odds from bulk fetch
+      // Second pass: games WITHOUT bulk odds — try per-fixture fetch for up to 20 extra
+      const fixturesWithoutBulkOdds = [];
+
       for (const fixture of prematchFixtures) {
         if (games.length >= MAX_GAMES) {
           console.log(`\n   ⏸️ Reached ${MAX_GAMES} games limit`);
@@ -400,6 +404,13 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
 
           // Get odds from the bulk fetch
           const oddsRows = oddsByFixture.get(fixtureId) || [];
+          
+          if (oddsRows.length === 0) {
+            // No bulk odds — save for per-fixture fallback
+            fixturesWithoutBulkOdds.push(fixture);
+            continue;
+          }
+
           const marketOdds = chooseBestOddsSet(oddsRows);
 
           if (!marketOdds || !marketOdds.home || !marketOdds.draw || !marketOdds.away) {
@@ -433,6 +444,56 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
           console.warn(`   ⚠️ Error processing fixture:`, fixtureErr.message);
           continue;
         }
+      }
+
+      // Second pass: try per-fixture odds for games not in bulk response
+      if (fixturesWithoutBulkOdds.length > 0 && games.length < MAX_GAMES) {
+        console.log(`\n📡 Fetching per-fixture odds for ${fixturesWithoutBulkOdds.length} remaining fixtures...`);
+        let perFixtureFetched = 0;
+        const PER_FIXTURE_LIMIT = 30; // Limit API calls
+
+        for (const fixture of fixturesWithoutBulkOdds) {
+          if (games.length >= MAX_GAMES || perFixtureFetched >= PER_FIXTURE_LIMIT) break;
+
+          try {
+            const fixtureId = fixture?.fixture?.id;
+            const homeTeam = fixture?.teams?.home?.name;
+            const awayTeam = fixture?.teams?.away?.name;
+            const leagueName = fixture?.league?.name || 'Football';
+            const kickoffTime = fixture?.fixture?.date;
+
+            if (!fixtureId || !homeTeam || !awayTeam) continue;
+
+            const oddsRows = await apiGetTest('/odds', { fixture: String(fixtureId) });
+            perFixtureFetched++;
+
+            const marketOdds = chooseBestOddsSet(oddsRows);
+            if (!marketOdds || !marketOdds.home || !marketOdds.draw || !marketOdds.away) continue;
+
+            const kickoffEAT = toEAT(kickoffTime);
+            const allMarketKeys = Object.values(REQUIRED_MARKETS).flat();
+            const marketsWithOdds = allMarketKeys.filter(k => !!marketOdds[k]).length;
+
+            games.push({
+              api_fixture_id: fixtureId,
+              league: leagueName,
+              home_team: homeTeam,
+              away_team: awayTeam,
+              home_odds: marketOdds.home,
+              draw_odds: marketOdds.draw,
+              away_odds: marketOdds.away,
+              time_utc: kickoffTime,
+              time_eat: kickoffEAT,
+              markets: marketOdds,
+              markets_count: marketsWithOdds
+            });
+
+            console.log(`   ✅ [per-fixture] Added: ${homeTeam} vs ${awayTeam} (${games.length}/${MAX_GAMES}) — ${marketsWithOdds} market odds`);
+          } catch (err) {
+            continue;
+          }
+        }
+        console.log(`   📊 Per-fixture pass: fetched odds for ${perFixtureFetched} fixtures`);
       }
     } catch (dateErr) {
       console.error(`❌ Error fetching fixtures for ${dateStr}:`, dateErr.message);

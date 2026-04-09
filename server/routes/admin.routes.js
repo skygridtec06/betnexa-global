@@ -797,6 +797,7 @@ router.post('/games', checkAdmin, async (req, res) => {
     }
     
     const {
+      gameId,
       league,
       homeTeam,
       awayTeam,
@@ -821,7 +822,7 @@ router.post('/games', checkAdmin, async (req, res) => {
     console.log('📊 Building game data object');
     // Only include fields that exist in the games table
     const gameData = {
-      game_id: `g${Date.now()}`,
+      game_id: gameId || `g${Date.now()}`,
       league: league || 'General',
       home_team: homeTeam,
       away_team: awayTeam,
@@ -849,6 +850,33 @@ router.post('/games', checkAdmin, async (req, res) => {
         error: 'Game with this ID already exists',
         gameId: gameData.game_id
       });
+    }
+
+    // Also check by team names + date to catch duplicates added under different IDs
+    try {
+      const gameDate = gameData.time ? gameData.time.split('T')[0] : null;
+      if (gameDate) {
+        const { data: teamDup } = await supabase
+          .from('games')
+          .select('id, game_id')
+          .ilike('home_team', gameData.home_team)
+          .ilike('away_team', gameData.away_team)
+          .gte('time', `${gameDate}T00:00:00`)
+          .lte('time', `${gameDate}T23:59:59`)
+          .limit(1)
+          .maybeSingle();
+
+        if (teamDup) {
+          console.warn(`⚠️ Duplicate fixture found: ${gameData.home_team} vs ${gameData.away_team} on ${gameDate} (existing: ${teamDup.game_id})`);
+          return res.status(409).json({
+            success: false,
+            error: `${gameData.home_team} vs ${gameData.away_team} already exists for this date`,
+            existingGameId: teamDup.game_id
+          });
+        }
+      }
+    } catch (dupErr) {
+      console.warn('⚠️ Team duplicate check failed (non-blocking):', dupErr.message);
     }
 
     console.log('🗄️  Inserting game into database');
