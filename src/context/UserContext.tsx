@@ -151,6 +151,12 @@ export function UserProvider({ children }: { children: ReactNode }) {
         const data = await res.json();
         if (data.banned) {
           console.log('🚫 User is banned, forcing logout');
+          const bannedInfo = encodeURIComponent(JSON.stringify({
+            username: user.username || user.name,
+            phone: user.phone,
+            email: user.email,
+            betnexaId: user.betnexaId,
+          }));
           setUser(null);
           setSessionId(null);
           setIsLoggedIn(false);
@@ -158,7 +164,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
           sessionStorage.removeItem('betnexa_session');
           localStorage.removeItem('betnexa_user');
           localStorage.removeItem('betnexa_session');
-          window.location.href = '/login?banned=1';
+          window.location.href = `/login?banned=1&info=${bannedInfo}`;
         }
       } catch (e) {
         // Silently fail - don't disrupt user on network errors
@@ -251,7 +257,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
       if (!response.ok || !data.success) {
         console.error('❌ Login failed:', data.message);
         if (data.banned) {
-          throw new Error('ACCOUNT_BANNED');
+          const err: any = new Error('ACCOUNT_BANNED');
+          err.userInfo = data.userInfo;
+          throw err;
         }
         return null;
       }

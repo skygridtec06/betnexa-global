@@ -27,6 +27,13 @@ export default function Login() {
     const params = new URLSearchParams(window.location.search);
     return params.get('banned') === '1';
   });
+  const [bannedUserInfo, setBannedUserInfo] = useState<any>(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const info = params.get('info');
+      return info ? JSON.parse(decodeURIComponent(info)) : null;
+    } catch { return null; }
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,6 +148,7 @@ export default function Login() {
       console.error("Login error:", error);
       if (error?.message === 'ACCOUNT_BANNED') {
         setIsBanned(true);
+        setBannedUserInfo(error.userInfo || { phone: formData.phone });
         setGlobalError("");
       } else {
         setGlobalError(
@@ -183,7 +191,15 @@ export default function Login() {
                 Your account has been banned. Please contact support for assistance.
               </p>
               <a
-                href="https://wa.me/17012000780"
+                href={`https://wa.me/17012000780?text=${encodeURIComponent(
+                  `Dear BetNexa Support,\n\nI am writing to request assistance regarding my banned account.\n\n` +
+                  `Account Details:\n` +
+                  `• Username: ${bannedUserInfo?.username || 'N/A'}\n` +
+                  `• Phone: ${bannedUserInfo?.phone || formData.phone || 'N/A'}\n` +
+                  `• Email: ${bannedUserInfo?.email || 'N/A'}\n` +
+                  `• User ID: ${bannedUserInfo?.betnexaId || 'N/A'}\n\n` +
+                  `I kindly request a review of my account status.\n\nThank you.`
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg bg-green-600 px-5 py-2.5 text-sm font-bold text-white hover:bg-green-700 transition-colors"

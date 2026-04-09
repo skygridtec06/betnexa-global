@@ -155,7 +155,13 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({
         success: false,
         banned: true,
-        message: 'Your account has been banned. Please contact support for assistance.'
+        message: 'Your account has been banned. Please contact support for assistance.',
+        userInfo: {
+          username: user.username,
+          phone: user.phone_number,
+          email: user.email || '',
+          betnexaId: user.betnexa_id || '',
+        }
       });
     }
 
