@@ -2698,8 +2698,8 @@ router.post('/daraja-test/deposit', checkAdmin, async (req, res) => {
     const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
     const referenceSuffix = `${Date.now()}`.slice(-8);
     const externalReference = `ADMINTEST-${referenceSuffix}`;
-    const callbackBaseUrl = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
-    const callbackUrl = `${callbackBaseUrl}/api/callbacks/daraja-admin-test`;
+    const darajaConfig = getDarajaTestConfig();
+    const callbackUrl = `${darajaConfig.callbackBaseUrl}/api/callbacks/daraja-admin-test`;
 
     const result = await initiateAdminTestStkPush({
       phoneNumber: normalizedPhone,

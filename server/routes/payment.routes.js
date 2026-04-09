@@ -1295,7 +1295,7 @@ router.post('/daraja/initiate', async (req, res) => {
     const suffix = `${Date.now()}`.slice(-8);
     const externalReference = `DUSER-${paymentType.toUpperCase().slice(0, 3)}-${suffix}`;
 
-    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
+    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/[\r\n]+/g, '').replace(/\/$/, '').trim();
     const callbackUrl = `${callbackBase}/api/callbacks/daraja-user`;
 
     const descriptionMap = {
@@ -1492,7 +1492,7 @@ router.post('/test-deposit', async (req, res) => {
     const suffix = `${Date.now()}`.slice(-8);
     const externalReference = `TEST-${suffix}`;
 
-    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/\/$/, '');
+    const callbackBase = (process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-tau-puce.vercel.app').replace(/[\r\n]+/g, '').replace(/\/$/, '').trim();
     const callbackUrl = `${callbackBase}/api/callbacks/daraja-user`;
 
     console.log('\n💳 Payment Details:');
