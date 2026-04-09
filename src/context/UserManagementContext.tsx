@@ -16,6 +16,7 @@ export interface User {
   accountBalance: number;
   withdrawalActivated?: boolean;
   withdrawalActivationDate?: string | null;
+  betnexaId?: string | null;
 }
 
 interface UserManagementContextType {
@@ -91,6 +92,7 @@ export function UserManagementProvider({ children }: { children: ReactNode }) {
             accountBalance: parseFloat(u.account_balance || 0),
             withdrawalActivated: u.withdrawal_activated || false,
             withdrawalActivationDate: u.withdrawal_activation_date || null,
+            betnexaId: u.betnexa_id || null,
           };
         });
 

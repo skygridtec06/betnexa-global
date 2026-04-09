@@ -3125,6 +3125,7 @@ const AdminPortal = () => {
                             <Badge variant="outline" className="text-[10px]">{user.username}</Badge>
                           </div>
                           <div className="grid gap-2 text-xs text-muted-foreground">
+                            <p><strong>User ID:</strong> <span className="font-mono font-bold text-primary">{user.betnexaId || 'N/A'}</span></p>
                             <p><strong>Email:</strong> {user.email}</p>
                             <p><strong>Phone:</strong> {user.phone}</p>
                             <p><strong>Password:</strong> <span className="font-mono font-bold text-primary">{user.password}</span></p>
