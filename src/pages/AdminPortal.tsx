@@ -3210,7 +3210,7 @@ const AdminPortal = () => {
                                   const res = await fetch(`${apiUrl}/api/admin/users/${user.id}/ban`, {
                                     method: 'PUT',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ banned: !user.isBanned }),
+                                    body: JSON.stringify({ banned: !user.isBanned, phone: loggedInUser?.phone }),
                                   });
                                   const data = await res.json();
                                   if (data.success) {
