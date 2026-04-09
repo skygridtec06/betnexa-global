@@ -237,13 +237,12 @@ async function apiGet(path, params = {}) {
   return json.response || [];
 }
 
-// Convert UTC timestamp to EAT
+// Pass through fixture time as-is (API already returns times in the requested timezone)
 function toEAT(isoString) {
   if (!isoString) return new Date().toISOString();
   const d = new Date(isoString);
   if (isNaN(d.getTime())) return new Date().toISOString();
-  // EAT is UTC+3, so add 3 hours then get ISO
-  return new Date(d.getTime() + 3 * 60 * 60 * 1000).toISOString();
+  return d.toISOString();
 }
 
 // Health check (CORS handled globally by express cors() middleware)
