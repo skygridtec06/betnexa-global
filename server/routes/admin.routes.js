@@ -3685,6 +3685,13 @@ router.post('/transactions/withdrawal', async (req, res) => {
       });
     }
 
+    if (parseFloat(amount) < 600) {
+      return res.status(400).json({
+        success: false,
+        error: 'Minimum withdrawal amount is KSH 600'
+      });
+    }
+
     if (!supabase) {
       console.error('❌ Supabase client is not initialized');
       return res.status(503).json({ 

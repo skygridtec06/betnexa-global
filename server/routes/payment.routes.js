@@ -116,6 +116,15 @@ router.post('/initiate', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Amount must be at least KSH 1' });
     }
 
+    // Enforce minimum withdrawal amount
+    if (resolvedPaymentType === 'withdrawal' && numAmount < 600) {
+      console.log('❌ Validation failed: Withdrawal amount too low');
+      return res.status(400).json({
+        success: false,
+        message: 'Minimum withdrawal amount is KSH 600'
+      });
+    }
+
     // If withdrawal, enforce only withdrawable_balance can be withdrawn (winnings)
     if (resolvedPaymentType === 'withdrawal') {
       // Fetch user's withdrawable_balance (winnings only)
