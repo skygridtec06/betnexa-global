@@ -140,6 +140,35 @@ export function UserProvider({ children }: { children: ReactNode }) {
     initializeAuth();
   }, []);
 
+  // Periodic ban check - force logout if user gets banned
+  useEffect(() => {
+    if (!user?.phone || !isLoggedIn) return;
+
+    const checkBanStatus = async () => {
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const res = await fetch(`${apiUrl}/api/auth/ban-check?phone=${encodeURIComponent(user.phone)}`);
+        const data = await res.json();
+        if (data.banned) {
+          console.log('🚫 User is banned, forcing logout');
+          setUser(null);
+          setSessionId(null);
+          setIsLoggedIn(false);
+          sessionStorage.removeItem('betnexa_user');
+          sessionStorage.removeItem('betnexa_session');
+          localStorage.removeItem('betnexa_user');
+          localStorage.removeItem('betnexa_session');
+          window.location.href = '/login?banned=1';
+        }
+      } catch (e) {
+        // Silently fail - don't disrupt user on network errors
+      }
+    };
+
+    const interval = setInterval(checkBanStatus, 30000);
+    return () => clearInterval(interval);
+  }, [user?.phone, isLoggedIn]);
+
   const login = async (userData: UserProfile) => {
     try {
       console.log(`\n🔐 [login] Setting user session`);

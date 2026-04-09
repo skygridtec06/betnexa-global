@@ -86,6 +86,24 @@ const findUserByPhone = async (phone) => {
 };
 
 /**
+ * GET /api/auth/ban-check
+ * Check if a user is banned (lightweight endpoint for periodic checks)
+ */
+router.get('/ban-check', async (req, res) => {
+  try {
+    const phone = req.query.phone;
+    if (!phone) return res.json({ banned: false });
+
+    const { user } = await findUserByPhone(phone);
+    if (!user) return res.json({ banned: false });
+
+    return res.json({ banned: !!user.is_banned });
+  } catch (error) {
+    return res.json({ banned: false });
+  }
+});
+
+/**
  * POST /api/auth/login
  * Login user with phone and password
  */

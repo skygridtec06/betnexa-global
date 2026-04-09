@@ -23,7 +23,10 @@ export default function Login() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [globalError, setGlobalError] = useState("");
-  const [isBanned, setIsBanned] = useState(false);
+  const [isBanned, setIsBanned] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('banned') === '1';
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
