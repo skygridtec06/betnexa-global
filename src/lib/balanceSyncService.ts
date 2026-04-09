@@ -97,6 +97,15 @@ class BalanceSyncService {
         const balance = parseFloat(data.balance);
         this.lastFetchedBalance.set(userId, balance);
 
+        // Update stakeable/withdrawable in localStorage for BetContext to pick up
+        if (data.stakeable_balance !== undefined || data.withdrawable_balance !== undefined) {
+          const stakeableBalance = parseFloat(data.stakeable_balance) || balance;
+          const withdrawableBalance = parseFloat(data.withdrawable_balance) || 0;
+          window.dispatchEvent(new CustomEvent('split_balance_updated', {
+            detail: { userId, stakeableBalance, withdrawableBalance, accountBalance: balance }
+          }));
+        }
+
         // Track activation status changes
         const activated = data.withdrawalActivated || false;
         const prevActivated = this.lastFetchedActivation.get(userId);

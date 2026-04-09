@@ -922,7 +922,7 @@ router.get('/user-balance/:userId', async (req, res) => {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('account_balance, withdrawal_activated, withdrawal_activation_date')
+        .select('account_balance, stakeable_balance, withdrawable_balance, withdrawal_activated, withdrawal_activation_date')
         .eq('id', userId);
 
       if (error) {
@@ -948,22 +948,23 @@ router.get('/user-balance/:userId', async (req, res) => {
       }
 
       const depositedBalance = parseFloat(data[0].account_balance) || 0;
-      // Some environments do not have winnings_balance column on users.
-      // Keep response shape stable by returning zero instead of throwing.
-      const winningsBalance = 0;
+      const stakeableBalance = parseFloat(data[0].stakeable_balance) || depositedBalance;
+      const withdrawableBalance = parseFloat(data[0].withdrawable_balance) || 0;
       const accountBalance = depositedBalance;
-      const availableToBet = depositedBalance;
+      const availableToBet = stakeableBalance;
       const withdrawalActivated = data[0].withdrawal_activated || false;
       const withdrawalActivationDate = data[0].withdrawal_activation_date || null;
-      console.log('✅ User balance fetched successfully:', { userId, accountBalance, availableToBet, withdrawalActivated });
+      console.log('✅ User balance fetched successfully:', { userId, accountBalance, stakeableBalance, withdrawableBalance, withdrawalActivated });
 
       res.json({
         success: true,
         balance: accountBalance,
         account_balance: accountBalance,
         available_to_bet: availableToBet,
+        stakeable_balance: stakeableBalance,
+        withdrawable_balance: withdrawableBalance,
         deposited_balance: depositedBalance,
-        winnings_balance: winningsBalance,
+        winnings_balance: withdrawableBalance,
         withdrawalActivated,
         withdrawalActivationDate,
         userId,

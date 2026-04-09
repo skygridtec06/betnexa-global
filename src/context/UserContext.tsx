@@ -15,6 +15,8 @@ export interface UserProfile {
   totalBets: number;
   totalWinnings: number;
   accountBalance: number;
+  stakeableBalance: number;
+  withdrawableBalance: number;
   withdrawalActivated: boolean;
   withdrawalActivationDate: string | null;
   isAdmin?: boolean;
@@ -47,6 +49,8 @@ const DEFAULT_USER: UserProfile = {
   totalBets: 245,
   totalWinnings: 15750,
   accountBalance: 10000,
+  stakeableBalance: 10000,
+  withdrawableBalance: 0,
   withdrawalActivated: false,
   withdrawalActivationDate: null,
 };

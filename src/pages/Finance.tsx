@@ -101,6 +101,18 @@ export default function Finance() {
       updateUser({ accountBalance: newBalance });
     });
 
+    // Subscribe to split balance updates from sync service
+    const handleSplitBalance = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail.userId === user?.id) {
+        console.log('📊 Split balance synced:', detail);
+        setStakeableBalance(detail.stakeableBalance);
+        setWithdrawableBalance(detail.withdrawableBalance);
+        setBalance(detail.accountBalance);
+      }
+    };
+    window.addEventListener('split_balance_updated', handleSplitBalance);
+
     // Subscribe to activation status changes
     const unsubActivation = balanceSyncService.subscribeActivation(user?.id || 'user1', (activated, activationDate) => {
       console.log('🔐 Activation synced:', activated);
@@ -113,9 +125,10 @@ export default function Finance() {
     return () => {
       unsubscribe();
       unsubActivation();
+      window.removeEventListener('split_balance_updated', handleSplitBalance);
       balanceSyncService.stopAutoSync();
     };
-  }, [user?.id, setBalance, updateUser]);
+  }, [user?.id, setBalance, setStakeableBalance, setWithdrawableBalance, updateUser]);
 
   // Sync split balances from user data
   useEffect(() => {
