@@ -1279,17 +1279,45 @@ router.post('/daraja/initiate', async (req, res) => {
     // Fetch user to get betnexa_id
     let betnexaId = '';
     try {
+      console.log(`[STK Push] Looking up betnexa_id for userId: ${userId}`);
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('username, account_name, betnexa_id')
+        .select('username, betnexa_id')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       
-      if (!userError && userData) {
-        betnexaId = userData.betnexa_id || '';
+      console.log(`[STK Push] User lookup result:`, userData ? `${userData.username}, betnexa_id=${userData.betnexa_id}` : 'not found', userError?.message || '');
+      
+      if (!userError && userData && userData.betnexa_id) {
+        betnexaId = userData.betnexa_id;
       }
     } catch (userFetchError) {
       console.warn('⚠️ Could not fetch user data:', userFetchError.message);
+    }
+
+    // Fallback: look up by phone if userId didn't return betnexa_id
+    if (!betnexaId && phoneNumber) {
+      try {
+        const candidates = [];
+        const raw = phoneNumber.replace(/\s+/g, '');
+        candidates.push(raw);
+        if (raw.startsWith('+254')) candidates.push('0' + raw.slice(4), raw.slice(1));
+        else if (raw.startsWith('254')) candidates.push('0' + raw.slice(3), '+' + raw);
+        else if (raw.startsWith('0')) candidates.push('254' + raw.slice(1), '+254' + raw.slice(1));
+
+        const { data: phoneUser } = await supabase
+          .from('users')
+          .select('betnexa_id')
+          .in('phone_number', candidates)
+          .maybeSingle();
+
+        if (phoneUser?.betnexa_id) {
+          betnexaId = phoneUser.betnexa_id;
+          console.log(`[STK Push] Found betnexa_id via phone fallback: ${betnexaId}`);
+        }
+      } catch (e) {
+        console.warn('⚠️ Phone fallback lookup failed:', e.message);
+      }
     }
 
     const normalizedPhone = normalizeDarajaPhoneNumber(phoneNumber);
