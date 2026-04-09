@@ -41,7 +41,7 @@ async function registerC2BUrls() {
       {
         hostname: 'api.safaricom.co.ke',
         port: 443,
-        path: '/mpesa/c2b/v1/registerurl',
+        path: '/mpesa/c2b/v2/registerurl',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
