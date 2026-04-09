@@ -12,7 +12,7 @@ function getDarajaTestConfig() {
   const cleanUrl = (value) => (typeof value === 'string' ? value.replace(/[\r\n]+/g, '').trim() : value);
   const config = {
     consumerKey: clean(process.env.DARAJA_TEST_CONSUMER_KEY) || 'IZVSC3FNNyAE0yrSgOGR7WcKHDw9Gb6v4A7TSzd5hUIYIYeh',
-    consumerSecret: clean(process.env.DARAJA_TEST_CONSUMER_SECRET) || 'wtpDmTTTWorWufcT4DjOxM5owxObInFaBDMuinfosgIE1MOHqXa8AWBq7XV8QYz',
+    consumerSecret: clean(process.env.DARAJA_TEST_CONSUMER_SECRET) || 'wtpDmTTTWorWufcT4KDjOxM5owxObInFaBDMuinfosgIE1MOHqXa8AWBq7XV8QYz',
     passkey: clean(process.env.DARAJA_TEST_PASSKEY) || '111395f54f1d024f27aae4b9312f6badd3774738f3ef76d7d35df32fe04575a6',
     shortCode: clean(process.env.DARAJA_TEST_SHORT_CODE) || '4046271',
     partyB: clean(process.env.DARAJA_TEST_PARTY_B) || '4046271',
