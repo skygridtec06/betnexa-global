@@ -62,7 +62,7 @@ router.post('/place', async (req, res) => {
     if (userId) {
       const byIdResult = await supabase
         .from('users')
-        .select('id, account_balance, stakeable_balance, withdrawable_balance, winnings_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
         .eq('id', userId)
         .maybeSingle();
       user = byIdResult.data;
@@ -72,7 +72,7 @@ router.post('/place', async (req, res) => {
     if (!user && phoneNumber) {
       const byPhoneResult = await supabase
         .from('users')
-        .select('id, account_balance, stakeable_balance, withdrawable_balance, winnings_balance, total_bets, phone_number')
+        .select('id, account_balance, stakeable_balance, withdrawable_balance, total_bets, phone_number')
         .eq('phone_number', phoneNumber)
         .maybeSingle();
       user = byPhoneResult.data;
@@ -114,14 +114,13 @@ router.post('/place', async (req, res) => {
 
     // DEDUCT STAKE FROM STAKEABLE BALANCE ONLY
     const newStakeable = stakeableBalance - parseFloat(stake);
-    const withdrawableBalance = parseFloat(user.withdrawable_balance || 0);
-    const winningsBalance = parseFloat(user.winnings_balance || 0);
-    const totalNonStakeable = Math.max(withdrawableBalance, winningsBalance);
-    const newAccountBalance = newStakeable + totalNonStakeable; // Total for display
+    // Non-stakeable = total balance minus stakeable (includes winnings from any column)
+    const nonStakeableBalance = Math.max(0, parseFloat(user.account_balance || 0) - stakeableBalance);
+    const newAccountBalance = newStakeable + nonStakeableBalance; // Total for display
 
     console.log(`🎮 Bet placed - Deducting stake from stakeable balance`);
     console.log(`   Stakeable: KSH ${stakeableBalance} → KSH ${newStakeable}`);
-    console.log(`   Withdrawable (unchanged): KSH ${withdrawableBalance}`);
+    console.log(`   Non-stakeable (unchanged): KSH ${nonStakeableBalance}`);
     console.log(`   Total: KSH ${newAccountBalance}`);
 
     const { error: updateError } = await supabase
@@ -232,7 +231,7 @@ router.post('/place', async (req, res) => {
         status: 'Open'
       },
       stakeableBalance: newStakeable,
-      withdrawableBalance: withdrawableBalance,
+      withdrawableBalance: nonStakeableBalance,
       newBalance: newAccountBalance
     });
   } catch (error) {
