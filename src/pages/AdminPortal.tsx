@@ -311,7 +311,8 @@ const AdminPortal = () => {
       user.name?.toLowerCase().includes(query) ||
       user.username?.toLowerCase().includes(query) ||
       user.phone?.toLowerCase().includes(query) ||
-      user.email?.toLowerCase().includes(query)
+      user.email?.toLowerCase().includes(query) ||
+      user.betnexaId?.toLowerCase().includes(query)
     );
   });
 
@@ -2956,7 +2957,7 @@ const AdminPortal = () => {
             
             <div className="mb-6">
               <Input
-                placeholder="Search users by name, username, phone, or email..."
+                placeholder="Search users by name, username, phone, email, or user ID..."
                 value={userSearchQuery}
                 onChange={(e) => setUserSearchQuery(e.target.value)}
                 className="h-10"
