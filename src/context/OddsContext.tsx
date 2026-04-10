@@ -58,15 +58,6 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
         
-        // Maintain API-managed schedule as today+tomorrow before loading list.
-        try {
-          await fetch(`${apiUrl}/api/live/bootstrap-schedule`, {
-            signal: AbortSignal.timeout(30000),
-          });
-        } catch {
-          // Non-blocking: still load existing DB games if bootstrap is unavailable
-        }
-        
         console.log('🔄 Fetching games from:', apiUrl);
 
         const controller = new AbortController();
