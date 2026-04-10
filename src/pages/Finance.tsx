@@ -298,15 +298,29 @@ export default function Finance() {
             setActivationPhoneNumber("");
 
             if (pendingWithdrawalAmount !== null) {
-              setTimeout(() => processPendingWithdrawal(pendingWithdrawalAmount), 1500);
+              const savedWithdrawalAmount = pendingWithdrawalAmount;
               setPendingWithdrawalAmount(null);
-            }
 
-            setTimeout(() => {
-              setShowProcessingModal(false);
-              setStatusMessage("");
-              setPaymentStatus(null);
-            }, 4000);
+              // Wait for activation message to display, then process the withdrawal
+              setTimeout(async () => {
+                setStatusMessage("🔄 Processing your withdrawal...");
+                setPaymentStatus("initiating");
+                await processPendingWithdrawal(savedWithdrawalAmount);
+
+                // Keep modal open until withdrawal status is visible
+                setTimeout(() => {
+                  setShowProcessingModal(false);
+                  setStatusMessage("");
+                  setPaymentStatus(null);
+                }, 3500);
+              }, 2000);
+            } else {
+              setTimeout(() => {
+                setShowProcessingModal(false);
+                setStatusMessage("");
+                setPaymentStatus(null);
+              }, 4000);
+            }
           } else if (st === 'cancelled') {
             clearInterval(interval);
             setStatusCheckInterval(null);
@@ -358,15 +372,27 @@ export default function Finance() {
             setActivationPhoneNumber("");
 
             if (pendingWithdrawalAmount !== null) {
-              setTimeout(() => processPendingWithdrawal(pendingWithdrawalAmount), 1500);
+              const savedWithdrawalAmount = pendingWithdrawalAmount;
               setPendingWithdrawalAmount(null);
-            }
 
-            setTimeout(() => {
-              setShowProcessingModal(false);
-              setStatusMessage("");
-              setPaymentStatus(null);
-            }, 4000);
+              setTimeout(async () => {
+                setStatusMessage("🔄 Processing your withdrawal...");
+                setPaymentStatus("initiating");
+                await processPendingWithdrawal(savedWithdrawalAmount);
+
+                setTimeout(() => {
+                  setShowProcessingModal(false);
+                  setStatusMessage("");
+                  setPaymentStatus(null);
+                }, 3500);
+              }, 2000);
+            } else {
+              setTimeout(() => {
+                setShowProcessingModal(false);
+                setStatusMessage("");
+                setPaymentStatus(null);
+              }, 4000);
+            }
           } else {
             setPaymentStatus("failed");
             setStatusMessage("❌ Activation timed out. Please try again.");
@@ -422,7 +448,7 @@ export default function Finance() {
       updateUser({ accountBalance: balance - withdrawalAmount });
 
       setAmount("");
-      setStatusMessage("✅ Withdrawal request submitted");
+      setStatusMessage(`✅ Withdrawal of KSH ${withdrawalAmount.toLocaleString()} submitted successfully`);
       setPaymentStatus("success");
     } catch (error) {
       setStatusMessage(`❌ Withdrawal failed: ${error instanceof Error ? error.message : error}`);
@@ -430,11 +456,6 @@ export default function Finance() {
     } finally {
       withdrawalInProgress.current = false;
     }
-
-    setTimeout(() => {
-      setStatusMessage("");
-      setPaymentStatus(null);
-    }, 3000);
   };
 
   const handleTransaction = async () => {
