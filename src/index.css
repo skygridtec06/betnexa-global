@@ -214,4 +214,8 @@
     border-color: hsl(280 85% 55%);
     color: hsl(280 85% 55%);
   }
+
+  :root.light .app-logo {
+    mix-blend-mode: screen;
+  }
 }

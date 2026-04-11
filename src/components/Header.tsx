@@ -63,7 +63,7 @@ export function Header() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <img src={Logo} alt="BETNEXA Logo" className="h-12 w-12" />
+          <img src={Logo} alt="BETNEXA Logo" className="h-12 w-12 rounded-lg app-logo" />
           <span className="font-display text-xl font-bold tracking-wider text-foreground hidden sm:inline">
             BET<span className="text-primary">NEXA</span>
           </span>

@@ -165,7 +165,7 @@ export default function Login() {
       <header className="border-b border-border/50 bg-background/95 backdrop-blur-md">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-2 w-fit cursor-pointer">
-            <img src={Logo} alt="BETNEXA Logo" className="h-10 w-10" />
+            <img src={Logo} alt="BETNEXA Logo" className="h-10 w-10 rounded-lg app-logo" />
             <span className="font-display text-lg font-bold tracking-wider text-foreground">
               BET<span className="text-primary">NEXA</span>
             </span>
