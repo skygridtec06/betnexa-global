@@ -54,6 +54,51 @@
     --font-display: 'Rajdhani', sans-serif;
     --font-body: 'DM Sans', sans-serif;
   }
+
+  :root.light {
+    --background: 270 30% 98%;
+    --foreground: 260 20% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 260 20% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 260 20% 12%;
+
+    --primary: 280 85% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 190 70% 92%;
+    --secondary-foreground: 260 20% 15%;
+
+    --muted: 270 20% 93%;
+    --muted-foreground: 260 10% 40%;
+
+    --accent: 320 80% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 80% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 270 20% 88%;
+    --input: 270 20% 88%;
+    --ring: 280 85% 55%;
+
+    --neon-glow: 280 85% 60%;
+    --gold: 45 100% 50%;
+    --gold-foreground: 260 20% 12%;
+    --live: 350 90% 55%;
+    --warning: 38 100% 50%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 260 20% 15%;
+    --sidebar-primary: 280 85% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 190 70% 92%;
+    --sidebar-accent-foreground: 260 20% 15%;
+    --sidebar-border: 270 20% 88%;
+    --sidebar-ring: 280 85% 55%;
+  }
 }
 
 @layer base {
@@ -122,5 +167,47 @@
     background: hsl(142 72% 45% / 0.2);
     border-color: hsl(142 72% 45%);
     color: hsl(142 72% 55%);
+  }
+
+  :root.light .text-glow {
+    text-shadow: 0 0 10px hsl(280 85% 55% / 0.5), 0 0 30px hsl(320 80% 55% / 0.3);
+  }
+
+  :root.light .neon-border {
+    box-shadow: 0 0 5px hsl(280 85% 55% / 0.3), inset 0 0 5px hsl(280 85% 55% / 0.1);
+  }
+
+  :root.light .card-glow {
+    box-shadow: 0 4px 20px hsl(270 30% 70% / 0.2), 0 0 15px hsl(280 85% 55% / 0.08);
+  }
+
+  :root.light .gradient-primary {
+    background: linear-gradient(135deg, hsl(280 85% 55%), hsl(320 80% 55%));
+  }
+
+  :root.light .gradient-dark {
+    background: linear-gradient(180deg, hsl(270 30% 97%), hsl(270 30% 94%));
+  }
+
+  :root.light .gradient-card {
+    background: linear-gradient(145deg, hsl(0 0% 100%), hsl(270 20% 97%));
+  }
+
+  :root.light .odds-btn {
+    background: hsl(270 20% 96%);
+    color: hsl(260 20% 20%);
+    border: 1px solid hsl(270 20% 88%);
+  }
+
+  :root.light .odds-btn:hover {
+    background: hsl(280 85% 55% / 0.1);
+    border-color: hsl(280 85% 55% / 0.5);
+    color: hsl(280 85% 55%);
+  }
+
+  :root.light .odds-btn.selected {
+    background: hsl(280 85% 55% / 0.15);
+    border-color: hsl(280 85% 55%);
+    color: hsl(280 85% 55%);
   }
 }

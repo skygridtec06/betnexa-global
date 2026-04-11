@@ -11,6 +11,7 @@ import { OddsProvider } from "./context/OddsContext";
 import { UserManagementProvider } from "./context/UserManagementContext";
 import { TransactionProvider } from "./context/TransactionContext";
 import { PresenceProvider } from "./context/PresenceContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import { BalanceSyncProvider } from "./components/BalanceSyncProvider";
 import { PresenceTracker } from "./components/PresenceTracker";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -41,6 +42,7 @@ const LoadingPage = () => (
 const App = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
       <TooltipProvider>
         <UserManagementProvider>
           <TransactionProvider>
@@ -79,6 +81,7 @@ const App = () => {
           </TransactionProvider>
         </UserManagementProvider>
       </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 };

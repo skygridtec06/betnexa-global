@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, User, Wallet, Bell, Search, ChevronDown, LogOut, Download, PlusCircle } from "lucide-react";
+import { Menu, X, User, Wallet, Bell, Search, ChevronDown, LogOut, Download, PlusCircle, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import Logo from "@/assets/betnexa official logo .jpeg";
 import betnexaAPK from "@/assets/betnexa apk.apk";
 import { useBets } from "@/context/BetContext";
 import { useUser } from "@/context/UserContext";
+import { useTheme } from "@/context/ThemeContext";
 
 const sports = [
   { name: "Football", path: "/", emoji: "⚽" },
@@ -24,6 +25,7 @@ export function Header() {
   const navigate = useNavigate();
   const { balance, stakeableBalance, withdrawableBalance } = useBets();
   const { isLoggedIn, logout, user } = useUser();
+  const { theme, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     logout();
@@ -188,6 +190,14 @@ export function Header() {
             >
               <Download className="h-4 w-4" />
               {isDownloading ? "Downloading APK..." : "Download APK"}
+            </button>
+            {/* Theme Toggle */}
+            <button
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-secondary w-full font-medium transition-colors"
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-purple-500" />}
+              {theme === "dark" ? "Light Mode" : "Dark Mode"}
             </button>
             {isLoggedIn && (
               <button
