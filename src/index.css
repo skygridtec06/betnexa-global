@@ -109,10 +109,14 @@
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body);
+    font-weight: 500;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3 {
     font-family: var(--font-display);
+    font-weight: 700;
   }
 }
 
