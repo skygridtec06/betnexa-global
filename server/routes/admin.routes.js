@@ -1658,35 +1658,17 @@ router.put('/games/:gameId/markets', checkAdmin, async (req, res) => {
         market_key: key,
         odds: odds,
         updated_at: nowIso,
-        manually_edited_at: nowIso,
       };
     });
 
     if (entriesToInsert.length > 0) {
       let { error: insErr } = await supabase.from('markets').insert(entriesToInsert);
 
-      // Fallback if manually_edited_at column doesn't exist
-      if (insErr && /manually_edited_at|column .* does not exist/i.test(insErr.message || '')) {
-        console.warn(`   ⚠️ Retrying without manually_edited_at column`);
-        const fallback = entriesToInsert.map(e => {
-          const copy = { ...e };
-          delete copy.manually_edited_at;
-          return copy;
-        });
-        insErr = (await supabase.from('markets').insert(fallback)).error;
-      }
-
       if (insErr) {
         console.error(`   ❌ Insert error: ${insErr.message}`);
-        // Try to restore the markets by re-inserting with original values
+        // Try to restore the markets by re-inserting
         console.log(`   🔧 RECOVERING: Re-attempting insert for markets...`);
-        const { error: recoveryErr } = await supabase.from('markets').insert(
-          entriesToInsert.map(e => {
-            const copy = { ...e };
-            delete copy.manually_edited_at;
-            return copy;
-          })
-        );
+        const { error: recoveryErr } = await supabase.from('markets').insert(entriesToInsert);
         if (recoveryErr) {
           console.error(`   ❌ Recovery failed: ${recoveryErr.message}`);
           return res.status(500).json({ error: 'Failed to update markets', details: insErr.message });

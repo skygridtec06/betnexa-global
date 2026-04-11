@@ -63,8 +63,9 @@ export function OddsProvider({ children }: { children: ReactNode }) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-        const response = await fetch(`${apiUrl}/api/admin/games`, {
+        const response = await fetch(`${apiUrl}/api/admin/games?_t=${Date.now()}`, {
           signal: controller.signal,
+          cache: 'no-store',
         });
 
         clearTimeout(timeoutId);
@@ -273,8 +274,9 @@ export function OddsProvider({ children }: { children: ReactNode }) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
         
-        const response = await fetch(`${apiUrl}/api/admin/games`, {
+        const response = await fetch(`${apiUrl}/api/admin/games?_t=${Date.now()}`, {
           signal: controller.signal,
+          cache: 'no-store',
         });
         
         clearTimeout(timeoutId);
@@ -391,8 +393,9 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
-      const response = await fetch(`${apiUrl}/api/admin/games`, {
+      const response = await fetch(`${apiUrl}/api/admin/games?_t=${Date.now()}`, {
         signal: controller.signal,
+        cache: 'no-store',
       });
 
       clearTimeout(timeoutId);

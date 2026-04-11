@@ -1406,6 +1406,8 @@ const AdminPortal = () => {
     const details = gameDetailsEdit[gameId];
     if (!details) return;
 
+    let marketsSaved = false;
+
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       console.log(`✏️  Updating game details: ${gameId}`);
@@ -1414,6 +1416,7 @@ const AdminPortal = () => {
       const response = await fetch(`${apiUrl}/api/admin/games/${gameId}/details`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        cache: 'no-store',
         body: JSON.stringify({
           phone: loggedInUser.phone,
           league: details.league || game.league,
@@ -1443,14 +1446,18 @@ const AdminPortal = () => {
         );
         
         if (Object.keys(marketsToSave).length > 0) {
+          const marketPayload = Object.fromEntries(
+            Object.entries(marketsToSave).map(([k, v]) => [k, parseFloat(v as any)])
+          );
+          console.log(`📊 Sending ${Object.keys(marketPayload).length} markets to backend:`, JSON.stringify(marketPayload).slice(0, 200));
+          
           const marketsResponse = await fetch(`${apiUrl}/api/admin/games/${gameId}/markets`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
+            cache: 'no-store',
             body: JSON.stringify({
               phone: loggedInUser.phone,
-              markets: Object.fromEntries(
-                Object.entries(marketsToSave).map(([k, v]) => [k, parseFloat(v as any)])
-              )
+              markets: marketPayload
             })
           });
 
@@ -1460,27 +1467,41 @@ const AdminPortal = () => {
           if (!marketsData.success) {
             console.error('❌ Markets save error:', marketsData);
             alert(`⚠️ Game details saved but markets failed: ${marketsData.error || 'Unknown error'}`);
+            return;
+          }
+          
+          // Use the verified saved markets from the backend response
+          if (marketsData.savedMarkets) {
+            marketsSaved = true;
+            updateGame(gameId, {
+              league: details.league || game.league,
+              homeTeam: details.homeTeam || game.homeTeam,
+              awayTeam: details.awayTeam || game.awayTeam,
+              homeOdds: details.homeOdds ? parseFloat(details.homeOdds) : game.homeOdds,
+              drawOdds: details.drawOdds ? parseFloat(details.drawOdds) : game.drawOdds,
+              awayOdds: details.awayOdds ? parseFloat(details.awayOdds) : game.awayOdds,
+              time: details.kickoffTime || game.time,
+              markets: marketsData.savedMarkets
+            });
           }
         }
       }
 
-      // Update UI
-      updateGame(gameId, {
-        league: details.league || game.league,
-        homeTeam: details.homeTeam || game.homeTeam,
-        awayTeam: details.awayTeam || game.awayTeam,
-        homeOdds: details.homeOdds ? parseFloat(details.homeOdds) : game.homeOdds,
-        drawOdds: details.drawOdds ? parseFloat(details.drawOdds) : game.drawOdds,
-        awayOdds: details.awayOdds ? parseFloat(details.awayOdds) : game.awayOdds,
-        time: details.kickoffTime || game.time,
-        ...(details.markets && Object.keys(details.markets).length > 0 && {
-          markets: Object.fromEntries(
-            Object.entries(details.markets)
-              .filter(([_, v]) => v && parseFloat(v as any) > 0)
-              .map(([k, v]) => [k, parseFloat(v as any)])
-          )
-        })
-      });
+      // Update UI (only if markets weren't already handled above)
+      if (!marketsSaved) {
+        updateGame(gameId, {
+          league: details.league || game.league,
+          homeTeam: details.homeTeam || game.homeTeam,
+          awayTeam: details.awayTeam || game.awayTeam,
+          homeOdds: details.homeOdds ? parseFloat(details.homeOdds) : game.homeOdds,
+          drawOdds: details.drawOdds ? parseFloat(details.drawOdds) : game.drawOdds,
+          awayOdds: details.awayOdds ? parseFloat(details.awayOdds) : game.awayOdds,
+          time: details.kickoffTime || game.time,
+        });
+      }
+
+      // Force refresh from database to ensure all clients see updated markets
+      await refreshGames();
 
       setEditingGameDetails(null);
       const newEdit = { ...gameDetailsEdit };
