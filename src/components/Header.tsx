@@ -130,6 +130,9 @@ export function Header() {
                 Logout
               </Button>
             )}
+            <Button variant="ghost" size="icon" onClick={toggleTheme} title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}>
+              {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-purple-500" />}
+            </Button>
           </div>
           <div className="flex items-center gap-1.5 md:hidden min-w-0">
             {isLoggedIn && (
