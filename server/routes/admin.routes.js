@@ -685,10 +685,31 @@ router.get('/games', async (req, res) => {
       });
     }
 
-    console.log(`✅ Retrieved ${games?.length || 0} games successfully`);
+    // Auto-cleanup: delete API-fetched (af-) games whose kickoff has passed
+    const now = new Date();
+    const afGamesToDelete = (games || []).filter(g => {
+      if (!g.game_id || !g.game_id.startsWith('af-')) return false;
+      if (g.status === 'live' || g.status === 'finished') return false;
+      const kickoff = new Date(g.time);
+      return !isNaN(kickoff.getTime()) && kickoff <= now;
+    });
+
+    if (afGamesToDelete.length > 0) {
+      const idsToDelete = afGamesToDelete.map(g => g.id);
+      console.log(`🗑️ Auto-deleting ${idsToDelete.length} expired af- games`);
+      // Delete markets first, then games
+      await supabase.from('markets').delete().in('game_id', idsToDelete);
+      await supabase.from('games').delete().in('id', idsToDelete);
+    }
+
+    // Return remaining games (exclude the ones just deleted)
+    const deletedIds = new Set(afGamesToDelete.map(g => g.id));
+    const remainingGames = (games || []).filter(g => !deletedIds.has(g.id));
+
+    console.log(`✅ Retrieved ${remainingGames.length} games successfully`);
 
     // Fetch markets for each game
-    let gamesWithMarkets = games || [];
+    let gamesWithMarkets = remainingGames;
     if (gamesWithMarkets.length > 0) {
       try {
         // Use only the UUID id field for marketing queries
