@@ -37,7 +37,7 @@ export function Header() {
     const id = user?.betnexaId || user?.betnexa_id || 'N/A';
     const phone = user?.phone || user?.phone_number || 'N/A';
     const email = user?.email || 'N/A';
-    const message = `Hello BETNEXA Support Team,\n\nI am a registered user and I need assistance.\n\n--- Account Details ---\nName: ${name}\nBETNEXA ID: ${id}\nPhone: ${phone}\nEmail: ${email}\n\nPlease help me with the following:\n`;
+    const message = `Hello BETNEXA Support Team,\n\nI am a registered user and I need assistance.\n\n--- Account Details ---\nName: ${name}\nBETNEXA ID: ${id}\nPhone: ${phone}\nEmail: ${email}\n`;
     const encoded = encodeURIComponent(message);
     window.open(`https://wa.me/17012000780?text=${encoded}`, '_blank');
   };
