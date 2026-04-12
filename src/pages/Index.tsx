@@ -48,7 +48,10 @@ const sortEndedGames = (games: any[]) => {
 
 const isFutureKickoff = (time: string) => {
   const kickoffMs = new Date(time).getTime();
-  return !Number.isNaN(kickoffMs) && kickoffMs > Date.now();
+  if (Number.isNaN(kickoffMs)) return false;
+  // Show games until 3 hours after kickoff (covers full match duration)
+  const threeHoursMs = 3 * 60 * 60 * 1000;
+  return kickoffMs + threeHoursMs > Date.now();
 };
 
 const Index = () => {
