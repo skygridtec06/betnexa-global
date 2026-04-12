@@ -266,8 +266,7 @@ router.post('/test', (req, res) => {
 // POST: Fetch preview - Get games from API Football
 router.post('/fetch-preview', checkAdmin, async (req, res) => {
   try {
-    const MAX_GAMES = 100;
-    console.log(`\n🔍 [API Football Fetch Preview] Fetching TODAY'S prematch games (Max ${MAX_GAMES})...`);
+    console.log(`\n🔍 [API Football Fetch Preview] Fetching ALL of TODAY'S prematch games...`);
 
     // Use the test API key for this fetch preview endpoint
     const TEST_API_KEY = '49f4155b78d58351ed95b5c3bbcebd9e';
@@ -386,11 +385,6 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       const fixturesWithoutBulkOdds = [];
 
       for (const fixture of prematchFixtures) {
-        if (games.length >= MAX_GAMES) {
-          console.log(`\n   ⏸️ Reached ${MAX_GAMES} games limit`);
-          break;
-        }
-
         try {
           const fixtureId = fixture?.fixture?.id;
           if (!fixtureId) continue;
@@ -439,7 +433,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
             markets_count: marketsWithOdds
           });
 
-          console.log(`   ✅ Added: ${homeTeam} vs ${awayTeam} (${games.length}/${MAX_GAMES}) — ${marketsWithOdds} market odds`);
+          console.log(`   ✅ Added: ${homeTeam} vs ${awayTeam} (${games.length}) — ${marketsWithOdds} market odds`);
         } catch (fixtureErr) {
           console.warn(`   ⚠️ Error processing fixture:`, fixtureErr.message);
           continue;
@@ -447,13 +441,13 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       }
 
       // Second pass: try per-fixture odds for games not in bulk response
-      if (fixturesWithoutBulkOdds.length > 0 && games.length < MAX_GAMES) {
+      if (fixturesWithoutBulkOdds.length > 0) {
         console.log(`\n📡 Fetching per-fixture odds for ${fixturesWithoutBulkOdds.length} remaining fixtures...`);
         let perFixtureFetched = 0;
         const PER_FIXTURE_LIMIT = 30; // Limit API calls
 
         for (const fixture of fixturesWithoutBulkOdds) {
-          if (games.length >= MAX_GAMES || perFixtureFetched >= PER_FIXTURE_LIMIT) break;
+          if (perFixtureFetched >= PER_FIXTURE_LIMIT) break;
 
           try {
             const fixtureId = fixture?.fixture?.id;
@@ -488,7 +482,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
               markets_count: marketsWithOdds
             });
 
-            console.log(`   ✅ [per-fixture] Added: ${homeTeam} vs ${awayTeam} (${games.length}/${MAX_GAMES}) — ${marketsWithOdds} market odds`);
+            console.log(`   ✅ [per-fixture] Added: ${homeTeam} vs ${awayTeam} (${games.length}) — ${marketsWithOdds} market odds`);
           } catch (err) {
             continue;
           }
@@ -504,7 +498,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       });
     }
 
-    console.log(`\n✅ Fetched ${games.length} prematch games from API Football (Max ${MAX_GAMES})`);
+    console.log(`\n✅ Fetched ${games.length} prematch games from API Football (no limit)`);
 
     if (games.length === 0) {
       return res.json({
@@ -521,7 +515,7 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
       message: `Found ${games.length} prematch games ready to add`,
       game_count: games.length,
       matches_fetched: games.length,
-      max_limit: MAX_GAMES,
+      max_limit: 'unlimited',
       games: games,
       next_step: 'Call /api/admin/fetch-api-football/execute with the games to add them to the site'
     });
