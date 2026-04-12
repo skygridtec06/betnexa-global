@@ -5518,9 +5518,9 @@ router.get('/earnings', checkAdmin, async (req, res) => {
     
     // Fetch completed deposits from transactions table (includes STK push + C2B)
     console.log('[EARNINGS] Fetching deposits from transactions...');
-    let deposits = [];
+    let allTransactions = [];
     try {
-      deposits = await fetchAll('transactions', 'amount', [
+      allTransactions = await fetchAll('transactions', 'amount', [
         { op: 'eq', col: 'type', val: 'deposit' },
         { op: 'eq', col: 'status', val: 'completed' },
         { op: 'gte', col: 'created_at', val: startIso },
@@ -5530,9 +5530,20 @@ router.get('/earnings', checkAdmin, async (req, res) => {
       console.error('[EARNINGS] Error fetching deposits:', depositsError);
       return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
     }
-    console.log(`[EARNINGS] Deposits found: ${deposits.length}`);
+    console.log(`[EARNINGS] Total transactions found: ${allTransactions.length}`);
     
-    // Fetch activation fees from activation_fees table
+    // Classify: 1000 = activation fees, 399 = priority fees, rest = deposits
+    const deposits = [];
+    const activationFromTx = [];
+    const priorityFromTx = [];
+    allTransactions.forEach(t => {
+      const amt = parseFloat(t.amount || 0);
+      if (amt === 1000) activationFromTx.push(t);
+      else if (amt === 399) priorityFromTx.push(t);
+      else deposits.push(t);
+    });
+    
+    // Also fetch from activation_fees table
     console.log('[EARNINGS] Fetching activation fees...');
     let activationFees = [];
     try {
@@ -5544,15 +5555,16 @@ router.get('/earnings', checkAdmin, async (req, res) => {
     } catch (activationFeesError) {
       console.warn('[EARNINGS] Warning fetching activation fees:', activationFeesError);
     }
-    console.log(`[EARNINGS] Activation fees found: ${activationFees.length}`);
+    console.log(`[EARNINGS] Activation fees from table: ${activationFees.length}`);
     
     // Calculate totals
     const totalDeposits = deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
-    const totalActivationFees = activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0);
-    const totalPriorityFees = 0;
+    const totalActivationFees = activationFromTx.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
+      + activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0);
+    const totalPriorityFees = priorityFromTx.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
     const masterTotal = totalDeposits + totalActivationFees + totalPriorityFees;
     
-    console.log(`[EARNINGS] Results - Deposits: KSH ${totalDeposits}, Activation Fees: KSH ${totalActivationFees}, Total: KSH ${masterTotal}`);
+    console.log(`[EARNINGS] Results - Deposits: KSH ${totalDeposits}, Activation Fees: KSH ${totalActivationFees}, Priority Fees: KSH ${totalPriorityFees}, Total: KSH ${masterTotal}`);
     
     res.json({
       success: true,
@@ -5564,8 +5576,8 @@ router.get('/earnings', checkAdmin, async (req, res) => {
         totalPriorityFees: Math.round(totalPriorityFees),
         masterTotal: Math.round(masterTotal),
         depositCount: deposits.length,
-        activationFeeCount: activationFees.length,
-        priorityFeeCount: 0,
+        activationFeeCount: activationFromTx.length + activationFees.length,
+        priorityFeeCount: priorityFromTx.length,
       }
     });
   } catch (error) {
@@ -5618,9 +5630,9 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
     
     // Fetch completed deposits from transactions table
     console.log('[EARNINGS_DAILY] Fetching deposits from transactions...');
-    let deposits = [];
+    let allTransactions = [];
     try {
-      deposits = await fetchAll('transactions', 'amount, created_at', [
+      allTransactions = await fetchAll('transactions', 'amount, created_at', [
         { op: 'eq', col: 'type', val: 'deposit' },
         { op: 'eq', col: 'status', val: 'completed' },
         { op: 'gte', col: 'created_at', val: startIso },
@@ -5630,7 +5642,7 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
       console.error('[EARNINGS_DAILY] Error fetching deposits:', depositsError);
       return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
     }
-    console.log(`[EARNINGS_DAILY] Deposits found: ${deposits.length}`);
+    console.log(`[EARNINGS_DAILY] Total transactions found: ${allTransactions.length}`);
     
     console.log('[EARNINGS_DAILY] Fetching activation fees...');
     let activationFees = [];
@@ -5645,15 +5657,18 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
     }
     console.log(`[EARNINGS_DAILY] Activation fees found: ${activationFees.length}`);
     
-    // Group by date
+    // Group by date, classify: 1000 = activation, 399 = priority, rest = deposits
     const dailyEarnings = {};
     
-    deposits.forEach(d => {
-      const date = new Date(d.created_at).toISOString().split('T')[0];
+    allTransactions.forEach(t => {
+      const date = new Date(t.created_at).toISOString().split('T')[0];
       if (!dailyEarnings[date]) {
         dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
       }
-      dailyEarnings[date].deposits += parseFloat(d.amount || 0);
+      const amt = parseFloat(t.amount || 0);
+      if (amt === 1000) dailyEarnings[date].activation += amt;
+      else if (amt === 399) dailyEarnings[date].priority += amt;
+      else dailyEarnings[date].deposits += amt;
     });
     
     activationFees.forEach(af => {

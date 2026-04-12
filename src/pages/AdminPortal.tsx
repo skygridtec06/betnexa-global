@@ -76,6 +76,38 @@ const AdminPortal = () => {
   const [showDarajaTestModal, setShowDarajaTestModal] = useState(false);
   const [showFetchGamesModal, setShowFetchGamesModal] = useState(false);
   const [adminTab, setAdminTab] = useState("games");
+  const [showPinDialog, setShowPinDialog] = useState(false);
+  const [pinInput, setPinInput] = useState("");
+  const [pinError, setPinError] = useState("");
+  const [pendingTab, setPendingTab] = useState("");
+  const [unlockedTabs, setUnlockedTabs] = useState<Set<string>>(new Set());
+
+  const PIN_PROTECTED_TABS = ["earnings", "transactions"];
+  const ADMIN_PIN_HASH = "140702";
+
+  const handleTabChange = (tab: string) => {
+    if (PIN_PROTECTED_TABS.includes(tab) && !unlockedTabs.has(tab)) {
+      setPendingTab(tab);
+      setPinInput("");
+      setPinError("");
+      setShowPinDialog(true);
+    } else {
+      setAdminTab(tab);
+    }
+  };
+
+  const handlePinSubmit = () => {
+    if (pinInput === ADMIN_PIN_HASH) {
+      setUnlockedTabs(prev => new Set([...prev, pendingTab]));
+      setAdminTab(pendingTab);
+      setShowPinDialog(false);
+      setPinInput("");
+      setPinError("");
+    } else {
+      setPinError("Incorrect PIN. Access denied.");
+      setPinInput("");
+    }
+  };
   const [selectedGameForEvents, setSelectedGameForEvents] = useState<{
     id: string;
     name: string;
@@ -2069,7 +2101,7 @@ const AdminPortal = () => {
           ))}
         </div>
 
-        <Tabs value={adminTab} onValueChange={setAdminTab}>
+        <Tabs value={adminTab} onValueChange={handleTabChange}>
           <TabsList className="mb-6 bg-secondary grid w-full grid-cols-8">
             <TabsTrigger value="games" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               <Trophy className="mr-1 h-4 w-4" /> Games
@@ -4166,6 +4198,44 @@ const AdminPortal = () => {
             }
           }}
         />
+
+        {/* PIN Dialog for protected tabs */}
+        <Dialog open={showPinDialog} onOpenChange={(open) => { if (!open) { setShowPinDialog(false); setPinInput(""); setPinError(""); } }}>
+          <DialogContent className="sm:max-w-[360px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Lock className="h-5 w-5 text-primary" /> PIN Required
+              </DialogTitle>
+              <DialogDescription>
+                Enter your admin PIN to access {pendingTab === "earnings" ? "Earnings" : "Transactions"}.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 pt-2">
+              <Input
+                type="password"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="Enter 6-digit PIN"
+                value={pinInput}
+                onChange={(e) => { setPinInput(e.target.value.replace(/\D/g, '')); setPinError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") handlePinSubmit(); }}
+                className="text-center text-2xl tracking-[0.5em] font-mono"
+                autoFocus
+              />
+              {pinError && (
+                <p className="text-sm text-destructive font-medium text-center">{pinError}</p>
+              )}
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => { setShowPinDialog(false); setPinInput(""); setPinError(""); }}>
+                  Cancel
+                </Button>
+                <Button variant="hero" className="flex-1" onClick={handlePinSubmit} disabled={pinInput.length < 6}>
+                  Unlock
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
