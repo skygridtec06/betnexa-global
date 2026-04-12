@@ -458,11 +458,18 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
       </div>
 
       {/* 1X2 always visible */}
-      <div className="grid grid-cols-3 gap-2">
-        <OddBtn label="1" value={effectiveOdds.home} type="home" />
-        <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
-        <OddBtn label="2" value={effectiveOdds.away} type="away" />
-      </div>
+      {match.drawOdds > 0 ? (
+        <div className="grid grid-cols-3 gap-2">
+          <OddBtn label="1" value={effectiveOdds.home} type="home" />
+          <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
+          <OddBtn label="2" value={effectiveOdds.away} type="away" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          <OddBtn label="1" value={effectiveOdds.home} type="home" />
+          <OddBtn label="2" value={effectiveOdds.away} type="away" />
+        </div>
+      )}
 
       {displayGame.status === "live" && (
         <div className="mt-2 rounded-lg border border-green-500/30 bg-green-500/10 p-2 text-center">
@@ -506,11 +513,18 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
 
           {/* Market content */}
           {activeTab === "1X2" && (
-            <div className="grid grid-cols-3 gap-2">
-              <OddBtn label="1" value={effectiveOdds.home} type="home" />
-              <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
-              <OddBtn label="2" value={effectiveOdds.away} type="away" />
-            </div>
+            match.drawOdds > 0 ? (
+              <div className="grid grid-cols-3 gap-2">
+                <OddBtn label="1" value={effectiveOdds.home} type="home" />
+                <OddBtn label="X" value={effectiveOdds.draw} type="draw" />
+                <OddBtn label="2" value={effectiveOdds.away} type="away" />
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <OddBtn label="1" value={effectiveOdds.home} type="home" />
+                <OddBtn label="2" value={effectiveOdds.away} type="away" />
+              </div>
+            )
           )}
 
           {activeTab === "BTTS" && (

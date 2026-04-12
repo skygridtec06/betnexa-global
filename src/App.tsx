@@ -61,6 +61,10 @@ const App = () => {
                                 <Route path="/login" element={<Login />} />
                                 <Route path="/signup" element={<Signup />} />
                                 <Route path="/" element={<ProtectedRoute element={<Index />} />} />
+                                <Route path="/basketball" element={<ProtectedRoute element={<Index sport="basketball" />} />} />
+                                <Route path="/tennis" element={<ProtectedRoute element={<Index sport="tennis" />} />} />
+                                <Route path="/cricket" element={<ProtectedRoute element={<Index sport="cricket" />} />} />
+                                <Route path="/boxing" element={<ProtectedRoute element={<Index sport="boxing" />} />} />
                                 <Route path="/finance" element={<ProtectedRoute element={<Finance />} />} />
                                 <Route path="/my-bets" element={<ProtectedRoute element={<MyBets />} />} />
                                 <Route path="/history" element={<ProtectedRoute element={<History />} />} />

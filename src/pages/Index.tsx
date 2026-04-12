@@ -11,6 +11,10 @@ import { useOdds } from "@/context/OddsContext";
 
 type MatchView = "upcoming" | "live" | "ended";
 
+interface IndexProps {
+  sport?: string;
+}
+
 const getMarketFromType = (type: string): string => {
   if (['home', 'draw', 'away'].includes(type)) return '1X2';
   if (type.startsWith('btts')) return 'BTTS';
@@ -51,7 +55,7 @@ const isFutureKickoff = (time: string) => {
   return !Number.isNaN(kickoffMs) && kickoffMs > Date.now();
 };
 
-const Index = () => {
+const Index = ({ sport = 'football' }: IndexProps) => {
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>(() => {
     try {
       const raw = localStorage.getItem('betSlipItems');
@@ -89,8 +93,8 @@ const Index = () => {
   // Enable auto bet calculation
   useBetAutoCalculation();
 
-  // Show all games including finished ones
-  const games = apiGames;
+  // Show all games including finished ones, filtered by sport
+  const games = apiGames.filter((g) => (g.sport || 'football') === sport);
 
   const filteredGames = searchQuery.trim()
     ? games.filter((g) => {
@@ -123,6 +127,11 @@ const Index = () => {
       ]);
     }
   };
+
+  // Sport display info
+  const sportEmoji: Record<string, string> = { football: '⚽', basketball: '🏀', tennis: '🎾', cricket: '🏏', boxing: '🥊' };
+  const sportLabel = sport.charAt(0).toUpperCase() + sport.slice(1);
+  const emoji = sportEmoji[sport] || '⚽';
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -184,7 +193,7 @@ const Index = () => {
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
                 <TrendingUp className="mr-2 inline h-5 w-5 text-primary" />
-                Upcoming Matches
+                Upcoming {sportLabel} {emoji}
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -218,7 +227,7 @@ const Index = () => {
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
                 <span className="inline-block h-3 w-3 rounded-full bg-live mr-2 animate-pulse" />
-                LIVE Matches
+                LIVE {sportLabel} {emoji}
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

@@ -685,10 +685,12 @@ router.get('/games', async (req, res) => {
       });
     }
 
-    // Auto-cleanup: delete API-fetched (af-) games whose kickoff has passed
+    // Auto-cleanup: delete API-fetched (af-, ab-) games whose kickoff has passed
     const now = new Date();
     const afGamesToDelete = (games || []).filter(g => {
-      if (!g.game_id || !g.game_id.startsWith('af-')) return false;
+      if (!g.game_id) return false;
+      const isApiGame = g.game_id.startsWith('af-') || g.game_id.startsWith('ab-');
+      if (!isApiGame) return false;
       if (g.status === 'live' || g.status === 'finished') return false;
       const kickoff = new Date(g.time);
       return !isNaN(kickoff.getTime()) && kickoff <= now;
@@ -788,8 +790,23 @@ router.get('/games', async (req, res) => {
       }
     }
 
-    console.log(`✅ [GET /api/admin/games] Response ready: ${gamesWithMarkets.length} games with markets`);
-    res.json({ success: true, games: gamesWithMarkets });
+    // Derive sport from game_id prefix and attach to each game
+    function getSportFromGameId(gameId) {
+      if (!gameId) return 'football';
+      if (gameId.startsWith('ab-') || gameId.startsWith('bb-')) return 'basketball';
+      if (gameId.startsWith('tn-')) return 'tennis';
+      if (gameId.startsWith('ck-')) return 'cricket';
+      if (gameId.startsWith('bx-')) return 'boxing';
+      return 'football';
+    }
+
+    const gamesWithSport = gamesWithMarkets.map(g => ({
+      ...g,
+      sport: getSportFromGameId(g.game_id)
+    }));
+
+    console.log(`✅ [GET /api/admin/games] Response ready: ${gamesWithSport.length} games with markets`);
+    res.json({ success: true, games: gamesWithSport });
   } catch (error) {
     console.error('❌ Get games error:', error.message || error);
     // Return empty array instead of error so frontend can load
@@ -828,6 +845,7 @@ router.post('/games', checkAdmin, async (req, res) => {
       time,
       status,
       markets,  // Markets will be handled separately
+      sport,    // Optional: 'football','basketball','tennis','cricket','boxing'
     } = req.body;
 
     console.log('🔍 Validating request parameters');
@@ -840,10 +858,14 @@ router.post('/games', checkAdmin, async (req, res) => {
     }
     console.log('✅ Parameters valid');
 
+    // Generate game_id with sport prefix
+    const sportPrefixes = { basketball: 'bb', tennis: 'tn', cricket: 'ck', boxing: 'bx' };
+    const defaultGameId = sportPrefixes[sport] ? `${sportPrefixes[sport]}-${Date.now()}` : `g${Date.now()}`;
+
     console.log('📊 Building game data object');
     // Only include fields that exist in the games table
     const gameData = {
-      game_id: gameId || `g${Date.now()}`,
+      game_id: gameId || defaultGameId,
       league: league || 'General',
       home_team: homeTeam,
       away_team: awayTeam,

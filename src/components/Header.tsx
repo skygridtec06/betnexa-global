@@ -82,17 +82,18 @@ export function Header() {
         {/* Desktop Nav */}
         <nav className="hidden items-center gap-1 md:flex">
           {sports.map((sport) => (
-            <div
+            <Link
               key={sport.name}
-              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors opacity-50 cursor-not-allowed ${
+              to={sport.path}
+              className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 location.pathname === sport.path
                   ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary"
               }`}
             >
               <span>{sport.emoji}</span>
               {sport.name}
-            </div>
+            </Link>
           ))}
           <div
             className="ml-1 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium opacity-50 cursor-not-allowed"
@@ -180,13 +181,19 @@ export function Header() {
         <div className="animate-fade-up border-t border-border bg-background px-4 py-4 md:hidden">
           <div className="flex flex-col gap-2">
             {sports.map((sport) => (
-              <div
+              <Link
                 key={sport.name}
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm opacity-50 cursor-not-allowed"
+                to={sport.path}
+                onClick={() => setMenuOpen(false)}
+                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                  location.pathname === sport.path
+                    ? "bg-primary/10 text-primary font-semibold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                }`}
               >
                 <span>{sport.emoji}</span>
                 {sport.name}
-              </div>
+              </Link>
             ))}
             {isLoggedIn && user?.isAdmin && (
               <Link to="/muleiadmin" onClick={() => setMenuOpen(false)}>

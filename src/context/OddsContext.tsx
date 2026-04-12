@@ -20,6 +20,7 @@ export interface GameOdds {
   gamePaused?: boolean;
   kickoffPausedAt?: number | string; // Timestamp when paused (ISO string or milliseconds)
   isHalftime?: boolean;
+  sport?: string; // 'football' | 'basketball' | 'tennis' | 'cricket' | 'boxing'
 }
 
 interface OddsContextType {
@@ -99,6 +100,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
               gamePaused: g.game_paused || false,
               kickoffPausedAt: g.kickoff_paused_at || undefined,
               isHalftime: g.is_halftime || false,
+              sport: g.sport || 'football',
             }));
             
             // Remove duplicates by ID and sort by ID for stable ordering to prevent reranking/collision issues

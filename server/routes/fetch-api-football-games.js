@@ -8,8 +8,28 @@ const router = express.Router();
 const supabase = require('../services/database');
 
 const API_BASE = 'https://v3.football.api-sports.io';
+const BASKETBALL_API_BASE = 'https://v1.basketball.api-sports.io';
 const API_KEY = process.env.API_FOOTBALL_KEY || process.env.APISPORTS_KEY || '';
 const TZ = 'Africa/Nairobi';
+
+// Sport prefix mapping for game IDs
+const SPORT_PREFIXES = {
+  football: 'af',
+  basketball: 'ab',
+  tennis: 'tn',
+  cricket: 'ck',
+  boxing: 'bx'
+};
+
+// Derive sport from game_id prefix
+function getSportFromGameId(gameId) {
+  if (!gameId) return 'football';
+  if (gameId.startsWith('ab-') || gameId.startsWith('bb-')) return 'basketball';
+  if (gameId.startsWith('tn-')) return 'tennis';
+  if (gameId.startsWith('ck-')) return 'cricket';
+  if (gameId.startsWith('bx-')) return 'boxing';
+  return 'football';
+}
 
 // Middleware to check if user is admin (same as in admin.routes.js)
 async function checkAdmin(req, res, next) {
@@ -532,10 +552,10 @@ router.post('/fetch-preview', checkAdmin, async (req, res) => {
   }
 });
 
-// POST: Execute - add the fetched games to the site
+// POST: Execute - add the fetched games to the site (actually saves to DB)
 router.post('/execute', checkAdmin, async (req, res) => {
   try {
-    const { games: gamesToAdd } = req.body;
+    const { games: gamesToAdd, sport = 'football' } = req.body;
 
     if (!gamesToAdd || !Array.isArray(gamesToAdd) || gamesToAdd.length === 0) {
       return res.status(400).json({
@@ -544,32 +564,92 @@ router.post('/execute', checkAdmin, async (req, res) => {
       });
     }
 
-    console.log(`\n💾 [Execute API Football Games] Adding ${gamesToAdd.length} games...`);
+    console.log(`\n💾 [Execute API Games] Adding ${gamesToAdd.length} ${sport} games...`);
 
-    // Would need supabase passed in or imported
-    // For now, return success structure that frontend expects
-    const results = {
-      added: [],
-      failed: [],
-      total_requested: gamesToAdd.length
-    };
+    const results = { added: [], failed: [], total_requested: gamesToAdd.length };
+    const prefix = SPORT_PREFIXES[sport] || 'af';
 
-    // In production, this would insert into Supabase
-    // For now just return the games formatted for the response
-    const added = gamesToAdd.map(g => ({
-      game_id: `af-${g.api_fixture_id}`,
-      status: 'added'
-    }));
+    for (const g of gamesToAdd) {
+      try {
+        const gameId = `${prefix}-${g.api_fixture_id}`;
 
-    results.added = added;
+        // Check if already exists
+        const { data: existing } = await supabase
+          .from('games')
+          .select('id')
+          .eq('game_id', gameId)
+          .maybeSingle();
 
-    console.log(`✅ ${added.length} games executed`);
+        if (existing) {
+          console.log(`   ⏭️ ${gameId} already exists, skipping`);
+          results.added.push({ game_id: gameId, status: 'already_exists' });
+          continue;
+        }
+
+        const drawOdds = (sport === 'basketball' || sport === 'tennis' || sport === 'boxing')
+          ? 0 : (parseFloat(g.draw_odds) || parseFloat(g.markets?.draw) || 3.0);
+
+        const gameData = {
+          game_id: gameId,
+          league: g.league || sport.charAt(0).toUpperCase() + sport.slice(1),
+          home_team: g.home_team,
+          away_team: g.away_team,
+          home_odds: parseFloat(g.home_odds) || 1.90,
+          draw_odds: drawOdds,
+          away_odds: parseFloat(g.away_odds) || 1.90,
+          time: g.time_utc || g.time_eat || new Date().toISOString(),
+          status: 'upcoming'
+        };
+
+        const { data: game, error: insertErr } = await supabase
+          .from('games')
+          .insert([gameData])
+          .select()
+          .single();
+
+        if (insertErr) {
+          console.error(`   ❌ Failed to insert ${gameId}:`, insertErr.message);
+          results.failed.push({ game_id: gameId, error: insertErr.message });
+          continue;
+        }
+
+        // Insert markets
+        if (g.markets && typeof g.markets === 'object') {
+          const marketsToInsert = [];
+          for (const [key, odds] of Object.entries(g.markets)) {
+            const oddsVal = parseFloat(odds);
+            if (oddsVal && oddsVal >= 1.01) {
+              marketsToInsert.push({
+                game_id: game.id,
+                market_type: determineMarketType(key),
+                market_key: key,
+                odds: oddsVal
+              });
+            }
+          }
+          if (marketsToInsert.length > 0) {
+            const { error: mErr } = await supabase.from('markets').insert(marketsToInsert);
+            if (mErr) console.warn(`   ⚠️ Markets insert warning for ${gameId}:`, mErr.message);
+            else console.log(`   📊 Inserted ${marketsToInsert.length} markets for ${gameId}`);
+          }
+        }
+
+        results.added.push({ game_id: gameId, status: 'added' });
+        console.log(`   ✅ Added: ${g.home_team} vs ${g.away_team} (${gameId})`);
+      } catch (gameErr) {
+        const gid = `${prefix}-${g.api_fixture_id}`;
+        console.error(`   ❌ Error adding ${gid}:`, gameErr.message);
+        results.failed.push({ game_id: gid, error: gameErr.message });
+      }
+    }
+
+    console.log(`✅ Execute complete: ${results.added.length} added, ${results.failed.length} failed`);
 
     res.json({
       success: true,
-      message: `Successfully added ${added.length} games to the site`,
-      games_added: added.length,
-      games_failed: 0,
+      message: `Successfully added ${results.added.length} games to the site`,
+      games_added: results.added.length,
+      games_failed: results.failed.length,
       results
     });
 
@@ -578,6 +658,162 @@ router.post('/execute', checkAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to add games',
+      details: error.message
+    });
+  }
+});
+
+// Helper to determine market type (same as admin.routes.js)
+function determineMarketType(key) {
+  if (key.startsWith('cs')) return 'CS';
+  if (key.includes('btts')) return 'BTTS';
+  if (key.includes('over') || key.includes('under')) return 'O/U';
+  if (key.includes('doubleChance')) return 'DC';
+  if (key.includes('htft')) return 'HT/FT';
+  return '1X2';
+}
+
+// ============================================================
+// BASKETBALL: Fetch preview for today's basketball games
+// ============================================================
+router.post('/fetch-preview/basketball', checkAdmin, async (req, res) => {
+  try {
+    console.log(`\n🏀 [API Basketball Fetch Preview] Fetching ALL of TODAY'S basketball games...`);
+
+    const BBALL_KEY = API_KEY || '49f4155b78d58351ed95b5c3bbcebd9e';
+
+    if (!BBALL_KEY) {
+      return res.status(500).json({ success: false, error: 'API key not configured' });
+    }
+
+    async function bballApiGet(path, params = {}) {
+      const qs = new URLSearchParams(params).toString();
+      const url = `${BASKETBALL_API_BASE}${path}${qs ? `?${qs}` : ''}`;
+      console.log(`   🔗 Basketball API: ${path}`, params);
+      const resp = await fetch(url, {
+        headers: { 'x-apisports-key': BBALL_KEY }
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`Basketball API ${resp.status}: ${body}`);
+      }
+      const json = await resp.json();
+      return json.response || [];
+    }
+
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0];
+
+    // Step 1: Fetch all basketball games for today
+    console.log(`\n📅 Fetching basketball games for ${dateStr}...`);
+    const allGames = await bballApiGet('/games', { date: dateStr, timezone: TZ });
+    console.log(`   📊 Found ${allGames.length} total basketball games`);
+
+    // Filter to Not Started (NS) only
+    const prematchGames = allGames.filter(g => g?.status?.short === 'NS');
+    console.log(`   🏀 ${prematchGames.length} upcoming (NS) basketball games`);
+
+    if (prematchGames.length === 0) {
+      return res.json({
+        success: true,
+        message: `No upcoming basketball games found for today (${dateStr})`,
+        game_count: 0,
+        games: [],
+        sport: 'basketball'
+      });
+    }
+
+    // Step 2: Fetch odds for games (limit to 30 API calls to conserve quota)
+    const ODDS_FETCH_LIMIT = 30;
+    const oddsMap = new Map();
+    let oddsFetched = 0;
+
+    for (const game of prematchGames) {
+      if (oddsFetched >= ODDS_FETCH_LIMIT) break;
+      try {
+        const oddsData = await bballApiGet('/odds', { game: String(game.id) });
+        if (oddsData.length > 0) {
+          oddsMap.set(game.id, oddsData[0]);
+        }
+        oddsFetched++;
+      } catch (err) {
+        oddsFetched++;
+        continue;
+      }
+    }
+    console.log(`   📈 Fetched odds for ${oddsMap.size} / ${prematchGames.length} games`);
+
+    // Step 3: Build games list
+    const games = [];
+    for (const game of prematchGames) {
+      try {
+        const gameId = game?.id;
+        if (!gameId) continue;
+
+        const homeTeam = game?.teams?.home?.name;
+        const awayTeam = game?.teams?.away?.name;
+        const leagueName = game?.league?.name || 'Basketball';
+        const kickoffTime = game?.date;
+
+        if (!homeTeam || !awayTeam) continue;
+
+        // Extract Home/Away odds
+        let homeOdds = 1.90, awayOdds = 1.90;
+        const oddsEntry = oddsMap.get(gameId);
+        if (oddsEntry) {
+          for (const bookmaker of (oddsEntry.bookmakers || [])) {
+            const homeAwayBet = (bookmaker.bets || []).find(b =>
+              b.name === 'Home/Away' || b.name === 'Winner' || b.id === 1
+            );
+            if (homeAwayBet) {
+              const hVal = homeAwayBet.values?.find(v => v.value === 'Home');
+              const aVal = homeAwayBet.values?.find(v => v.value === 'Away');
+              if (hVal) homeOdds = parseFloat(hVal.odd) || 1.90;
+              if (aVal) awayOdds = parseFloat(aVal.odd) || 1.90;
+              break; // Use first bookmaker with odds
+            }
+          }
+        }
+
+        const kickoffEAT = toEAT(kickoffTime);
+
+        games.push({
+          api_fixture_id: gameId,
+          sport: 'basketball',
+          league: leagueName,
+          home_team: homeTeam,
+          away_team: awayTeam,
+          home_odds: homeOdds,
+          draw_odds: 0,
+          away_odds: awayOdds,
+          time_utc: kickoffTime,
+          time_eat: kickoffEAT,
+          markets: { home: homeOdds, away: awayOdds },
+          markets_count: 1
+        });
+
+        console.log(`   ✅ Added: ${homeTeam} vs ${awayTeam} (${games.length})`);
+      } catch (err) {
+        continue;
+      }
+    }
+
+    console.log(`\n✅ Fetched ${games.length} basketball games from API`);
+
+    res.json({
+      success: true,
+      message: `Found ${games.length} basketball games ready to add`,
+      game_count: games.length,
+      games: games,
+      sport: 'basketball',
+      next_step: 'Call /api/admin/fetch-api-football/execute with sport=basketball to add them'
+    });
+
+  } catch (error) {
+    console.error('❌ Basketball fetch error:', error.message);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch basketball games',
       details: error.message
     });
   }
