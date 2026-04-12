@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { DollarSign, Calendar, RefreshCw, Download } from 'lucide-react';
+import { useUser } from '@/context/UserContext';
 
 interface EarningsData {
   startDate: string;
@@ -27,28 +28,31 @@ interface DailyEarnings {
 }
 
 export function EarningsCalculator() {
+  const { user } = useUser();
   const [loading, setLoading] = useState(false);
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
   const [dailyEarnings, setDailyEarnings] = useState<DailyEarnings>({});
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Initialize with today's date
+  // Initialize with today's date and fetch once user is available
   useEffect(() => {
     const today = new Date();
     const dateString = today.toISOString().split('T')[0];
     setStartDate(dateString);
     setEndDate(dateString);
-    
-    // Fetch earnings for today
-    fetchEarnings(dateString, dateString);
-  }, []);
+
+    const phone = user?.phone || user?.phone_number || '';
+    if (phone) {
+      fetchEarnings(dateString, dateString);
+    }
+  }, [user]);
 
   const fetchEarnings = async (start: string, end: string) => {
     setLoading(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const adminPhone = localStorage.getItem('adminPhone') || localStorage.getItem('userPhone') || '';
+      const adminPhone = user?.phone || user?.phone_number || '';
 
       // Fetch summary
       try {
