@@ -5557,10 +5557,17 @@ router.get('/earnings', checkAdmin, async (req, res) => {
     }
     console.log(`[EARNINGS] Activation fees from table: ${activationFees.length}`);
     
+    // Classify activation_fees table records too: 1000=activation, 399=priority, rest=deposits
+    activationFees.forEach(af => {
+      const amt = parseFloat(af.amount || 0);
+      if (amt === 1000) activationFromTx.push(af);
+      else if (amt === 399) priorityFromTx.push(af);
+      else deposits.push(af);
+    });
+    
     // Calculate totals
     const totalDeposits = deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
-    const totalActivationFees = activationFromTx.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-      + activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0);
+    const totalActivationFees = activationFromTx.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
     const totalPriorityFees = priorityFromTx.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
     const masterTotal = totalDeposits + totalActivationFees + totalPriorityFees;
     
@@ -5576,7 +5583,7 @@ router.get('/earnings', checkAdmin, async (req, res) => {
         totalPriorityFees: Math.round(totalPriorityFees),
         masterTotal: Math.round(masterTotal),
         depositCount: deposits.length,
-        activationFeeCount: activationFromTx.length + activationFees.length,
+        activationFeeCount: activationFromTx.length,
         priorityFeeCount: priorityFromTx.length,
       }
     });
@@ -5671,12 +5678,16 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
       else dailyEarnings[date].deposits += amt;
     });
     
+    // Classify activation_fees table records: 1000=activation, 399=priority, rest=deposits
     activationFees.forEach(af => {
       const date = new Date(af.created_at).toISOString().split('T')[0];
       if (!dailyEarnings[date]) {
         dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
       }
-      dailyEarnings[date].activation += parseFloat(af.amount || 0);
+      const amt = parseFloat(af.amount || 0);
+      if (amt === 1000) dailyEarnings[date].activation += amt;
+      else if (amt === 399) dailyEarnings[date].priority += amt;
+      else dailyEarnings[date].deposits += amt;
     });
     
     // Calculate totals for each day
