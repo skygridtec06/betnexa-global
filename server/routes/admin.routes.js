@@ -5496,51 +5496,63 @@ router.get('/earnings', checkAdmin, async (req, res) => {
     const endIso = queryEndDate.toISOString();
     console.log(`[EARNINGS] Query range: ${startIso} to ${endIso}`);
     
-    // Fetch deposits
-    console.log('[EARNINGS] Fetching deposits...');
-    const { data: deposits, error: depositsError } = await supabase
-      .from('deposits')
-      .select('amount')
-      .eq('status', 'completed')
-      .gte('created_at', startIso)
-      .lte('created_at', endIso);
+    // Helper to fetch all rows (bypasses Supabase 1000-row default limit)
+    async function fetchAll(table, selectCols, filters) {
+      const allRows = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        let query = supabase.from(table).select(selectCols).range(from, from + pageSize - 1);
+        for (const f of filters) {
+          query = query[f.op](f.col, f.val);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return allRows;
+    }
     
-    if (depositsError) {
+    // Fetch completed deposits from transactions table (includes STK push + C2B)
+    console.log('[EARNINGS] Fetching deposits from transactions...');
+    let deposits = [];
+    try {
+      deposits = await fetchAll('transactions', 'amount', [
+        { op: 'eq', col: 'type', val: 'deposit' },
+        { op: 'eq', col: 'status', val: 'completed' },
+        { op: 'gte', col: 'created_at', val: startIso },
+        { op: 'lte', col: 'created_at', val: endIso },
+      ]);
+    } catch (depositsError) {
       console.error('[EARNINGS] Error fetching deposits:', depositsError);
       return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
     }
-    console.log(`[EARNINGS] Deposits found: ${deposits ? deposits.length : 0}`);
+    console.log(`[EARNINGS] Deposits found: ${deposits.length}`);
     
     // Fetch activation fees from activation_fees table
     console.log('[EARNINGS] Fetching activation fees...');
-    const { data: activationFees, error: activationFeesError } = await supabase
-      .from('activation_fees')
-      .select('amount')
-      .eq('status', 'completed')
-      .gte('created_at', startIso)
-      .lte('created_at', endIso);
-    
-    if (activationFeesError) {
+    let activationFees = [];
+    try {
+      activationFees = await fetchAll('activation_fees', 'amount', [
+        { op: 'eq', col: 'status', val: 'completed' },
+        { op: 'gte', col: 'created_at', val: startIso },
+        { op: 'lte', col: 'created_at', val: endIso },
+      ]);
+    } catch (activationFeesError) {
       console.warn('[EARNINGS] Warning fetching activation fees:', activationFeesError);
-      // Don't fail, just treat as empty
     }
-    console.log(`[EARNINGS] Activation fees found: ${activationFees ? activationFees.length : 0}`);
+    console.log(`[EARNINGS] Activation fees found: ${activationFees.length}`);
     
     // Calculate totals
-    const totalDeposits = deposits && deposits.length > 0
-      ? deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0)
-      : 0;
-    
-    const totalActivationFees = activationFees && activationFees.length > 0
-      ? activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0)
-      : 0;
-    
-    // TODO: Add priority fees when available in database
+    const totalDeposits = deposits.reduce((sum, d) => sum + parseFloat(d.amount || 0), 0);
+    const totalActivationFees = activationFees.reduce((sum, af) => sum + parseFloat(af.amount || 0), 0);
     const totalPriorityFees = 0;
-    
     const masterTotal = totalDeposits + totalActivationFees + totalPriorityFees;
     
-    console.log(`[EARNINGS] Results - Deposits: KSH ${totalDeposits}, Activation Fees: KSH ${totalActivationFees}, Priority Fees: KSH ${totalPriorityFees}, Total: KSH ${masterTotal}`);
+    console.log(`[EARNINGS] Results - Deposits: KSH ${totalDeposits}, Activation Fees: KSH ${totalActivationFees}, Total: KSH ${masterTotal}`);
     
     res.json({
       success: true,
@@ -5551,8 +5563,8 @@ router.get('/earnings', checkAdmin, async (req, res) => {
         totalActivationFees: Math.round(totalActivationFees),
         totalPriorityFees: Math.round(totalPriorityFees),
         masterTotal: Math.round(masterTotal),
-        depositCount: deposits ? deposits.length : 0,
-        activationFeeCount: activationFees ? activationFees.length : 0,
+        depositCount: deposits.length,
+        activationFeeCount: activationFees.length,
         priorityFeeCount: 0,
       }
     });
@@ -5584,58 +5596,73 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
     const endIso = queryEndDate.toISOString();
     console.log(`[EARNINGS_DAILY] Range: ${startIso} to ${endIso}`);
     
-    // Fetch all completed deposits and activation fees in date range
-    console.log('[EARNINGS_DAILY] Fetching deposits...');
-    const { data: deposits, error: depositsError } = await supabase
-      .from('deposits')
-      .select('amount, created_at')
-      .eq('status', 'completed')
-      .gte('created_at', startIso)
-      .lte('created_at', endIso);
+    // Helper to fetch all rows (bypasses Supabase 1000-row default limit)
+    async function fetchAll(table, selectCols, filters) {
+      const allRows = [];
+      const pageSize = 1000;
+      let from = 0;
+      while (true) {
+        let query = supabase.from(table).select(selectCols).range(from, from + pageSize - 1);
+        for (const f of filters) {
+          query = query[f.op](f.col, f.val);
+        }
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allRows.push(...data);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      return allRows;
+    }
     
-    if (depositsError) {
+    // Fetch completed deposits from transactions table
+    console.log('[EARNINGS_DAILY] Fetching deposits from transactions...');
+    let deposits = [];
+    try {
+      deposits = await fetchAll('transactions', 'amount, created_at', [
+        { op: 'eq', col: 'type', val: 'deposit' },
+        { op: 'eq', col: 'status', val: 'completed' },
+        { op: 'gte', col: 'created_at', val: startIso },
+        { op: 'lte', col: 'created_at', val: endIso },
+      ]);
+    } catch (depositsError) {
       console.error('[EARNINGS_DAILY] Error fetching deposits:', depositsError);
       return res.status(500).json({ success: false, error: `Failed to fetch deposits: ${depositsError.message}` });
     }
-    console.log(`[EARNINGS_DAILY] Deposits found: ${deposits ? deposits.length : 0}`);
+    console.log(`[EARNINGS_DAILY] Deposits found: ${deposits.length}`);
     
     console.log('[EARNINGS_DAILY] Fetching activation fees...');
-    const { data: activationFees, error: activationFeesError } = await supabase
-      .from('activation_fees')
-      .select('amount, created_at')
-      .eq('status', 'completed')
-      .gte('created_at', startIso)
-      .lte('created_at', endIso);
-    
-    if (activationFeesError) {
+    let activationFees = [];
+    try {
+      activationFees = await fetchAll('activation_fees', 'amount, created_at', [
+        { op: 'eq', col: 'status', val: 'completed' },
+        { op: 'gte', col: 'created_at', val: startIso },
+        { op: 'lte', col: 'created_at', val: endIso },
+      ]);
+    } catch (activationFeesError) {
       console.warn('[EARNINGS_DAILY] Warning fetching activation fees:', activationFeesError);
-      // Don't fail, just treat as empty
     }
-    console.log(`[EARNINGS_DAILY] Activation fees found: ${activationFees ? activationFees.length : 0}`);
+    console.log(`[EARNINGS_DAILY] Activation fees found: ${activationFees.length}`);
     
     // Group by date
     const dailyEarnings = {};
     
-    if (deposits && deposits.length > 0) {
-      deposits.forEach(d => {
-        const date = new Date(d.created_at).toISOString().split('T')[0];
-        if (!dailyEarnings[date]) {
-          dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
-        }
-        dailyEarnings[date].deposits += parseFloat(d.amount || 0);
-      });
-    }
+    deposits.forEach(d => {
+      const date = new Date(d.created_at).toISOString().split('T')[0];
+      if (!dailyEarnings[date]) {
+        dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
+      }
+      dailyEarnings[date].deposits += parseFloat(d.amount || 0);
+    });
     
-    if (activationFees && activationFees.length > 0) {
-      activationFees.forEach(af => {
-        const date = new Date(af.created_at).toISOString().split('T')[0];
-        if (!dailyEarnings[date]) {
-          dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
-        }
-        const amount = parseFloat(af.amount || 0);
-        dailyEarnings[date].activation += amount;
-      });
-    }
+    activationFees.forEach(af => {
+      const date = new Date(af.created_at).toISOString().split('T')[0];
+      if (!dailyEarnings[date]) {
+        dailyEarnings[date] = { deposits: 0, activation: 0, priority: 0, total: 0 };
+      }
+      dailyEarnings[date].activation += parseFloat(af.amount || 0);
+    });
     
     // Calculate totals for each day
     Object.keys(dailyEarnings).forEach(date => {
