@@ -5706,6 +5706,78 @@ router.get('/earnings/daily', checkAdmin, async (req, res) => {
   }
 });
 
+// GET /api/admin/earnings/day-details - Fetch individual transactions for a specific date
+router.get('/earnings/day-details', checkAdmin, async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ success: false, error: 'date parameter required' });
+
+    const startIso = new Date(date + 'T00:00:00Z').toISOString();
+    const endIso = new Date(date + 'T23:59:59Z').toISOString();
+
+    // Fetch all completed deposit transactions for this date
+    const { data: txs, error: txErr } = await supabase
+      .from('transactions')
+      .select('phone_number, user_id, amount, created_at')
+      .eq('type', 'deposit')
+      .eq('status', 'completed')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .order('created_at', { ascending: false });
+
+    if (txErr) return res.status(500).json({ success: false, error: txErr.message });
+
+    // Fetch activation_fees for this date
+    const { data: afs, error: afErr } = await supabase
+      .from('activation_fees')
+      .select('phone_number, user_id, amount, created_at')
+      .eq('status', 'completed')
+      .gte('created_at', startIso)
+      .lte('created_at', endIso)
+      .order('created_at', { ascending: false });
+
+    if (afErr) console.warn('[DAY_DETAILS] activation_fees error:', afErr);
+
+    const allRecords = [...(txs || []), ...(afs || [])];
+    allRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // Collect unique user_ids to fetch usernames
+    const userIds = [...new Set(allRecords.map(r => r.user_id).filter(Boolean))];
+    let userMap = {};
+    if (userIds.length > 0) {
+      const { data: users } = await supabase
+        .from('users')
+        .select('id, username, phone_number')
+        .in('id', userIds);
+      if (users) {
+        users.forEach(u => { userMap[u.id] = u; });
+      }
+    }
+
+    // Build response with classification
+    const transactions = allRecords.map(r => {
+      const amt = parseFloat(r.amount || 0);
+      let category = 'deposit';
+      if (amt === 1000) category = 'activation';
+      else if (amt === 399) category = 'priority';
+
+      const usr = userMap[r.user_id];
+      return {
+        phone: usr?.phone_number || r.phone_number || '-',
+        username: usr?.username || '-',
+        amount: amt,
+        time: r.created_at,
+        category,
+      };
+    });
+
+    res.json({ success: true, data: transactions });
+  } catch (error) {
+    console.error('[DAY_DETAILS] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────
 // C2B URL REGISTRATION & BETNEXA ID MANAGEMENT
 // ─────────────────────────────────────────────────────────────────

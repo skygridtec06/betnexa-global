@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, Calendar, RefreshCw, Download } from 'lucide-react';
+import { DollarSign, Calendar, RefreshCw, Download, X, Loader2 } from 'lucide-react';
 import { useUser } from '@/context/UserContext';
 
 interface EarningsData {
@@ -27,6 +27,14 @@ interface DailyEarnings {
   };
 }
 
+interface DayTransaction {
+  phone: string;
+  username: string;
+  amount: number;
+  time: string;
+  category: 'deposit' | 'activation' | 'priority';
+}
+
 export function EarningsCalculator() {
   const { user } = useUser();
   const [loading, setLoading] = useState(false);
@@ -34,8 +42,11 @@ export function EarningsCalculator() {
   const [dailyEarnings, setDailyEarnings] = useState<DailyEarnings>({});
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [dayTransactions, setDayTransactions] = useState<DayTransaction[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
 
-  const adminPhone = user?.phone || user?.phone_number || '';
+  const adminPhone = user?.phone || '';
 
   // Initialize with today's date and fetch once user is available
   useEffect(() => {
@@ -93,6 +104,27 @@ export function EarningsCalculator() {
       console.error('Error in fetchEarnings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDayDetails = async (date: string) => {
+    setSelectedDay(date);
+    setDayLoading(true);
+    setDayTransactions([]);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const res = await fetch(
+        `${apiUrl}/api/admin/earnings/day-details?date=${date}&phone=${adminPhone}`,
+        { headers: { 'Content-Type': 'application/json' }, method: 'GET' }
+      );
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success) setDayTransactions(json.data);
+      }
+    } catch (err) {
+      console.warn('[Earnings] Failed to fetch day details:', err);
+    } finally {
+      setDayLoading(false);
     }
   };
 
@@ -345,7 +377,8 @@ export function EarningsCalculator() {
                 return (
                   <div
                     key={date}
-                    className="rounded-lg border border-primary/20 bg-secondary/30 p-3 hover:border-primary/40 transition"
+                    onClick={() => fetchDayDetails(date)}
+                    className="cursor-pointer rounded-lg border border-primary/20 bg-secondary/30 p-3 hover:border-primary/40 hover:bg-secondary/50 active:scale-[0.98] transition"
                   >
                     <p className="text-xs font-semibold text-primary">
                       {dayName}, {date}
@@ -374,6 +407,74 @@ export function EarningsCalculator() {
                 );
               })}
           </div>
+        </Card>
+      )}
+
+      {/* Day Transaction Details */}
+      {selectedDay && (
+        <Card className="border-primary/20 bg-card/50 p-4 neon-border">
+          <div className="mb-3 flex items-center justify-between">
+            <h4 className="font-display text-xs font-bold uppercase text-foreground">
+              Transactions — {selectedDay}
+            </h4>
+            <button
+              onClick={() => { setSelectedDay(null); setDayTransactions([]); }}
+              className="rounded-full p-1 hover:bg-secondary transition"
+            >
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+
+          {dayLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              <span className="ml-2 text-sm text-muted-foreground">Loading...</span>
+            </div>
+          ) : dayTransactions.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">No transactions found</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-primary/20">
+                    <th className="pb-2 text-left font-semibold text-muted-foreground">Phone</th>
+                    <th className="pb-2 text-left font-semibold text-muted-foreground">Username</th>
+                    <th className="pb-2 text-right font-semibold text-muted-foreground">Amount</th>
+                    <th className="pb-2 text-left font-semibold text-muted-foreground">Type</th>
+                    <th className="pb-2 text-right font-semibold text-muted-foreground">Time</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dayTransactions.map((tx, i) => (
+                    <tr key={i} className="border-b border-primary/10 last:border-0">
+                      <td className="py-2 text-foreground">{tx.phone}</td>
+                      <td className="py-2 text-foreground">{tx.username}</td>
+                      <td className="py-2 text-right font-semibold">
+                        <span className={
+                          tx.category === 'deposit' ? 'text-blue-400' :
+                          tx.category === 'activation' ? 'text-green-400' : 'text-orange-400'
+                        }>
+                          KSH {tx.amount.toLocaleString()}
+                        </span>
+                      </td>
+                      <td className="py-2">
+                        <Badge variant="outline" className={
+                          tx.category === 'deposit' ? 'border-blue-400/30 text-blue-400' :
+                          tx.category === 'activation' ? 'border-green-400/30 text-green-400' :
+                          'border-orange-400/30 text-orange-400'
+                        }>
+                          {tx.category}
+                        </Badge>
+                      </td>
+                      <td className="py-2 text-right text-muted-foreground">
+                        {new Date(tx.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </Card>
       )}
 
