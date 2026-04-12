@@ -312,142 +312,14 @@ async function upsertScheduleGameWithMarkets(supabase, fixture, marketOdds) {
 }
 
 // ── GET /api/live/bootstrap-schedule ──────────────────────────────────────────
-// Maintains API-managed schedule as exactly today+tomorrow (Nairobi), up to 100 each day.
+// ⛔ DISABLED — Games added via API fetch now persist until admin deletes them.
+// This endpoint previously deleted and re-imported af- games, causing games to disappear.
 router.get('/bootstrap-schedule', async (req, res) => {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    return res.status(500).json({ success: false, message: 'API_FOOTBALL_KEY not configured' });
-  }
-
-  const supabase = getSupabase();
-
-  try {
-    const today = formatDateInTZ(new Date());
-    const tomorrow = formatDateInTZ(new Date(Date.now() + 24 * 60 * 60 * 1000));
-    const targetDates = [today, tomorrow];
-
-    const { data: afGames, error: afErr } = await supabase
-      .from('games')
-      .select('id, game_id, time, status')
-      .like('game_id', 'af-%');
-
-    if (afErr) {
-      return res.status(500).json({ success: false, message: afErr.message });
-    }
-
-    const counts = { [today]: 0, [tomorrow]: 0 };
-    let staleUpcomingToday = 0;
-    for (const g of afGames || []) {
-      if (g.status !== 'upcoming') continue;
-      const d = classifyGameDateInTZ(g.time);
-      const kickoffMs = new Date(g.time || 0).getTime();
-      const isFutureTodayKickoff = !isNaN(kickoffMs) && kickoffMs > Date.now();
-      if (d === today && isFutureTodayKickoff) counts[today] += 1;
-      if (d === today && !isFutureTodayKickoff) staleUpcomingToday += 1;
-      if (d === tomorrow) counts[tomorrow] += 1;
-    }
-
-    if (staleUpcomingToday === 0 && counts[today] >= TARGET_MATCHES_PER_DAY && counts[tomorrow] >= TARGET_MATCHES_PER_DAY) {
-      return res.json({
-        success: true,
-        refreshed: false,
-        message: 'Schedule already ready for today and tomorrow',
-        counts
-      });
-    }
-
-    // Rebuild API-managed upcoming rows, but keep today's finished matches visible.
-    const staleIds = (afGames || [])
-      .filter((g) => {
-        const gameDate = classifyGameDateInTZ(g.time);
-        if (g.status === 'live') return false;
-        if (g.status === 'finished') return gameDate !== today;
-        return true;
-      })
-      .map((g) => g.id);
-
-    if (staleIds.length > 0) {
-      await supabase.from('markets').delete().in('game_id', staleIds);
-      await supabase.from('games').delete().in('id', staleIds);
-    }
-
-    const imported = { [today]: 0, [tomorrow]: 0 };
-
-    for (const dateStr of targetDates) {
-      const fixtures = await apiGet('/fixtures', { date: dateStr, timezone: TZ }, apiKey);
-
-      const seen = new Set();
-      const filtered = (fixtures || [])
-        .filter((f) => {
-          const id = f?.fixture?.id;
-          if (!id || seen.has(id)) return false;
-          seen.add(id);
-          return isMajorCompetition(f) && isUpcomingFixtureForSchedule(f, dateStr);
-        })
-        .sort((a, b) => new Date(a?.fixture?.date || 0) - new Date(b?.fixture?.date || 0));
-
-      const importedFixtureIds = new Set();
-
-      // Pass 1: prefer fully-covered market sets.
-      for (const f of filtered) {
-        if (imported[dateStr] >= TARGET_MATCHES_PER_DAY) break;
-
-        const fixtureId = f?.fixture?.id;
-        if (!fixtureId) continue;
-
-        let marketOdds = null;
-        try {
-          const oddsRows = await apiGet('/odds', { fixture: String(fixtureId) }, apiKey);
-          marketOdds = chooseBestOddsSet(oddsRows);
-        } catch {
-          continue;
-        }
-
-        if (!marketOdds || !hasAllRequiredMarkets(marketOdds)) continue;
-
-        const saved = await upsertScheduleGameWithMarkets(supabase, f, marketOdds);
-        if (!saved.ok) continue;
-
-        imported[dateStr] += 1;
-        importedFixtureIds.add(fixtureId);
-      }
-
-      // Pass 2: if still below target, allow API-sourced partial markets with valid 1X2.
-      for (const f of filtered) {
-        if (imported[dateStr] >= TARGET_MATCHES_PER_DAY) break;
-
-        const fixtureId = f?.fixture?.id;
-        if (!fixtureId || importedFixtureIds.has(fixtureId)) continue;
-
-        let marketOdds = null;
-        try {
-          const oddsRows = await apiGet('/odds', { fixture: String(fixtureId) }, apiKey);
-          marketOdds = chooseBestOddsSet(oddsRows);
-        } catch {
-          continue;
-        }
-
-        if (!marketOdds || !hasBasic1X2Markets(marketOdds)) continue;
-
-        const saved = await upsertScheduleGameWithMarkets(supabase, f, marketOdds);
-        if (!saved.ok) continue;
-
-        imported[dateStr] += 1;
-        importedFixtureIds.add(fixtureId);
-      }
-    }
-
-    return res.json({
-      success: true,
-      refreshed: true,
-      counts: imported,
-      targetPerDay: TARGET_MATCHES_PER_DAY,
-      dates: targetDates
-    });
-  } catch (err) {
-    console.error('❌ Schedule bootstrap error:', err);
-    return res.status(500).json({ success: false, message: err.message });
-  }
+  return res.json({
+    success: true,
+    refreshed: false,
+    message: 'bootstrap-schedule is disabled. Games persist until admin deletes them.',
+  });
 });
 
 // ── GET /api/live/sync ─────────────────────────────────────────────────────────
