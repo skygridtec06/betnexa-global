@@ -35,6 +35,8 @@ export function EarningsCalculator() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  const adminPhone = user?.phone || user?.phone_number || '';
+
   // Initialize with today's date and fetch once user is available
   useEffect(() => {
     const today = new Date();
@@ -42,17 +44,15 @@ export function EarningsCalculator() {
     setStartDate(dateString);
     setEndDate(dateString);
 
-    const phone = user?.phone || user?.phone_number || '';
-    if (phone) {
+    if (adminPhone) {
       fetchEarnings(dateString, dateString);
     }
-  }, [user]);
+  }, [adminPhone]);
 
   const fetchEarnings = async (start: string, end: string) => {
     setLoading(true);
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-      const adminPhone = user?.phone || user?.phone_number || '';
 
       // Fetch summary
       try {
