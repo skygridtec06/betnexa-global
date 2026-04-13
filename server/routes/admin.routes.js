@@ -710,7 +710,7 @@ router.get('/games', async (req, res) => {
 
     console.log(`✅ Retrieved ${remainingGames.length} games successfully`);
 
-    // Fetch markets for each game
+    // Fetch markets for each game (paginated — Supabase returns max 1000 rows per query)
     let gamesWithMarkets = remainingGames;
     if (gamesWithMarkets.length > 0) {
       try {
@@ -718,29 +718,39 @@ router.get('/games', async (req, res) => {
         const gameIds = gamesWithMarkets.map(g => g.id).filter(Boolean);
         
         if (gameIds.length > 0) {
-          const { data: markets, error: marketsError } = await supabase
-            .from('markets')
-            .select('*')
-            .in('game_id', gameIds);
+          // Paginate to get ALL markets (Supabase default limit is 1000)
+          let allMarkets = [];
+          const PAGE_SIZE = 1000;
+          let from = 0;
+          while (true) {
+            const { data: page, error: pageErr } = await supabase
+              .from('markets')
+              .select('*')
+              .in('game_id', gameIds)
+              .range(from, from + PAGE_SIZE - 1);
 
-          if (!marketsError && markets && markets.length > 0) {
-            console.log(`✅ Retrieved ${markets.length} market entries`);
+            if (pageErr) {
+              console.warn(`⚠️ Markets fetch page error at offset ${from}:`, pageErr.message);
+              break;
+            }
+            if (!page || page.length === 0) break;
+            allMarkets = allMarkets.concat(page);
+            if (page.length < PAGE_SIZE) break; // last page
+            from += PAGE_SIZE;
+          }
+
+          if (allMarkets.length > 0) {
+            console.log(`✅ Retrieved ${allMarkets.length} market entries (${Math.ceil(allMarkets.length / PAGE_SIZE)} pages)`);
             
-            // Group markets by game_id (UUID) and log for debugging
+            // Group markets by game_id (UUID)
             const marketsByGame = {};
-            markets.forEach((market) => {
+            allMarkets.forEach((market) => {
               const gameId = market.game_id;
               if (!marketsByGame[gameId]) {
                 marketsByGame[gameId] = {};
               }
-              // Store market with its key (e.g., 'cs00', 'cs01', etc.)
               if (market.market_key && market.odds !== null && market.odds !== undefined) {
                 marketsByGame[gameId][market.market_key] = parseFloat(market.odds);
-                
-                // Log CS markets specifically for visibility
-                if (market.market_key.startsWith('cs')) {
-                  console.log(`   📌 ${market.market_key} = ${market.odds}`);
-                }
               }
             });
 
@@ -749,24 +759,12 @@ router.get('/games', async (req, res) => {
             // Attach markets to each game using the UUID id field
             gamesWithMarkets = gamesWithMarkets.map((game) => {
               const gameMarkets = marketsByGame[game.id] || {};
-              const marketCount = Object.keys(gameMarkets).length;
-              if (marketCount > 0) {
-                console.log(`   Game ${game.game_id}: ${marketCount} markets attached`);
-              }
               return {
                 ...game,
                 markets: gameMarkets
               };
             });
-          } else if (marketsError) {
-            console.warn('⚠️ Failed to fetch markets:', marketsError.message);
-            // Continue without markets data
-            gamesWithMarkets = gamesWithMarkets.map((game) => ({
-              ...game,
-              markets: {}
-            }));
           } else {
-            // No markets found, add empty markets object
             console.log('⚠️ No markets found in database');
             gamesWithMarkets = gamesWithMarkets.map((game) => ({
               ...game,
