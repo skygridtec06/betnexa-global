@@ -959,28 +959,48 @@ router.post('/games', checkAdmin, async (req, res) => {
       away_team: game.away_team,
     });
 
-    // Now insert markets if provided or generate default ones
+    // Now insert markets: always generate defaults, then override with any custom values
     try {
       console.log('📊 Handling markets for new game');
-      let marketsToInsert = [];
 
+      // Always generate the full set of default markets
+      const defaultMarkets = generateDefaultMarkets(
+        game.id,
+        parseFloat(homeOdds) || 2.0,
+        parseFloat(drawOdds) || 3.0,
+        parseFloat(awayOdds) || 3.0
+      );
+
+      let marketsToInsert = defaultMarkets;
+
+      // If admin provided custom market odds, override the defaults
       if (markets && typeof markets === 'object' && Object.keys(markets).length > 0) {
-        // Use provided markets
-        marketsToInsert = Object.entries(markets).map(([key, odds]) => ({
-          game_id: game.id,
-          market_type: determineMarketType(key),
-          market_key: key,
-          odds: parseFloat(odds) || 0
-        }));
-      } else {
-        // Generate default markets based on 1X2 odds
-        const defaultMarkets = generateDefaultMarkets(
-          game.id,
-          parseFloat(homeOdds) || 2.0,
-          parseFloat(drawOdds) || 3.0,
-          parseFloat(awayOdds) || 3.0
+        const customMap = new Map();
+        for (const [key, odds] of Object.entries(markets)) {
+          const parsed = parseFloat(odds);
+          if (parsed && parsed >= 1.01) {
+            customMap.set(key, {
+              game_id: game.id,
+              market_type: determineMarketType(key),
+              market_key: key,
+              odds: parsed
+            });
+          }
+        }
+
+        // Override defaults with custom values where provided
+        marketsToInsert = defaultMarkets.map(dm =>
+          customMap.has(dm.market_key) ? customMap.get(dm.market_key) : dm
         );
-        marketsToInsert = defaultMarkets;
+
+        // Add any custom keys not in the default set
+        for (const [key, market] of customMap) {
+          if (!defaultMarkets.find(dm => dm.market_key === key)) {
+            marketsToInsert.push(market);
+          }
+        }
+
+        console.log(`   📝 Applied ${customMap.size} custom market overrides`);
       }
 
       if (marketsToInsert.length > 0) {
