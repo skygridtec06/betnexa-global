@@ -959,27 +959,16 @@ router.post('/games', checkAdmin, async (req, res) => {
       away_team: game.away_team,
     });
 
-    // Now insert markets: always generate defaults, then override with any custom values
+    // Now insert only the markets the admin explicitly provided
     try {
       console.log('📊 Handling markets for new game');
+      let marketsToInsert = [];
 
-      // Always generate the full set of default markets
-      const defaultMarkets = generateDefaultMarkets(
-        game.id,
-        parseFloat(homeOdds) || 2.0,
-        parseFloat(drawOdds) || 3.0,
-        parseFloat(awayOdds) || 3.0
-      );
-
-      let marketsToInsert = defaultMarkets;
-
-      // If admin provided custom market odds, override the defaults
       if (markets && typeof markets === 'object' && Object.keys(markets).length > 0) {
-        const customMap = new Map();
         for (const [key, odds] of Object.entries(markets)) {
           const parsed = parseFloat(odds);
           if (parsed && parsed >= 1.01) {
-            customMap.set(key, {
+            marketsToInsert.push({
               game_id: game.id,
               market_type: determineMarketType(key),
               market_key: key,
@@ -987,20 +976,9 @@ router.post('/games', checkAdmin, async (req, res) => {
             });
           }
         }
-
-        // Override defaults with custom values where provided
-        marketsToInsert = defaultMarkets.map(dm =>
-          customMap.has(dm.market_key) ? customMap.get(dm.market_key) : dm
-        );
-
-        // Add any custom keys not in the default set
-        for (const [key, market] of customMap) {
-          if (!defaultMarkets.find(dm => dm.market_key === key)) {
-            marketsToInsert.push(market);
-          }
-        }
-
-        console.log(`   📝 Applied ${customMap.size} custom market overrides`);
+        console.log(`   📝 Saving ${marketsToInsert.length} custom markets (blank markets left empty)`);
+      } else {
+        console.log('   ℹ️ No markets provided — all markets left blank for admin to fill later');
       }
 
       if (marketsToInsert.length > 0) {

@@ -47,41 +47,38 @@ interface MatchCardProps {
 }
 
 export function generateMarketOdds(homeOdds: number, drawOdds: number, awayOdds: number, existingMarkets?: Record<string, number>): MatchMarkets {
-  // Ensure minimum odds of 1.10 to avoid 0 or NaN in any market
-  const h = Math.max(1.10, homeOdds || 2.00);
-  const d = Math.max(1.10, drawOdds || 3.00);
-  const a = Math.max(1.10, awayOdds || 3.00);
-
-  // Helper: clamp any odds value to minimum 1.01
-  const safe = (v: number) => {
-    const n = +v;
-    return +(isNaN(n) || n < 1.01 ? 1.50 : n).toFixed(2);
+  // Helper: only return odds if they exist in the DB, never generate fallbacks
+  const dbVal = (key: string, ...aliases: string[]): number | undefined => {
+    for (const k of [key, ...aliases]) {
+      const v = existingMarkets?.[k];
+      if (typeof v === 'number' && Number.isFinite(v) && v >= 1.01) return +v.toFixed(2);
+    }
+    return undefined;
   };
-  
-  // Use deterministic fallbacks based on odds instead of Math.random()
-  const seed = h + d + a;
+
   const markets: MatchMarkets = {
-    bttsYes: safe(existingMarkets?.['bttsYes'] ?? existingMarkets?.['btts:yes'] ?? (1.6 + (seed % 0.5))),
-    bttsNo: safe(existingMarkets?.['bttsNo'] ?? existingMarkets?.['btts:no'] ?? (2.0 + ((seed * 1.3) % 0.5))),
-    over25: safe(existingMarkets?.['over25'] ?? existingMarkets?.['over_under:over_2.5'] ?? (1.7 + ((seed * 0.7) % 0.6))),
-    under25: safe(existingMarkets?.['under25'] ?? existingMarkets?.['over_under:under_2.5'] ?? (1.9 + ((seed * 1.1) % 0.5))),
-    over15: safe(existingMarkets?.['over15'] ?? existingMarkets?.['over_under:over_1.5'] ?? (1.2 + ((seed * 0.9) % 0.3))),
-    under15: safe(existingMarkets?.['under15'] ?? existingMarkets?.['over_under:under_1.5'] ?? (3.5 + ((seed * 0.4) % 1.0))),
-    doubleChanceHomeOrDraw: safe(existingMarkets?.['doubleChanceHomeOrDraw'] ?? existingMarkets?.['double_chance:1X'] ?? (1 / (1/h + 1/d) * 0.9)),
-    doubleChanceAwayOrDraw: safe(existingMarkets?.['doubleChanceAwayOrDraw'] ?? existingMarkets?.['double_chance:X2'] ?? (1 / (1/a + 1/d) * 0.9)),
-    doubleChanceHomeOrAway: safe(existingMarkets?.['doubleChanceHomeOrAway'] ?? existingMarkets?.['double_chance:12'] ?? (1 / (1/h + 1/a) * 0.9)),
-    htftHomeHome: safe(existingMarkets?.['htftHomeHome'] ?? existingMarkets?.['half_time_result:1'] ?? (h * 1.8)),
-    htftDrawDraw: safe(existingMarkets?.['htftDrawDraw'] ?? existingMarkets?.['half_time_result:X'] ?? (d * 2.0)),
-    htftAwayAway: safe(existingMarkets?.['htftAwayAway'] ?? existingMarkets?.['half_time_result:2'] ?? (a * 1.8)),
-    htftDrawHome: safe(existingMarkets?.['htftDrawHome'] ?? (d * h * 0.7)),
-    htftDrawAway: safe(existingMarkets?.['htftDrawAway'] ?? (d * a * 0.7)),
+    bttsYes: dbVal('bttsYes', 'btts:yes'),
+    bttsNo: dbVal('bttsNo', 'btts:no'),
+    over25: dbVal('over25', 'over_under:over_2.5'),
+    under25: dbVal('under25', 'over_under:under_2.5'),
+    over15: dbVal('over15', 'over_under:over_1.5'),
+    under15: dbVal('under15', 'over_under:under_1.5'),
+    doubleChanceHomeOrDraw: dbVal('doubleChanceHomeOrDraw', 'double_chance:1X'),
+    doubleChanceAwayOrDraw: dbVal('doubleChanceAwayOrDraw', 'double_chance:X2'),
+    doubleChanceHomeOrAway: dbVal('doubleChanceHomeOrAway', 'double_chance:12'),
+    htftHomeHome: dbVal('htftHomeHome', 'half_time_result:1'),
+    htftDrawDraw: dbVal('htftDrawDraw', 'half_time_result:X'),
+    htftAwayAway: dbVal('htftAwayAway', 'half_time_result:2'),
+    htftDrawHome: dbVal('htftDrawHome'),
+    htftDrawAway: dbVal('htftDrawAway'),
   };
 
-  // Generate correct scores from 0:0 to 4:4 with deterministic fallbacks
+  // Correct scores — only include if in DB
   for (let hScore = 0; hScore <= 4; hScore++) {
     for (let aScore = 0; aScore <= 4; aScore++) {
       const key = `cs${hScore}${aScore}`;
-      markets[key] = safe(existingMarkets?.[key] ?? existingMarkets?.[`correct_score:${hScore}:${aScore}`] ?? (3.0 + ((seed * (hScore + 1) * (aScore + 2)) % 20)));
+      const val = dbVal(key, `correct_score:${hScore}:${aScore}`);
+      if (val !== undefined) markets[key] = val;
     }
   }
 
