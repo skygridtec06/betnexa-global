@@ -1,4 +1,3 @@
-import { formatKickoffTimeEAT } from "@/lib/timeFormatter";
 import { Card } from "@/components/ui/card";
 
 interface FinishedMatch {
@@ -16,18 +15,6 @@ interface FinishedMatchCardProps {
 }
 
 export function FinishedMatchCard({ match }: FinishedMatchCardProps) {
-  const matchDate = new Date(match.time);
-  const dateStr = matchDate.toLocaleDateString("en-KE", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-  const timeStr = matchDate.toLocaleTimeString("en-KE", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
   return (
     <Card className="gradient-card rounded-lg border border-border/50 p-4 transition-all hover:border-primary/20 card-glow">
       <div className="flex flex-col gap-3">
@@ -55,12 +42,6 @@ export function FinishedMatchCard({ match }: FinishedMatchCardProps) {
           <div className="flex-1 text-right">
             <p className="text-sm font-semibold text-foreground leading-tight">{match.awayTeam}</p>
           </div>
-        </div>
-
-        {/* Date and Time */}
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{dateStr}</span>
-          <span>{timeStr}</span>
         </div>
       </div>
     </Card>
