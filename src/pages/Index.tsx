@@ -5,7 +5,7 @@ import { FinishedMatchCard } from "@/components/FinishedMatchCard";
 import { BettingSlip, type BetSlipItem } from "@/components/BettingSlip";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
-import { TrendingUp, Search, Flame } from "lucide-react";
+import { TrendingUp, Search } from "lucide-react";
 import { useBetAutoCalculation } from "@/hooks/useBetAutoCalculation";
 import { useOdds } from "@/context/OddsContext";
 
@@ -164,21 +164,21 @@ const Index = ({ sport = 'football' }: IndexProps) => {
 
       {/* Matches - Organized by Status */}
       <section className="container mx-auto px-4 py-4">
-        <div className="mb-6 flex flex-wrap gap-2">
+        <div className="mb-6 grid grid-cols-4 gap-2">
           <Button
             variant={activeView === "hot" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("hot")}
-            className="min-w-[92px]"
+            className="w-full text-xs sm:text-sm"
           >
-            <Flame className="mr-1 h-3.5 w-3.5" />
+            <span className="mr-1">🔥</span>
             Hot
           </Button>
           <Button
             variant={activeView === "upcoming" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("upcoming")}
-            className="min-w-[92px]"
+            className="w-full text-xs sm:text-sm"
           >
             Upcoming
           </Button>
@@ -186,7 +186,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
             variant={activeView === "live" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("live")}
-            className="min-w-[92px]"
+            className="w-full text-xs sm:text-sm"
           >
             LIVE
           </Button>
@@ -194,7 +194,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
             variant={activeView === "ended" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("ended")}
-            className="min-w-[92px]"
+            className="w-full text-xs sm:text-sm"
           >
             ENDED
           </Button>
@@ -204,7 +204,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
-                <Flame className="mr-2 inline h-5 w-5 text-orange-500" />
+                <span className="mr-2 inline text-lg">🔥</span>
                 Hot Matches 🔥
               </h2>
             </div>
