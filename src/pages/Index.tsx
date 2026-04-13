@@ -5,11 +5,11 @@ import { FinishedMatchCard } from "@/components/FinishedMatchCard";
 import { BettingSlip, type BetSlipItem } from "@/components/BettingSlip";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
-import { TrendingUp, Search } from "lucide-react";
+import { TrendingUp, Search, Flame } from "lucide-react";
 import { useBetAutoCalculation } from "@/hooks/useBetAutoCalculation";
 import { useOdds } from "@/context/OddsContext";
 
-type MatchView = "upcoming" | "live" | "ended";
+type MatchView = "hot" | "upcoming" | "live" | "ended";
 
 interface IndexProps {
   sport?: string;
@@ -78,7 +78,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
   });
   const [showAllFinished, setShowAllFinished] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeView, setActiveView] = useState<MatchView>("upcoming");
+  const [activeView, setActiveView] = useState<MatchView>("hot");
   const { games: apiGames } = useOdds();;
 
   // Persist bet slip selections so they remain even if match cards move/disappear.
@@ -107,6 +107,9 @@ const Index = ({ sport = 'football' }: IndexProps) => {
       })
     : games;
 
+  const hotGames = sortGamesByKickoffTime(
+    filteredGames.filter((g) => g.isHot && g.status !== "finished")
+  );
   const upcomingGames = sortGamesByKickoffTime(
     filteredGames.filter((g) => g.status === "upcoming" && isFutureKickoff(g.time))
   );
@@ -163,6 +166,15 @@ const Index = ({ sport = 'football' }: IndexProps) => {
       <section className="container mx-auto px-4 py-4">
         <div className="mb-6 flex flex-wrap gap-2">
           <Button
+            variant={activeView === "hot" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("hot")}
+            className="min-w-[92px]"
+          >
+            <Flame className="mr-1 h-3.5 w-3.5" />
+            Hot
+          </Button>
+          <Button
             variant={activeView === "upcoming" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("upcoming")}
@@ -187,6 +199,40 @@ const Index = ({ sport = 'football' }: IndexProps) => {
             ENDED
           </Button>
         </div>
+
+        {activeView === "hot" && hotGames.length > 0 && (
+          <div className="mb-10">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
+                <Flame className="mr-2 inline h-5 w-5 text-orange-500" />
+                Hot Matches 🔥
+              </h2>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {hotGames.map((game) => {
+                const match: Match = {
+                  id: game.id,
+                  league: game.league,
+                  homeTeam: game.homeTeam,
+                  awayTeam: game.awayTeam,
+                  homeOdds: game.homeOdds,
+                  drawOdds: game.drawOdds,
+                  awayOdds: game.awayOdds,
+                  time: game.time,
+                  markets: game.markets,
+                };
+                return (
+                  <MatchCard
+                    key={game.id}
+                    match={match}
+                    onSelectOdd={(id, type, odds) => handleSelectOdd(id, type, odds, match)}
+                    selectedOdd={selectedOdds[game.id] || null}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {activeView === "upcoming" && upcomingGames.length > 0 && (
           <div className="mb-10">
@@ -303,12 +349,13 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           </div>
         )}
 
-        {((activeView === "upcoming" && upcomingGames.length === 0) ||
+        {((activeView === "hot" && hotGames.length === 0) ||
+          (activeView === "upcoming" && upcomingGames.length === 0) ||
           (activeView === "live" && liveGames.length === 0) ||
           (activeView === "ended" && endedGames.length === 0)) && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
-              {searchQuery ? `No matches found for "${searchQuery}"` : `No ${activeView} matches available right now.`}
+              {searchQuery ? `No matches found for "${searchQuery}"` : activeView === "hot" ? "No hot matches right now. Check upcoming!" : `No ${activeView} matches available right now.`}
             </p>
           </div>
         )}

@@ -3,7 +3,7 @@ import { Header } from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download, Ban } from "lucide-react";
+import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download, Ban, Flame } from "lucide-react";
 import { type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
@@ -1054,7 +1054,29 @@ const AdminPortal = () => {
     }
   };
 
-
+  const toggleHot = async (id: string) => {
+    const game = games.find((g) => g.id === id);
+    if (!game) return;
+    const newHot = !game.isHot;
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/games/${id}/hot`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: loggedInUser.phone, is_hot: newHot })
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateGame(id, { isHot: newHot } as any);
+        alert(newHot ? '🔥 Match marked as Hot!' : '❄️ Match unmarked as Hot');
+      } else {
+        alert(`Error: ${data.error || 'Failed to toggle hot status'}`);
+      }
+    } catch (error) {
+      console.error('Error toggling hot:', error);
+      alert('Failed to toggle hot status');
+    }
+  };
 
   const removeGameHandler = async (id: string) => {
     if (!confirm('Are you sure you want to delete this game?')) return;
@@ -2929,6 +2951,9 @@ const AdminPortal = () => {
                         className="border-primary/50 hover:bg-primary/10"
                       >
                         <Zap className="h-4 w-4 text-primary" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => toggleHot(game.id)} title={game.isHot ? "Unmark as Hot" : "Mark as Hot"}>
+                        <Flame className={`h-4 w-4 ${game.isHot ? 'text-orange-500 fill-orange-500' : 'text-muted-foreground'}`} />
                       </Button>
                       <Button variant="ghost" size="icon" disabled={isApiManagedGame(game.id)} onClick={() => regenerateOdds(game.id)} title={isApiManagedGame(game.id) ? "API-managed matches sync automatically" : "Regenerate all market odds"}>
                         <RefreshCw className="h-4 w-4 text-primary" />

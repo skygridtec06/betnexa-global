@@ -21,6 +21,7 @@ export interface GameOdds {
   kickoffPausedAt?: number | string; // Timestamp when paused (ISO string or milliseconds)
   isHalftime?: boolean;
   sport?: string; // 'football' | 'basketball' | 'tennis' | 'cricket' | 'boxing'
+  isHot?: boolean; // Hot/popular match
 }
 
 interface OddsContextType {
@@ -341,6 +342,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
                   gamePaused: g.game_paused || false,
                   kickoffPausedAt: g.kickoff_paused_at || undefined,
                   isHalftime: g.is_halftime || false,
+                  isHot: g.is_hot || false,
                 }));
                 
                 const seenIds = new Set<string>();
@@ -426,6 +428,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
             gamePaused: g.game_paused || false,
             kickoffPausedAt: g.kickoff_paused_at || undefined,
             isHalftime: g.is_halftime || false,
+            isHot: g.is_hot || false,
           }));
           
           // Remove duplicates by ID and sort by ID for stable ordering to prevent reranking/collision issues

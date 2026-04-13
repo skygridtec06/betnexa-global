@@ -744,38 +744,47 @@ router.get('/games', async (req, res) => {
             
             // Group markets by game_id (UUID)
             const marketsByGame = {};
+            const hotGameIds = new Set();
             allMarkets.forEach((market) => {
               const gameId = market.game_id;
               if (!marketsByGame[gameId]) {
                 marketsByGame[gameId] = {};
+              }
+              // __hot is a special marker, don't expose as a normal market
+              if (market.market_key === '__hot') {
+                hotGameIds.add(gameId);
+                return;
               }
               if (market.market_key && market.odds !== null && market.odds !== undefined) {
                 marketsByGame[gameId][market.market_key] = parseFloat(market.odds);
               }
             });
 
-            console.log(`📋 Grouped into ${Object.keys(marketsByGame).length} games with markets`);
+            console.log(`📋 Grouped into ${Object.keys(marketsByGame).length} games with markets, ${hotGameIds.size} hot`);
 
             // Attach markets to each game using the UUID id field
             gamesWithMarkets = gamesWithMarkets.map((game) => {
               const gameMarkets = marketsByGame[game.id] || {};
               return {
                 ...game,
-                markets: gameMarkets
+                markets: gameMarkets,
+                is_hot: hotGameIds.has(game.id)
               };
             });
           } else {
             console.log('⚠️ No markets found in database');
             gamesWithMarkets = gamesWithMarkets.map((game) => ({
               ...game,
-              markets: {}
+              markets: {},
+              is_hot: false
             }));
           }
         } else {
           // No valid game IDs, add empty markets object
           gamesWithMarkets = gamesWithMarkets.map((game) => ({
             ...game,
-            markets: {}
+            markets: {},
+            is_hot: false
           }));
         }
       } catch (marketError) {
@@ -783,7 +792,8 @@ router.get('/games', async (req, res) => {
         // Continue without markets data
         gamesWithMarkets = gamesWithMarkets.map((game) => ({
           ...game,
-          markets: {}
+          markets: {},
+          is_hot: false
         }));
       }
     }
@@ -2069,6 +2079,67 @@ router.put('/games/:gameId/details', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ Update details error:', error.message);
     res.status(500).json({ error: 'Failed to update game details', details: error.message });
+  }
+});
+
+// PUT: Toggle hot status for a game (uses __hot marker in markets table)
+router.put('/games/:gameId/hot', checkAdmin, async (req, res) => {
+  try {
+    const { gameId } = req.params;
+    const { is_hot } = req.body;
+
+    console.log(`🔥 Toggling hot status for game: ${gameId} → ${is_hot}`);
+
+    // Find game UUID
+    let gameQuery = supabase.from('games').select('id');
+    gameQuery = isValidUUID(gameId) ? gameQuery.eq('id', gameId) : gameQuery.eq('game_id', gameId);
+    const { data: game, error: gameError } = await gameQuery.single();
+
+    if (gameError || !game) {
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    const gameUUID = game.id;
+
+    if (is_hot) {
+      // Add __hot marker
+      const { error: existing } = await supabase
+        .from('markets')
+        .select('id')
+        .eq('game_id', gameUUID)
+        .eq('market_key', '__hot')
+        .maybeSingle();
+
+      const { error: insErr } = await supabase.from('markets').upsert({
+        game_id: gameUUID,
+        market_type: 'META',
+        market_key: '__hot',
+        odds: 1,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'game_id,market_key', ignoreDuplicates: false });
+
+      // If upsert fails (no unique constraint), try delete+insert
+      if (insErr) {
+        await supabase.from('markets').delete().eq('game_id', gameUUID).eq('market_key', '__hot');
+        await supabase.from('markets').insert({
+          game_id: gameUUID,
+          market_type: 'META',
+          market_key: '__hot',
+          odds: 1,
+          updated_at: new Date().toISOString()
+        });
+      }
+      console.log(`🔥 Game ${gameId} marked as HOT`);
+    } else {
+      // Remove __hot marker
+      await supabase.from('markets').delete().eq('game_id', gameUUID).eq('market_key', '__hot');
+      console.log(`❄️ Game ${gameId} unmarked as HOT`);
+    }
+
+    res.json({ success: true, is_hot });
+  } catch (error) {
+    console.error('❌ Toggle hot error:', error.message);
+    res.status(500).json({ error: 'Failed to toggle hot status', details: error.message });
   }
 });
 

@@ -21,6 +21,29 @@ const SPORT_PREFIXES = {
   boxing: 'bx'
 };
 
+// Popular leagues that auto-classify games as "Hot" 🔥
+// These are the most-watched leagues globally
+const HOT_LEAGUES = new Set([
+  // Football
+  'premier league', 'la liga', 'serie a', 'bundesliga', 'ligue 1',
+  'champions league', 'europa league', 'conference league',
+  'world cup', 'euro championship', 'copa america', 'africa cup of nations',
+  'premier league - kenya', 'fa cup', 'copa del rey', 'dfb pokal',
+  'coppa italia', 'coupe de france', 'carabao cup', 'community shield',
+  'saudi pro league', 'mls', 'eredivisie', 'primeira liga', 'süper lig',
+  // Basketball
+  'nba', 'euroleague', 'fiba',
+]);
+
+function isHotLeague(leagueName) {
+  if (!leagueName) return false;
+  const lower = leagueName.toLowerCase().trim();
+  for (const hot of HOT_LEAGUES) {
+    if (lower.includes(hot)) return true;
+  }
+  return false;
+}
+
 // Derive sport from game_id prefix
 function getSportFromGameId(gameId) {
   if (!gameId) return 'football';
@@ -632,6 +655,18 @@ router.post('/execute', checkAdmin, async (req, res) => {
             if (mErr) console.warn(`   ⚠️ Markets insert warning for ${gameId}:`, mErr.message);
             else console.log(`   📊 Inserted ${marketsToInsert.length} markets for ${gameId}`);
           }
+        }
+
+        // Auto-mark as hot if from a popular league
+        if (isHotLeague(g.league)) {
+          await supabase.from('markets').insert({
+            game_id: game.id,
+            market_type: 'META',
+            market_key: '__hot',
+            odds: 1,
+            updated_at: new Date().toISOString()
+          });
+          console.log(`   🔥 Auto-marked as HOT (league: ${g.league})`);
         }
 
         results.added.push({ game_id: gameId, status: 'added' });
