@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2, CheckCircle, XCircle, Clock, DollarSign, Users, UserPlus, BarChart3, Trophy, Settings, RefreshCw, Edit2, Save, ArrowDown, ArrowUp, Play, Pause, Square, Lock, Unlock, Shield, Zap, Upload, Image as ImageIcon, Loader2, Megaphone, Calendar, Download, Ban } from "lucide-react";
-import { generateMarketOdds, type MatchMarkets } from "@/components/MatchCard";
+import { type MatchMarkets } from "@/components/MatchCard";
 import { useMatches } from "@/context/MatchContext";
 import { useBets } from "@/context/BetContext";
 import { useOdds, type GameOdds } from "@/context/OddsContext";
@@ -954,7 +954,7 @@ const AdminPortal = () => {
       const kickoffTime = pg.kickoffDateTime
         ? new Date(pg.kickoffDateTime + ':00+03:00').toISOString() // EAT = UTC+3
         : new Date().toISOString();
-      const markets = generateMarketOdds(h, d, a);
+      const markets: Record<string, number> = { home: h, draw: d, away: a };
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/games`, {
         method: 'POST',
@@ -1014,8 +1014,21 @@ const AdminPortal = () => {
     if (!game) return;
 
     try {
-      // Preserve correct score odds from database, only regenerate other odds
-      const newMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
+      // Send existing DB markets to be re-saved (preserves all custom values)
+      const existingMarkets = game.markets || {};
+      
+      // Filter to only include valid numeric odds
+      const cleanMarkets: Record<string, number> = {};
+      for (const [k, v] of Object.entries(existingMarkets)) {
+        if (typeof v === 'number' && Number.isFinite(v) && v >= 1.01) {
+          cleanMarkets[k] = v;
+        }
+      }
+
+      if (Object.keys(cleanMarkets).length === 0) {
+        alert('⚠️ No markets to regenerate. Use Edit Details to add market odds.');
+        return;
+      }
       
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/games/${id}/markets`, {
@@ -1023,14 +1036,14 @@ const AdminPortal = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone: loggedInUser.phone,
-          markets: newMarkets
+          markets: cleanMarkets
         })
       });
 
       const data = await response.json();
 
       if (data.success) {
-        updateGameMarkets(id, newMarkets);
+        updateGameMarkets(id, data.savedMarkets || cleanMarkets);
         alert('✅ Odds regenerated successfully!');
       } else {
         alert(`Error: ${data.error || 'Failed to regenerate odds'}`);
@@ -1253,8 +1266,8 @@ const AdminPortal = () => {
 
     try {
       const newOdds = adjustOddsBasedOnScore(game.homeOdds, game.drawOdds, game.awayOdds, homeScore, awayScore);
-      // Pass existing markets to preserve correct score odds from database
-      const newMarkets = generateMarketOdds(newOdds.homeOdds, newOdds.drawOdds, newOdds.awayOdds, game.markets);
+      // Preserve existing DB markets, only update 1X2 odds
+      const existingMarkets = game.markets || {};
 
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/games/${gameId}/score`, {
@@ -1272,14 +1285,14 @@ const AdminPortal = () => {
       const data = await response.json();
 
       if (data.success) {
-        // Update local state
+        // Update local state - preserve DB markets, update 1X2 odds
         updateGame(gameId, {
           homeScore,
           awayScore,
           homeOdds: newOdds.homeOdds,
           drawOdds: newOdds.drawOdds,
           awayOdds: newOdds.awayOdds,
-          markets: newMarkets,
+          markets: existingMarkets,
         });
       } else {
         alert(`Error: ${data.error || 'Failed to update score'}`);
@@ -1474,12 +1487,16 @@ const AdminPortal = () => {
       if (details.markets && Object.keys(details.markets).length > 0) {
         console.log(`📊 Saving markets for game ${gameId}`);
         const marketsToSave = Object.fromEntries(
-          Object.entries(details.markets).filter(([_, v]) => v && parseFloat(v as any) > 0)
+          Object.entries(details.markets).filter(([_, v]) => {
+            if (v == null || v === undefined) return false;
+            const num = typeof v === 'number' ? v : parseFloat(v as any);
+            return Number.isFinite(num) && num > 0;
+          })
         );
         
         if (Object.keys(marketsToSave).length > 0) {
           const marketPayload = Object.fromEntries(
-            Object.entries(marketsToSave).map(([k, v]) => [k, parseFloat(v as any)])
+            Object.entries(marketsToSave).map(([k, v]) => [k, typeof v === 'number' ? v : parseFloat(v as any)])
           );
           console.log(`📊 Sending ${Object.keys(marketPayload).length} markets to backend:`, JSON.stringify(marketPayload).slice(0, 200));
           
@@ -2470,15 +2487,16 @@ const AdminPortal = () => {
                                 kickoffTimeStr = new Date().toISOString();
                               }
                               
-                              // Initialize markets from database or generate them
+                              // Initialize markets: start with ALL marketLabels keys + any DB values
                               const dbMarkets = game.markets || {};
-                              let editableMarkets: Record<string, number> = {};
-                              
-                              if (Object.keys(dbMarkets).length > 0) {
-                                editableMarkets = { ...dbMarkets };
-                              } else {
-                                const fullMarkets = generateMarketOdds(game.homeOdds, game.drawOdds, game.awayOdds, game.markets);
-                                editableMarkets = { ...fullMarkets };
+                              const editableMarkets: Record<string, number> = { ...dbMarkets };
+                              // Ensure every marketLabels key exists in state so edits are tracked
+                              for (const k of Object.keys(marketLabels)) {
+                                if (editableMarkets[k] === undefined || editableMarkets[k] === null) {
+                                  // leave absent — will show as empty input
+                                } else {
+                                  editableMarkets[k] = editableMarkets[k]; // keep DB value
+                                }
                               }
                               
                               setGameDetailsEdit({
@@ -2511,7 +2529,7 @@ const AdminPortal = () => {
                               <label className="text-xs text-muted-foreground">League</label>
                               <Input
                                 value={gameDetailsEdit[game.id]?.league || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], league: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], league: v } })); }}
                                 className="h-7 text-xs"
                                 placeholder="League"
                               />
@@ -2537,7 +2555,7 @@ const AdminPortal = () => {
                                   if (e.target.value) {
                                     try {
                                       const newDate = new Date(e.target.value + ':00').toISOString();
-                                      setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], kickoffTime: newDate } });
+                                      setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], kickoffTime: newDate } }));
                                     } catch (err) {
                                       console.error('Error parsing date:', err);
                                     }
@@ -2552,7 +2570,7 @@ const AdminPortal = () => {
                               <label className="text-xs text-muted-foreground">Home Team</label>
                               <Input
                                 value={gameDetailsEdit[game.id]?.homeTeam || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], homeTeam: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], homeTeam: v } })); }}
                                 className="h-7 text-xs"
                                 placeholder="Home Team"
                               />
@@ -2561,7 +2579,7 @@ const AdminPortal = () => {
                               <label className="text-xs text-muted-foreground">Away Team</label>
                               <Input
                                 value={gameDetailsEdit[game.id]?.awayTeam || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], awayTeam: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], awayTeam: v } })); }}
                                 className="h-7 text-xs"
                                 placeholder="Away Team"
                               />
@@ -2575,7 +2593,7 @@ const AdminPortal = () => {
                                 min="1"
                                 step="0.01"
                                 value={gameDetailsEdit[game.id]?.homeOdds || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], homeOdds: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], homeOdds: v } })); }}
                                 className="h-7 text-xs"
                               />
                             </div>
@@ -2586,7 +2604,7 @@ const AdminPortal = () => {
                                 min="1"
                                 step="0.01"
                                 value={gameDetailsEdit[game.id]?.drawOdds || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], drawOdds: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], drawOdds: v } })); }}
                                 className="h-7 text-xs"
                               />
                             </div>
@@ -2597,7 +2615,7 @@ const AdminPortal = () => {
                                 min="1"
                                 step="0.01"
                                 value={gameDetailsEdit[game.id]?.awayOdds || ""}
-                                onChange={(e) => setGameDetailsEdit({ ...gameDetailsEdit, [game.id]: { ...gameDetailsEdit[game.id], awayOdds: e.target.value } })}
+                                onChange={(e) => { const v = e.target.value; setGameDetailsEdit(prev => ({ ...prev, [game.id]: { ...prev[game.id], awayOdds: v } })); }}
                                 className="h-7 text-xs"
                               />
                             </div>
@@ -2625,20 +2643,22 @@ const AdminPortal = () => {
                                         className={`w-full rounded border bg-background px-2 py-1 font-mono text-xs text-foreground outline-none focus:border-primary ${
                                           hasChanged ? 'border-yellow-500/50 bg-yellow-500/5' : 'border-border'
                                         }`}
-                                        value={editValue || ''}
+                                        value={editValue != null && editValue !== 0 ? editValue : ''}
                                         placeholder={currentDbValue?.toFixed(2) || '1.50'}
                                         onChange={(e) => {
-                                          const newValue = parseFloat(e.target.value) || 0;
-                                          setGameDetailsEdit({
-                                            ...gameDetailsEdit,
+                                          const raw = e.target.value;
+                                          const parsed = raw === '' ? undefined : parseFloat(raw);
+                                          const newValue = parsed !== undefined && !isNaN(parsed) ? parsed : undefined;
+                                          setGameDetailsEdit(prev => ({
+                                            ...prev,
                                             [game.id]: {
-                                              ...gameDetailsEdit[game.id],
+                                              ...prev[game.id],
                                               markets: {
-                                                ...gameDetailsEdit[game.id]?.markets,
-                                                [key]: newValue
+                                                ...prev[game.id]?.markets,
+                                                [key]: newValue as any
                                               }
                                             }
-                                          });
+                                          }));
                                         }}
                                       />
                                     </div>

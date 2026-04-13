@@ -960,6 +960,7 @@ router.post('/games', checkAdmin, async (req, res) => {
     });
 
     // Now insert only the markets the admin explicitly provided
+    let savedMarketsObj = {};
     try {
       console.log('📊 Handling markets for new game');
       let marketsToInsert = [];
@@ -974,6 +975,7 @@ router.post('/games', checkAdmin, async (req, res) => {
               market_key: key,
               odds: parsed
             });
+            savedMarketsObj[key] = parsed;
           }
         }
         console.log(`   📝 Saving ${marketsToInsert.length} custom markets (blank markets left empty)`);
@@ -988,14 +990,14 @@ router.post('/games', checkAdmin, async (req, res) => {
 
         if (marketError) {
           console.warn('⚠️ Failed to insert markets:', marketError.message);
-          // Don't fail the game creation, continue anyway
+          savedMarketsObj = {};
         } else {
           console.log(`✅ Inserted ${marketsToInsert.length} markets for game`);
         }
       }
     } catch (marketError) {
       console.warn('⚠️ Error creating markets:', marketError.message);
-      // Don't fail the game creation if markets fail
+      savedMarketsObj = {};
     }
 
     // Try to log admin action, but don't fail if it doesn't work
@@ -1036,7 +1038,8 @@ router.post('/games', checkAdmin, async (req, res) => {
         away_odds: game.away_odds,
         status: game.status,
         time: game.time,
-        created_at: game.created_at
+        created_at: game.created_at,
+        markets: savedMarketsObj
       }
     });
   } catch (error) {
