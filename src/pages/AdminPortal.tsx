@@ -1792,7 +1792,8 @@ const AdminPortal = () => {
 
     const accountLabel = String(getTransactionAccountLabel(transaction) || '').toLowerCase();
     const phone = String(transaction.phone_number || '').toLowerCase();
-    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery);
+    const userId = String(transaction.user_id || '').toLowerCase();
+    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery) || userId.includes(transactionQuery);
   });
 
   const filteredActivationFees = activationFees.filter((fee: any) => {
@@ -1805,7 +1806,8 @@ const AdminPortal = () => {
       'User'
     ).toLowerCase();
     const phone = String(fee.phone_number || '').toLowerCase();
-    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery);
+    const userId = String(fee.user_id || '').toLowerCase();
+    return accountLabel.includes(transactionQuery) || phone.includes(transactionQuery) || userId.includes(transactionQuery);
   });
 
   // Fetch all payments
@@ -3476,7 +3478,7 @@ const AdminPortal = () => {
               <Input
                 value={transactionSearchQuery}
                 onChange={(e) => setTransactionSearchQuery(e.target.value)}
-                placeholder="Search by username or phone number"
+                placeholder="Search by username, phone number, or user ID"
                 className="mt-2"
               />
             </Card>
