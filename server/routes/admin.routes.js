@@ -238,6 +238,149 @@ function evaluateSelectionOutcome(selection, game) {
   return 'pending';
 }
 
+// Helper function to unsettle affected bets when a game is reverted from finished to live
+async function unsettleBetsForGame(gameId) {
+  try {
+    console.log(`\n⏪ [UNSETTLE] Processing bets for game: ${gameId}`);
+
+    // Find all bet selections related to this game
+    const { data: selections, error: selectionsError } = await supabase
+      .from('bet_selections')
+      .select('*, bets!inner(id, user_id, stake, potential_win, status)')
+      .eq('game_id', gameId);
+
+    if (selectionsError) {
+      console.error('❌ Error fetching selections:', selectionsError.message);
+      return;
+    }
+
+    if (!selections || selections.length === 0) {
+      console.log('   ℹ️ No selections found for this game');
+      return;
+    }
+
+    console.log(`   Found ${selections.length} selections to unsettle`);
+
+    // Get unique affected bet IDs
+    const affectedBetIds = [...new Set((selections || []).map((sel) => sel.bet_id))];
+
+    for (const betId of affectedBetIds) {
+      const { data: bet, error: betError } = await supabase
+        .from('bets')
+        .select('id, bet_id, user_id, stake, potential_win, status, amount_won')
+        .eq('id', betId)
+        .single();
+
+      if (betError || !bet) {
+        console.warn(`   ⚠️ Bet not found: ${betId}`, betError?.message);
+        continue;
+      }
+
+      // Only process settled bets (Won or Lost)
+      if (bet.status === 'Open') {
+        console.log(`   ℹ️  Bet ${betId.substring(0, 8)}... already Open, skipping`);
+        continue;
+      }
+
+      console.log(`\n   🎯 Unsettling bet ${betId.substring(0, 8)}... (status: ${bet.status})`);
+
+      // Reset all selections for this bet to pending
+      const { error: selectionsResetError } = await supabase
+        .from('bet_selections')
+        .update({ outcome: 'pending', updated_at: new Date().toISOString() })
+        .eq('bet_id', betId);
+
+      if (selectionsResetError) {
+        console.warn('   ⚠️ Error resetting selections:', selectionsResetError.message);
+      }
+
+      // Reverse winnings if bet was Won
+      let reversedAmount = 0;
+      if (bet.status === 'Won' && bet.amount_won && bet.user_id) {
+        reversedAmount = parseFloat(bet.amount_won);
+        console.log(`      💰 Reversing winnings: KSH ${reversedAmount}`);
+
+        let { data: user, error: userError } = await supabase
+          .from('users')
+          .select('winnings_balance, total_winnings, account_balance, phone_number')
+          .eq('id', bet.user_id)
+          .single();
+
+        if (userError && `${userError.message || ''}`.includes('winnings_balance')) {
+          const fallbackUserResult = await supabase
+            .from('users')
+            .select('total_winnings, account_balance, phone_number')
+            .eq('id', bet.user_id)
+            .single();
+          user = fallbackUserResult.data;
+          userError = fallbackUserResult.error;
+        }
+
+        if (!user || userError) {
+          console.error('   ❌ Error fetching user:', userError?.message);
+          continue;
+        }
+
+        const currentWinningsBalance = parseFloat(user.winnings_balance ?? user.total_winnings ?? 0) || 0;
+        const newWinningsBalance = Math.max(0, currentWinningsBalance - reversedAmount);
+        const newTotalWinnings = Math.max(0, (parseFloat(user.total_winnings) || 0) - reversedAmount);
+        const newMainBalance = Math.max(0, (parseFloat(user.account_balance) || 0) - reversedAmount);
+
+        const userBalanceUpdate = {
+          account_balance: newMainBalance,
+          winnings_balance: newWinningsBalance,
+          total_winnings: newTotalWinnings,
+          updated_at: new Date().toISOString()
+        };
+
+        let { error: balanceError } = await supabase
+          .from('users')
+          .update(userBalanceUpdate)
+          .eq('id', bet.user_id);
+
+        if (balanceError && `${balanceError.message || ''}`.includes('winnings_balance')) {
+          const fallbackUpdate = { ...userBalanceUpdate };
+          delete fallbackUpdate.winnings_balance;
+          const fallbackResult = await supabase
+            .from('users')
+            .update(fallbackUpdate)
+            .eq('id', bet.user_id);
+          balanceError = fallbackResult.error;
+        }
+
+        if (balanceError) {
+          console.error('   ❌ Error reversing user winnings:', balanceError.message);
+        } else {
+          console.log(`      ✅ User balances updated: account KSH ${newMainBalance}, winnings KSH ${newWinningsBalance} (-KSH ${reversedAmount})`);
+        }
+      }
+
+      // Reset bet to Open status
+      const betResetUpdate = {
+        status: 'Open',
+        amount_won: null,
+        settled_at: null,
+        updated_at: new Date().toISOString()
+      };
+
+      const { error: betUpdateError } = await supabase
+        .from('bets')
+        .update(betResetUpdate)
+        .eq('id', betId);
+
+      if (betUpdateError) {
+        console.error('   ❌ Error resetting bet status:', betUpdateError.message);
+      } else {
+        console.log(`      ✅ Bet status reset to Open`);
+      }
+    }
+
+    console.log(`\n✅ Unsettlement complete for game ${gameId}`);
+  } catch (error) {
+    console.error('❌ Unsettlement error:', error.message);
+  }
+}
+
 // Helper function to settle affected bets after a game score update
 async function settleBetsForGame(gameId, game) {
   try {
@@ -2019,6 +2162,72 @@ router.put('/games/:gameId/end', checkAdmin, async (req, res) => {
   } catch (error) {
     console.error('❌ End game error:', error.message);
     res.status(500).json({ error: 'Failed to end game', details: error.message });
+  }
+});
+
+// PUT: Revert ended game back to live and unsettle all settled bets
+router.put('/games/:gameId/revert', checkAdmin, async (req, res) => {
+  try {
+    const { gameId } = req.params;
+
+    if (isApiManagedGameId(gameId)) {
+      return res.status(403).json({ error: 'API-managed matches cannot be reverted by admin' });
+    }
+
+    console.log(`\n⏪ Reverting game: ${gameId}`);
+
+    // Find the game
+    let existingGameQuery = supabase.from('games').select('*');
+    
+    if (isValidUUID(gameId)) {
+      existingGameQuery = existingGameQuery.eq('id', gameId);
+    } else {
+      existingGameQuery = existingGameQuery.eq('game_id', gameId);
+    }
+
+    const { data: existingGame, error: findError } = await existingGameQuery.maybeSingle();
+
+    if (findError) {
+      console.error('❌ Error finding game:', findError.message);
+      return res.status(400).json({ error: 'Failed to find game', details: findError.message });
+    }
+
+    if (!existingGame) {
+      console.error('❌ No game found:', gameId);
+      return res.status(404).json({ error: 'Game not found' });
+    }
+
+    if (existingGame.status !== 'finished') {
+      return res.status(400).json({ error: 'Only finished games can be reverted', current_status: existingGame.status });
+    }
+
+    // Revert the game status to live
+    const updates = {
+      status: 'live',
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: game, error: updateError } = await supabase
+      .from('games')
+      .update(updates)
+      .eq('id', existingGame.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('❌ Error reverting game:', updateError.message);
+      return res.status(400).json({ error: 'Failed to revert game', details: updateError.message });
+    }
+
+    // Unsettle all bets affected by this game
+    console.log(`🔄 Unsettling bets for game ${existingGame.id}`);
+    await unsettleBetsForGame(existingGame.id);
+
+    console.log(`✅ Game reverted: ${gameId}`);
+    res.json({ success: true, game, message: 'Game reverted to live and all settled bets have been unsettled' });
+  } catch (error) {
+    console.error('❌ Revert game error:', error.message);
+    res.status(500).json({ error: 'Failed to revert game', details: error.message });
   }
 });
 

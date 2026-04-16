@@ -1357,6 +1357,42 @@ const AdminPortal = () => {
     }
   };
 
+  const revertGame = async (gameId: string) => {
+    if (!ensureManualGame(gameId)) return;
+    const game = games.find((g) => g.id === gameId);
+    if (!game) return;
+
+    if (!window.confirm('⚠️ Are you sure you want to revert this finished game back to LIVE?\n\nThis will unsettl all settled bets and reverse any winnings credited.')) {
+      return;
+    }
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const response = await fetch(`${apiUrl}/api/admin/games/${gameId}/revert`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone,
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        updateGame(gameId, {
+          status: "live",
+        });
+        alert('✅ Game reverted to LIVE! All settled bets have been unsettled.');
+      } else {
+        console.error('Revert game error:', data);
+        alert(`Error: ${data.details || data.error || 'Failed to revert game'}`);
+      }
+    } catch (error) {
+      console.error('Error reverting game:', error);
+      alert('Failed to revert game: ' + error.message);
+    }
+  };
+
   const markHalftime = async (gameId: string) => {
     if (!ensureManualGame(gameId)) return;
     const game = games.find((g) => g.id === gameId);
@@ -2875,6 +2911,19 @@ const AdminPortal = () => {
                                 className="text-xs"
                               >
                                 <Square className="mr-1 h-3 w-3" /> End Game
+                              </Button>
+                            )}
+
+                            {game.status === "finished" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isApiManagedGame(game.id)}
+                                onClick={() => revertGame(game.id)}
+                                className="text-xs"
+                                title="Revert finished game back to live and unsettle all bets"
+                              >
+                                <RefreshCw className="mr-1 h-3 w-3" /> Revert to Live
                               </Button>
                             )}
                           </div>
