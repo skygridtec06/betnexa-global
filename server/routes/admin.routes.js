@@ -5634,6 +5634,74 @@ router.post('/bets/:betId/send-sms', checkAdmin, async (req, res) => {
   }
 });
 
+router.post('/bets/bulk-delete', checkAdmin, async (req, res) => {
+  try {
+    const { betIds } = req.body;
+
+    if (!Array.isArray(betIds) || betIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'betIds must be a non-empty array' });
+    }
+
+    console.log(`\n🗑️  [DELETE] Bulk deleting ${betIds.length} bets`);
+
+    // Delete bet_selections first (due to foreign key constraint)
+    const { error: selectionsDeleteError } = await supabase
+      .from('bet_selections')
+      .delete()
+      .in('bet_id', betIds);
+
+    if (selectionsDeleteError) {
+      console.error('Error deleting selections:', selectionsDeleteError.message);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to delete bet selections', 
+        details: selectionsDeleteError.message 
+      });
+    }
+
+    // Delete the bets
+    const { error: betsDeleteError } = await supabase
+      .from('bets')
+      .delete()
+      .in('id', betIds);
+
+    if (betsDeleteError) {
+      console.error('Error deleting bets:', betsDeleteError.message);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to delete bets', 
+        details: betsDeleteError.message 
+      });
+    }
+
+    // Log the deletion
+    try {
+      await supabase.from('admin_logs').insert([{
+        admin_id: req.user?.id && req.user.id !== 'unknown' ? req.user.id : null,
+        action: 'bulk_delete_bets',
+        target_type: 'bets',
+        changes: {
+          deleted_count: betIds.length,
+          bet_ids: betIds,
+        },
+        description: `Bulk deleted ${betIds.length} bets`,
+        created_at: new Date().toISOString(),
+      }]);
+    } catch (_) {}
+
+    console.log(`✅ Successfully deleted ${betIds.length} bets and their selections`);
+
+    return res.json({
+      success: true,
+      deletedCount: betIds.length,
+      message: `Successfully deleted ${betIds.length} bet(s)`
+    });
+  } catch (error) {
+    console.error('Bulk delete bets error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============================================
 // MATCH EVENT SCHEDULER ROUTES
 // ============================================

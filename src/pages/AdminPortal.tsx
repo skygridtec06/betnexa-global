@@ -279,6 +279,10 @@ const AdminPortal = () => {
     includeAdmins: false,
   });
 
+  // Bet marking and deletion state
+  const [markedBets, setMarkedBets] = useState<Set<string>>(new Set());
+  const [deletingMarkedBets, setDeletingMarkedBets] = useState(false);
+
   // Use refs to track latest games and updateGame function in the interval
   const gamesRef = useRef(games);
   const updateGameRef = useRef(updateGame);
@@ -418,6 +422,61 @@ const AdminPortal = () => {
       alert(`Failed to send broadcast SMS: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setSendingBroadcast(false);
+    }
+  };
+
+  const toggleBetMark = (betId: string) => {
+    setMarkedBets(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(betId)) {
+        newSet.delete(betId);
+      } else {
+        newSet.add(betId);
+      }
+      return newSet;
+    });
+  };
+
+  const deleteMarkedBets = async () => {
+    if (markedBets.size === 0) {
+      alert('No bets selected for deletion.');
+      return;
+    }
+
+    if (!window.confirm(`⚠️ Are you sure you want to delete ${markedBets.size} marked bet(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingMarkedBets(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const betIdsArray = Array.from(markedBets);
+      
+      const response = await fetch(`${apiUrl}/api/admin/bets/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone,
+          betIds: betIdsArray
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove deleted bets from local state
+        const newBets = bets.filter(b => !markedBets.has(b.id));
+        setBets(newBets);
+        setMarkedBets(new Set());
+        alert(`✅ Successfully deleted ${data.deletedCount} bet(s)`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to delete bets'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting marked bets:', error);
+      alert(`Failed to delete bets: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDeletingMarkedBets(false);
     }
   };
 
@@ -3877,10 +3936,21 @@ const AdminPortal = () => {
                       {/* OPEN BETS - At Top */}
                       {openBets.length > 0 && (
                         <div className="space-y-3 pb-8 border-b-2 border-yellow-500/30">
-                          <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm py-2">
+                          <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm py-2 flex items-center justify-between">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-500 flex items-center gap-2">
                               <Clock className="h-4 w-4" /> Open Bets ({openBets.length})
                             </h4>
+                            {markedBets.size > 0 && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={deleteMarkedBets}
+                                disabled={deletingMarkedBets}
+                                className="text-xs"
+                              >
+                                <Trash2 className="mr-1 h-3 w-3" /> Delete {markedBets.size} Marked
+                              </Button>
+                            )}
                           </div>
                           
                           {/* Open Bets Table */}
@@ -3888,6 +3958,22 @@ const AdminPortal = () => {
                             <table className="w-full text-xs">
                               <thead className="bg-secondary/50 border-b border-border">
                                 <tr className="text-muted-foreground">
+                                  <th className="text-center p-2 font-semibold w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={openBets.length > 0 && openBets.every(b => markedBets.has(b.id))}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setMarkedBets(new Set([...markedBets, ...openBets.map(b => b.id)]));
+                                        } else {
+                                          const newSet = new Set(markedBets);
+                                          openBets.forEach(b => newSet.delete(b.id));
+                                          setMarkedBets(newSet);
+                                        }
+                                      }}
+                                      className="cursor-pointer"
+                                    />
+                                  </th>
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold">Action</th>
@@ -3905,6 +3991,14 @@ const AdminPortal = () => {
                                   const betOutcomes = selectionOutcomes[bet.id];
                                   return (
                                     <tr key={bet.id} className="hover:bg-secondary/30 transition-colors">
+                                      <td className="p-2 text-center w-8">
+                                        <input
+                                          type="checkbox"
+                                          checked={markedBets.has(bet.id)}
+                                          onChange={() => toggleBetMark(bet.id)}
+                                          className="cursor-pointer"
+                                        />
+                                      </td>
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-center">
@@ -3946,10 +4040,21 @@ const AdminPortal = () => {
                       {/* WON BETS - Below Open with Divider */}
                       {wonBets.length > 0 && (
                         <div className="space-y-3 pt-8 pb-8 border-b-2 border-green-500/30">
-                          <div className="bg-card/95 backdrop-blur-sm py-2">
+                          <div className="bg-card/95 backdrop-blur-sm py-2 flex items-center justify-between">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-green-500 flex items-center gap-2">
                               <CheckCircle className="h-4 w-4" /> Won Bets ({wonBets.length})
                             </h4>
+                            {markedBets.size > 0 && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={deleteMarkedBets}
+                                disabled={deletingMarkedBets}
+                                className="text-xs"
+                              >
+                                <Trash2 className="mr-1 h-3 w-3" /> Delete {markedBets.size} Marked
+                              </Button>
+                            )}
                           </div>
                           
                           {/* Won Bets Table */}
@@ -3957,6 +4062,22 @@ const AdminPortal = () => {
                             <table className="w-full text-xs">
                               <thead className="bg-green-500/10 border-b border-green-500/30">
                                 <tr className="text-green-500">
+                                  <th className="text-center p-2 font-semibold w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={wonBets.length > 0 && wonBets.every(b => markedBets.has(b.id))}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setMarkedBets(new Set([...markedBets, ...wonBets.map(b => b.id)]));
+                                        } else {
+                                          const newSet = new Set(markedBets);
+                                          wonBets.forEach(b => newSet.delete(b.id));
+                                          setMarkedBets(newSet);
+                                        }
+                                      }}
+                                      className="cursor-pointer"
+                                    />
+                                  </th>
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold">Action</th>
@@ -3973,6 +4094,14 @@ const AdminPortal = () => {
                                 {wonBets.map((bet) => {
                                   return (
                                     <tr key={bet.id} className="bg-green-500/5 hover:bg-green-500/10 transition-colors">
+                                      <td className="p-2 text-center w-8">
+                                        <input
+                                          type="checkbox"
+                                          checked={markedBets.has(bet.id)}
+                                          onChange={() => toggleBetMark(bet.id)}
+                                          className="cursor-pointer"
+                                        />
+                                      </td>
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-center">
@@ -4015,10 +4144,21 @@ const AdminPortal = () => {
                       {/* LOST BETS - Below Won with Divider */}
                       {lostBets.length > 0 && (
                         <div className="space-y-3 pt-8">
-                          <div className="bg-card/95 backdrop-blur-sm py-2">
+                          <div className="bg-card/95 backdrop-blur-sm py-2 flex items-center justify-between">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-red-500 flex items-center gap-2">
                               <XCircle className="h-4 w-4" /> Lost Bets ({lostBets.length})
                             </h4>
+                            {markedBets.size > 0 && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={deleteMarkedBets}
+                                disabled={deletingMarkedBets}
+                                className="text-xs"
+                              >
+                                <Trash2 className="mr-1 h-3 w-3" /> Delete {markedBets.size} Marked
+                              </Button>
+                            )}
                           </div>
                           
                           {/* Lost Bets Table */}
@@ -4026,6 +4166,22 @@ const AdminPortal = () => {
                             <table className="w-full text-xs">
                               <thead className="bg-red-500/10 border-b border-red-500/30">
                                 <tr className="text-red-500">
+                                  <th className="text-center p-2 font-semibold w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={lostBets.length > 0 && lostBets.every(b => markedBets.has(b.id))}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          setMarkedBets(new Set([...markedBets, ...lostBets.map(b => b.id)]));
+                                        } else {
+                                          const newSet = new Set(markedBets);
+                                          lostBets.forEach(b => newSet.delete(b.id));
+                                          setMarkedBets(newSet);
+                                        }
+                                      }}
+                                      className="cursor-pointer"
+                                    />
+                                  </th>
                                   <th className="text-left p-2 font-semibold">Username</th>
                                   <th className="text-left p-2 font-semibold">Phone</th>
                                   <th className="text-center p-2 font-semibold">Action</th>
@@ -4042,6 +4198,14 @@ const AdminPortal = () => {
                                 {lostBets.map((bet) => {
                                   return (
                                     <tr key={bet.id} className="bg-red-500/5 hover:bg-red-500/10 transition-colors">
+                                      <td className="p-2 text-center w-8">
+                                        <input
+                                          type="checkbox"
+                                          checked={markedBets.has(bet.id)}
+                                          onChange={() => toggleBetMark(bet.id)}
+                                          className="cursor-pointer"
+                                        />
+                                      </td>
                                       <td className="p-2 text-foreground font-medium">{bet.username || 'Unknown'}</td>
                                       <td className="p-2 text-muted-foreground">{bet.phone_number || '-'}</td>
                                       <td className="p-2 text-center">
