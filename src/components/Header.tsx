@@ -208,73 +208,110 @@ export function Header() {
       {menuOpen && (
         <div className="animate-fade-up border-t border-border bg-background px-4 py-4 md:hidden">
           <div className="flex flex-col gap-2">
-            {sports.map((sport) => (
-              <Link
-                key={sport.name}
-                to={sport.path}
-                onClick={() => setMenuOpen(false)}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  location.pathname === sport.path
-                    ? "bg-primary/10 text-primary font-semibold"
-                    : "text-muted-foreground hover:text-foreground hover:bg-secondary"
-                }`}
-              >
-                <span>{sport.emoji}</span>
-                {sport.name}
-              </Link>
-            ))}
-            {isLoggedIn && user?.isAdmin && (
-              <Link to="/muleiadmin" onClick={() => setMenuOpen(false)}>
-                <Button variant="outline" size="sm" className="w-full text-orange-500 border-orange-500 hover:bg-orange-500/10">
-                  🔐 Admin Panel
-                </Button>
-              </Link>
-            )}
-            {/* Download APK Button */}
-            <button
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary w-full font-medium transition-colors"
-              onClick={() => {
-                handleDownloadAPK();
-                setMenuOpen(false);
-              }}
-              disabled={isDownloading}
-            >
-              <Download className="h-4 w-4" />
-              {isDownloading ? "Downloading APK..." : "Download APK"}
-            </button>
-            {/* Theme Toggle */}
-            <button
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-secondary w-full font-medium transition-colors"
-              onClick={toggleTheme}
-            >
-              {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-purple-500" />}
-              {theme === "dark" ? "Light Mode" : "Dark Mode"}
-            </button>
-            {/* WhatsApp Support */}
-            <button
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-500 hover:bg-green-500/10 w-full font-medium transition-colors"
-              onClick={() => {
-                handleWhatsAppSupport();
-                setMenuOpen(false);
-              }}
-            >
-              <MessageCircle className="h-4 w-4" />
-              Support
-            </button>
-            {isLoggedIn && (
-              <button
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-secondary w-full"
-                onClick={() => {
-                  handleLogout();
-                  setMenuOpen(false);
-                }}
-              >
-                <LogOut className="h-4 w-4" />
-                Logout
-              </button>
-            )}
-            {!isLoggedIn && (
+            {isLoggedIn ? (
+              // Logged-in user menu
               <>
+                {sports.map((sport) => (
+                  <Link
+                    key={sport.name}
+                    to={sport.path}
+                    onClick={() => setMenuOpen(false)}
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                      location.pathname === sport.path
+                        ? "bg-primary/10 text-primary font-semibold"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    <span>{sport.emoji}</span>
+                    {sport.name}
+                  </Link>
+                ))}
+                {user?.isAdmin && (
+                  <Link to="/muleiadmin" onClick={() => setMenuOpen(false)}>
+                    <Button variant="outline" size="sm" className="w-full text-orange-500 border-orange-500 hover:bg-orange-500/10">
+                      🔐 Admin Panel
+                    </Button>
+                  </Link>
+                )}
+                {/* Download APK Button */}
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary w-full font-medium transition-colors"
+                  onClick={() => {
+                    handleDownloadAPK();
+                    setMenuOpen(false);
+                  }}
+                  disabled={isDownloading}
+                >
+                  <Download className="h-4 w-4" />
+                  {isDownloading ? "Downloading APK..." : "Download APK"}
+                </button>
+                {/* Theme Toggle */}
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-secondary w-full font-medium transition-colors"
+                  onClick={toggleTheme}
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-purple-500" />}
+                  {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                </button>
+                {/* WhatsApp Support */}
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-green-500 hover:bg-green-500/10 w-full font-medium transition-colors"
+                  onClick={() => {
+                    handleWhatsAppSupport();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <MessageCircle className="h-4 w-4" />
+                  Support
+                </button>
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-secondary w-full"
+                  onClick={() => {
+                    handleLogout();
+                    setMenuOpen(false);
+                  }}
+                >
+                  <LogOut className="h-4 w-4" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              // Guest user menu - only Football, Download APK, Dark Mode, Signup, Login
+              <>
+                {/* Football link only */}
+                <Link
+                  to="/"
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                    location.pathname === "/"
+                      ? "bg-primary/10 text-primary font-semibold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary"
+                  }`}
+                >
+                  <span>⚽</span>
+                  Football
+                </Link>
+                {/* Download APK Button */}
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-primary hover:bg-secondary w-full font-medium transition-colors"
+                  onClick={() => {
+                    handleDownloadAPK();
+                    setMenuOpen(false);
+                  }}
+                  disabled={isDownloading}
+                >
+                  <Download className="h-4 w-4" />
+                  {isDownloading ? "Downloading APK..." : "Download APK"}
+                </button>
+                {/* Theme Toggle */}
+                <button
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-foreground hover:bg-secondary w-full font-medium transition-colors"
+                  onClick={toggleTheme}
+                >
+                  {theme === "dark" ? <Sun className="h-4 w-4 text-yellow-400" /> : <Moon className="h-4 w-4 text-purple-500" />}
+                  {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                </button>
+                {/* Signup and Login buttons */}
                 <Link to="/signup" onClick={() => setMenuOpen(false)}>
                   <Button size="sm" className="w-full bg-primary hover:bg-primary/90 font-semibold">
                     Sign Up
