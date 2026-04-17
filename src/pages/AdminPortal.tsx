@@ -39,8 +39,16 @@ const sortGamesByKickoffTime = (gamesToSort: any[]) => {
   return [...gamesToSort].sort((a, b) => {
     try {
       // First, prioritize admin-added matches over API-fetched matches
-      const isAdminAddedA = !a.game_id || (!a.game_id.startsWith('af-') && !a.game_id.startsWith('ab-') && !a.game_id.startsWith('tn-') && !a.game_id.startsWith('ck-') && !a.game_id.startsWith('bx-'));
-      const isAdminAddedB = !b.game_id || (!b.game_id.startsWith('af-') && !b.game_id.startsWith('ab-') && !b.game_id.startsWith('tn-') && !b.game_id.startsWith('ck-') && !b.game_id.startsWith('bx-'));
+      // API-managed games have game_id starting with 'af-' (from backend isApiManagedGameId check)
+      const isApiManagedA = a.game_id && String(a.game_id).startsWith('af-');
+      const isApiManagedB = b.game_id && String(b.game_id).startsWith('af-');
+      const isAdminAddedA = !isApiManagedA;  // Admin-added if NOT API-managed
+      const isAdminAddedB = !isApiManagedB;
+      
+      // Debug: Log first few games to verify sorting
+      if (gamesToSort.length > 0 && gamesToSort.indexOf(a) < 2) {
+        console.log(`[SORT] ${a.game_id || 'no-id'} (${a.homeTeam}) - isAdminAdded=${isAdminAddedA}, isApiManaged=${isApiManagedA}`);
+      }
       
       if (isAdminAddedA && !isAdminAddedB) {
         return -1; // Admin-added match A comes first
@@ -3170,7 +3178,7 @@ const AdminPortal = () => {
 
               {(() => {
                 // Get all API-managed games and filter by date
-                const apiGames = games.filter(g => g.id.startsWith('af-'));
+                const apiGames = games.filter(g => g.game_id && String(g.game_id).startsWith('af-'));
                 const filteredGames = gameDeleteDateFilter
                   ? apiGames.filter(g => {
                       const gameDate = new Date(g.kickoffStartTime || g.time).toISOString().split('T')[0];
@@ -3345,7 +3353,7 @@ const AdminPortal = () => {
                                     />
                                   </td>
                                   <td className="p-2 text-muted-foreground text-[10px] font-semibold">
-                                    {game.id.startsWith('af-') ? '🔗 API' : '✏️ Manual'}
+                                    {game.game_id && String(game.game_id).startsWith('af-') ? '🔗 API' : '✏️ Manual'}
                                   </td>
                                   <td className="p-2 text-muted-foreground">{game.league || '-'}</td>
                                   <td className="p-2 text-foreground font-medium">{game.homeTeam} vs {game.awayTeam}</td>
