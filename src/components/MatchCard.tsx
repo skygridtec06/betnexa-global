@@ -332,37 +332,19 @@ export function MatchCard({ match, onSelectOdd, selectedOdd }: MatchCardProps) {
   const getMarketOdd = (key: string, aliases: string[] = [], fallback?: number): number | undefined => {
     const keys = [key, ...aliases];
 
-    // IMPORTANT: Prioritize ACTUAL database markets over generated odds
-    // Only use generated market as fallback if database market is missing
-    if (displayGame.status === "live") {
-      // For live matches, prefer computed live odds, then DB markets
-      for (const k of keys) {
-        const v = displayGame.markets?.[k];
-        if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
-      }
-      for (const k of keys) {
-        const v = computedLiveMarkets?.[k];
-        if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
-      }
-      return undefined;
-    }
-
-    // For non-live matches, ONLY use database markets if they exist
-    // Check if we have ANY markets from the database
-    const hasDbMarkets = Object.keys(displayGame.markets || {}).length > 0;
+    // IMPORTANT: Always try to get from database first, but ALWAYS fall back to generated odds
     
+    // Try each key in database
     for (const k of keys) {
       const v = displayGame.markets?.[k];
-      if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) return v;
+      if (typeof v === "number" && Number.isFinite(v) && v >= 1.01) {
+        return v;
+      }
     }
     
-    // ONLY fall back to generated odds if database is completely empty
-    // This prevents stale generated odds from overriding real DB changes
-    if (!hasDbMarkets) {
-      return fallback;
-    }
-    
-    return undefined;
+    // If not found in database, use the fallback (generated/precomputed odds)
+    // This ensures users always see an odd, even if the database is missing that market type
+    return fallback;
   };
 
   // Real-time in-play 1X2 odds — recalculates every second as minute advances.
