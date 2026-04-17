@@ -283,6 +283,11 @@ const AdminPortal = () => {
   const [markedBets, setMarkedBets] = useState<Set<string>>(new Set());
   const [deletingMarkedBets, setDeletingMarkedBets] = useState(false);
 
+  // Game marking and deletion state
+  const [markedGames, setMarkedGames] = useState<Set<string>>(new Set());
+  const [deletingMarkedGames, setDeletingMarkedGames] = useState(false);
+  const [gameDeleteDateFilter, setGameDeleteDateFilter] = useState<string>("");
+
   // Use refs to track latest games and updateGame function in the interval
   const gamesRef = useRef(games);
   const updateGameRef = useRef(updateGame);
@@ -477,6 +482,61 @@ const AdminPortal = () => {
       alert(`Failed to delete bets: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeletingMarkedBets(false);
+    }
+  };
+
+  const toggleGameMark = (gameId: string) => {
+    setMarkedGames(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(gameId)) {
+        newSet.delete(gameId);
+      } else {
+        newSet.add(gameId);
+      }
+      return newSet;
+    });
+  };
+
+  const deleteMarkedGames = async () => {
+    if (markedGames.size === 0) {
+      alert('No games selected for deletion.');
+      return;
+    }
+
+    if (!window.confirm(`⚠️ Are you sure you want to delete ${markedGames.size} marked API game(s)? This action cannot be undone.`)) {
+      return;
+    }
+
+    setDeletingMarkedGames(true);
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const gameIdsArray = Array.from(markedGames);
+      
+      const response = await fetch(`${apiUrl}/api/admin/games/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: loggedInUser.phone,
+          gameIds: gameIdsArray
+        })
+      });
+
+      const data = await response.json();
+      
+      if (data.success) {
+        // Remove deleted games from local state
+        const newGames = games.filter(g => !markedGames.has(g.id));
+        refreshGames();
+        setMarkedGames(new Set());
+        alert(`✅ Successfully deleted ${data.deletedCount} game(s)`);
+      } else {
+        alert(`Error: ${data.error || 'Failed to delete games'}`);
+      }
+    } catch (error) {
+      console.error('Error deleting marked games:', error);
+      alert(`Failed to delete games: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setDeletingMarkedGames(false);
     }
   };
 
@@ -3079,6 +3139,116 @@ const AdminPortal = () => {
                   No games added yet. Click "Add Fixture" to get started.
                 </div>
               )}
+            </div>
+
+            {/* Delete API Games Section */}
+            <div className="mt-12 space-y-4 rounded-xl border border-red-500/30 bg-red-500/5 p-6">
+              <h4 className="font-display text-sm font-bold uppercase tracking-wider text-red-500 flex items-center gap-2">
+                <Trash2 className="h-4 w-4" /> Delete API-Fetched Games by Date
+              </h4>
+              <p className="text-xs text-muted-foreground">Select and delete API-fetched matches (not admin-added ones) by their kickoff date.</p>
+              
+              <div className="flex gap-2">
+                <Input
+                  type="date"
+                  value={gameDeleteDateFilter}
+                  onChange={(e) => setGameDeleteDateFilter(e.target.value)}
+                  className="max-w-xs"
+                />
+              </div>
+
+              {(() => {
+                // Get all API-managed games and filter by date
+                const apiGames = games.filter(g => g.id.startsWith('af-'));
+                const filteredGames = gameDeleteDateFilter
+                  ? apiGames.filter(g => {
+                      const gameDate = new Date(g.kickoffStartTime || g.time).toISOString().split('T')[0];
+                      return gameDate === gameDeleteDateFilter;
+                    })
+                  : [];
+
+                return (
+                  <div className="space-y-4">
+                    {filteredGames.length > 0 ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-semibold text-foreground">Found {filteredGames.length} API games for {gameDeleteDateFilter}</p>
+                          {markedGames.size > 0 && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={deleteMarkedGames}
+                              disabled={deletingMarkedGames}
+                              className="text-xs"
+                            >
+                              <Trash2 className="mr-1 h-3 w-3" /> Delete {markedGames.size} Marked Games
+                            </Button>
+                          )}
+                        </div>
+
+                        <div className="overflow-x-auto rounded-lg border border-border/50">
+                          <table className="w-full text-xs">
+                            <thead className="bg-red-500/10 border-b border-red-500/30">
+                              <tr className="text-red-500">
+                                <th className="text-center p-2 font-semibold w-8">
+                                  <input
+                                    type="checkbox"
+                                    checked={filteredGames.length > 0 && filteredGames.every(g => markedGames.has(g.id))}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setMarkedGames(new Set([...markedGames, ...filteredGames.map(g => g.id)]));
+                                      } else {
+                                        const newSet = new Set(markedGames);
+                                        filteredGames.forEach(g => newSet.delete(g.id));
+                                        setMarkedGames(newSet);
+                                      }
+                                    }}
+                                    className="cursor-pointer"
+                                  />
+                                </th>
+                                <th className="text-left p-2 font-semibold">League</th>
+                                <th className="text-left p-2 font-semibold">Match</th>
+                                <th className="text-center p-2 font-semibold">Kickoff Time</th>
+                                <th className="text-center p-2 font-semibold">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                              {filteredGames.map((game) => (
+                                <tr key={game.id} className="hover:bg-red-500/5 transition-colors">
+                                  <td className="text-center p-2 w-8">
+                                    <input
+                                      type="checkbox"
+                                      checked={markedGames.has(game.id)}
+                                      onChange={() => toggleGameMark(game.id)}
+                                      className="cursor-pointer"
+                                    />
+                                  </td>
+                                  <td className="p-2 text-muted-foreground">{game.league || '-'}</td>
+                                  <td className="p-2 text-foreground font-medium">{game.homeTeam} vs {game.awayTeam}</td>
+                                  <td className="p-2 text-center text-muted-foreground">
+                                    {new Date(game.kickoffStartTime || game.time).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                                  </td>
+                                  <td className="p-2 text-center">
+                                    <Badge variant="secondary" className="text-[10px]">{game.status}</Badge>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </>
+                    ) : gameDeleteDateFilter ? (
+                      <div className="rounded-lg border border-border/50 bg-card p-4 text-center text-sm text-muted-foreground">
+                        No API games found for {gameDeleteDateFilter}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-border/50 bg-card p-4 text-center text-sm text-muted-foreground">
+                        Select a date to view API-fetched games for deletion
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </TabsContent>
 

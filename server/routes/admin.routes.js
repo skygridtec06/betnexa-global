@@ -1689,6 +1689,70 @@ router.delete('/games/:gameId', checkAdmin, async (req, res) => {
   }
 });
 
+router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
+  try {
+    const { gameIds } = req.body;
+
+    if (!Array.isArray(gameIds) || gameIds.length === 0) {
+      return res.status(400).json({ success: false, error: 'gameIds must be a non-empty array' });
+    }
+
+    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} API games`);
+
+    // Only delete API-managed games (those starting with 'af-')
+    const apiGameIds = gameIds.filter(id => String(id).startsWith('af-'));
+    
+    if (apiGameIds.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Only API-fetched games (starting with af-) can be bulk deleted',
+        details: `Found 0 API games in the provided list of ${gameIds.length} games`
+      });
+    }
+
+    // Delete the games
+    const { error: gamesDeleteError } = await supabase
+      .from('games')
+      .delete()
+      .in('id', apiGameIds);
+
+    if (gamesDeleteError) {
+      console.error('Error deleting games:', gamesDeleteError.message);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Failed to delete games', 
+        details: gamesDeleteError.message 
+      });
+    }
+
+    // Log the deletion
+    try {
+      await supabase.from('admin_logs').insert([{
+        admin_id: req.user?.id && req.user.id !== 'unknown' ? req.user.id : null,
+        action: 'bulk_delete_games',
+        target_type: 'games',
+        changes: {
+          deleted_count: apiGameIds.length,
+          game_ids: apiGameIds,
+        },
+        description: `Bulk deleted ${apiGameIds.length} API games`,
+        created_at: new Date().toISOString(),
+      }]);
+    } catch (_) {}
+
+    console.log(`✅ Successfully deleted ${apiGameIds.length} API games`);
+
+    return res.json({
+      success: true,
+      deletedCount: apiGameIds.length,
+      message: `Successfully deleted ${apiGameIds.length} API game(s)`
+    });
+  } catch (error) {
+    console.error('Bulk delete games error:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // PUT: Update game score
 router.put('/games/:gameId/score', checkAdmin, async (req, res) => {
   try {
