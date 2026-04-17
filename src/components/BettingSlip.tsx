@@ -295,35 +295,37 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
             <Button variant="ghost" size="sm" onClick={onClear} className="flex-1 text-xs" disabled={isPlacing}>
               <Trash2 className="mr-1 h-3 w-3" /> Clear
             </Button>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="flex-1 text-xs"
-              onClick={() => {
-                try {
-                  const link = generateShareableLink(items);
-                  navigator.clipboard.writeText(link);
-                  toast({
-                    title: "Link Copied!",
-                    description: "Share this link to let others view and place these selections.",
-                  });
-                } catch (error) {
-                  console.error("Failed to copy link:", error);
-                  toast({
-                    title: "Error",
-                    description: "Failed to copy link. Please try again.",
-                    variant: "destructive",
-                  });
-                }
-              }}
-              disabled={items.length === 0}
-            >
-              <LinkIcon className="mr-1 h-3 w-3" /> Share
-            </Button>
+            {user?.isAdmin && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="flex-1 text-xs"
+                onClick={() => {
+                  try {
+                    const link = generateShareableLink(items);
+                    navigator.clipboard.writeText(link);
+                    toast({
+                      title: "Link Copied!",
+                      description: "Share this link to let others view and place these selections.",
+                    });
+                  } catch (error) {
+                    console.error("Failed to copy link:", error);
+                    toast({
+                      title: "Error",
+                      description: "Failed to copy link. Please try again.",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+                disabled={items.length === 0}
+              >
+                <LinkIcon className="mr-1 h-3 w-3" /> Share
+              </Button>
+            )}
             <Button 
               variant="hero" 
               size="sm" 
-              className="flex-1 text-xs" 
+              className={`flex-1 text-xs ${user?.isAdmin ? '' : 'flex-1'}`}
               onClick={handlePlaceBet}
               disabled={isPlacing || items.length === 0}
             >
