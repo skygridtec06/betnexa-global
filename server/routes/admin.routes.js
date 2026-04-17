@@ -1699,21 +1699,30 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
 
     console.log(`\n🗑️  [BULK DELETE] Starting bulk delete of ${gameIds.length} games: ${gameIds.join(', ')}`);
 
-    // Try to delete ALL related records first to avoid constraint violations
-    // Using service role key to bypass RLS policies
-    
-    // 1. Find all bets related to these games
-    console.log('   [1/5] Finding related bets...');
-    const { data: relatedBets, error: betsError } = await supabase
-      .from('bet_selections')
-      .select('distinct bet_id')
+    // CRITICAL: gameIds are text strings like "af-1378185", not UUIDs
+    // We need to look up the actual UUID 'id' values first
+    console.log('   [0/5] Looking up UUID ids for text game_ids...');
+    const { data: gamesToDelete, error: lookupError } = await supabase
+      .from('games')
+      .select('id, game_id')
       .in('game_id', gameIds);
-    
-    const betIds = relatedBets?.map(b => b.bet_id)?.filter(Boolean) || [];
-    console.log(`   ✓ Found ${betIds.length} related bets`);
 
-    // 2. Delete user_winning_numbers that reference these games
-    console.log('   [2/5] Deleting user_winning_numbers...');
+    if (lookupError || !gamesToDelete || gamesToDelete.length === 0) {
+      console.error('❌ ERROR looking up games:', lookupError?.message || 'No games found');
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Games not found',
+        details: lookupError?.message || `Could not find games with ids: ${gameIds.join(', ')}`
+      });
+    }
+
+    const uuidIds = gamesToDelete.map(g => g.id);
+    console.log(`   ✓ Found ${uuidIds.length} games with UUIDs: ${uuidIds.join(', ')}`);
+
+    // Now delete ALL related records using the UUID ids
+    
+    // 1. Delete user_winning_numbers that reference these games
+    console.log('   [1/5] Deleting user_winning_numbers...');
     try {
       const { error } = await supabase
         .from('user_winning_numbers')
@@ -1724,8 +1733,8 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       console.log(`   ℹ️  Skipped user_winning_numbers (${e.message})`);
     }
 
-    // 3. Delete bet_selections for these games
-    console.log('   [3/5] Deleting bet_selections...');
+    // 2. Delete bet_selections for these games
+    console.log('   [2/5] Deleting bet_selections...');
     try {
       const { error } = await supabase
         .from('bet_selections')
@@ -1736,8 +1745,8 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       console.log(`   ℹ️  Skipped bet_selections (${e.message})`);
     }
 
-    // 4. Delete markets for these games
-    console.log('   [4/5] Deleting markets...');
+    // 3. Delete markets for these games
+    console.log('   [3/5] Deleting markets...');
     try {
       const { error } = await supabase
         .from('markets')
@@ -1748,12 +1757,12 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       console.log(`   ℹ️  Skipped markets (${e.message})`);
     }
 
-    // 5. Delete the games themselves
-    console.log('   [5/5] Deleting games...');
-    const { error: gamesDeleteError, count } = await supabase
+    // 4. Delete the games themselves using UUID ids
+    console.log('   [4/5] Deleting games by UUID id...');
+    const { error: gamesDeleteError } = await supabase
       .from('games')
       .delete()
-      .in('id', gameIds);
+      .in('id', uuidIds);
 
     if (gamesDeleteError) {
       console.error('❌ ERROR deleting games:', gamesDeleteError);
@@ -1777,6 +1786,7 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
         changes: {
           deleted_count: gameIds.length,
           game_ids: gameIds,
+          uuid_ids: uuidIds,
         },
         description: `Bulk deleted ${gameIds.length} games`,
         created_at: new Date().toISOString(),
@@ -1790,7 +1800,7 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Bulk delete games error:', error);
-    return res.status(500).json({ success: false, error: error.message, stack: error.stack });
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
