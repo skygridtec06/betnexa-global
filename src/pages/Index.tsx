@@ -82,7 +82,66 @@ const Index = ({ sport = 'football' }: IndexProps) => {
   const [showAllFinished, setShowAllFinished] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<MatchView>("upcoming");
+  const [invalidPicksMessage, setInvalidPicksMessage] = useState<string>("");
   const { games: apiGames } = useOdds();;
+
+  // Validate picks against current games
+  const validatePicks = (picks: BetSlipItem[], gamesToCheck: any[]): { valid: BetSlipItem[]; invalid: boolean; message: string } => {
+    const validPicks: BetSlipItem[] = [];
+    
+    for (const pick of picks) {
+      const game = gamesToCheck.find(g => g.id === pick.matchId);
+      
+      if (!game) {
+        // Game doesn't exist
+        return { valid: [], invalid: true, message: `Game "${pick.match}" no longer exists or has been removed.` };
+      }
+      
+      if (game.status === "finished") {
+        // Game has ended
+        return { valid: [], invalid: true, message: `Game "${pick.match}" has already ended. Selections are no longer valid.` };
+      }
+      
+      if (game.status === "live") {
+        // Game is live - can't use for pre-match picks
+        return { valid: [], invalid: true, message: `Game "${pick.match}" is currently live. Only live bets are available.` };
+      }
+      
+      validPicks.push(pick);
+    }
+    
+    return { valid: validPicks, invalid: false, message: "" };
+  };
+
+  // Auto-cleanup selections when games kick off
+  useEffect(() => {
+    if (betSlip.length === 0) return;
+    
+    // Find games that have kicked off
+    const gamesWithKickOff = betSlip.filter(pick => {
+      const game = apiGames.find(g => g.id === pick.matchId);
+      return game && (game.status === "live" || game.status === "finished");
+    });
+    
+    if (gamesWithKickOff.length > 0) {
+      // Remove selections for games that have kicked off
+      const updatedBetSlip = betSlip.filter(pick => {
+        const game = apiGames.find(g => g.id === pick.matchId);
+        return !game || (game.status !== "live" && game.status !== "finished");
+      });
+      
+      if (updatedBetSlip.length < betSlip.length) {
+        setBetSlip(updatedBetSlip);
+        
+        // Update selectedOdds map
+        const newOddsMap: Record<string, string> = {};
+        updatedBetSlip.forEach(item => {
+          newOddsMap[item.matchId] = `${item.matchId}-${item.type}`;
+        });
+        setSelectedOdds(newOddsMap);
+      }
+    }
+  }, [apiGames]);
 
   // Persist bet slip selections so they remain even if match cards move/disappear.
   useEffect(() => {
@@ -118,16 +177,25 @@ const Index = ({ sport = 'football' }: IndexProps) => {
     if (urlPicks.length > 0) {
       // Only load if bet slip is empty (to avoid overwriting)
       if (betSlip.length === 0) {
-        setBetSlip(urlPicks);
+        // Validate picks against current games
+        const validation = validatePicks(urlPicks, apiGames);
+        
+        if (validation.invalid) {
+          setInvalidPicksMessage(validation.message);
+          // Don't load invalid picks
+          return;
+        }
+        
+        setBetSlip(validation.valid);
         // Build selectedOdds map from URL picks
         const oddsMap: Record<string, string> = {};
-        urlPicks.forEach(item => {
+        validation.valid.forEach(item => {
           oddsMap[item.matchId] = `${item.matchId}-${item.type}`;
         });
         setSelectedOdds(oddsMap);
       }
     }
-  }, []); // Run only once on mount
+  }, [apiGames]); // Re-run when games change
 
   // Enable auto bet calculation
   useBetAutoCalculation();
@@ -200,6 +268,15 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           )}
         </div>
       </section>
+
+      {/* Invalid Picks Alert */}
+      {invalidPicksMessage && (
+        <section className="container mx-auto px-4 py-2">
+          <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3">
+            <p className="text-sm text-red-600 font-medium">⚠️ {invalidPicksMessage}</p>
+          </div>
+        </section>
+      )}
 
       {/* Matches - Organized by Status */}
       <section className="container mx-auto px-4 py-4">
