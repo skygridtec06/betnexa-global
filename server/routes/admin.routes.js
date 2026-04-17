@@ -859,6 +859,7 @@ router.get('/games', async (req, res) => {
       try {
         // Use only the UUID id field for marketing queries
         const gameIds = gamesWithMarkets.map(g => g.id).filter(Boolean);
+        console.log(`   📌 Looking for markets for ${gameIds.length} games:`, gameIds.slice(0, 3).join(', '), gameIds.length > 3 ? '...' : '');
         
         if (gameIds.length > 0) {
           // Paginate to get ALL markets (Supabase default limit is 1000)
@@ -873,7 +874,7 @@ router.get('/games', async (req, res) => {
               .range(from, from + PAGE_SIZE - 1);
 
             if (pageErr) {
-              console.warn(`⚠️ Markets fetch page error at offset ${from}:`, pageErr.message);
+              console.warn(`⚠️ Markets fetch page error at offset ${from}:`, pageErr.message, pageErr.code);
               break;
             }
             if (!page || page.length === 0) break;
@@ -882,9 +883,12 @@ router.get('/games', async (req, res) => {
             from += PAGE_SIZE;
           }
 
+          console.log(`   📊 Total markets fetched: ${allMarkets.length} entries`);
           if (allMarkets.length > 0) {
-            console.log(`✅ Retrieved ${allMarkets.length} market entries (${Math.ceil(allMarkets.length / PAGE_SIZE)} pages)`);
-            
+            console.log(`   Sample markets:`, allMarkets.slice(0, 5).map(m => `${m.game_id} → ${m.market_key}: ${m.odds}`).join('; '));
+          }
+
+          if (allMarkets.length > 0) {
             // Group markets by game_id (UUID)
             const marketsByGame = {};
             const hotGameIds = new Set();
@@ -903,7 +907,7 @@ router.get('/games', async (req, res) => {
               }
             });
 
-            console.log(`📋 Grouped into ${Object.keys(marketsByGame).length} games with markets, ${hotGameIds.size} hot`);
+            console.log(`   ✅ Grouped into ${Object.keys(marketsByGame).length} games with markets, ${hotGameIds.size} hot`);
 
             // Attach markets to each game using the UUID id field
             gamesWithMarkets = gamesWithMarkets.map((game) => {
@@ -915,7 +919,7 @@ router.get('/games', async (req, res) => {
               };
             });
           } else {
-            console.log('⚠️ No markets found in database');
+            console.log('   ⚠️ No markets found in database for these games');
             gamesWithMarkets = gamesWithMarkets.map((game) => ({
               ...game,
               markets: {},
@@ -924,6 +928,7 @@ router.get('/games', async (req, res) => {
           }
         } else {
           // No valid game IDs, add empty markets object
+          console.log('   ⚠️ No valid game IDs to query markets');
           gamesWithMarkets = gamesWithMarkets.map((game) => ({
             ...game,
             markets: {},
