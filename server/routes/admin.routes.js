@@ -1697,27 +1697,76 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'gameIds must be a non-empty array' });
     }
 
-    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} games`);
+    console.log(`\n🗑️  [BULK DELETE] Starting bulk delete of ${gameIds.length} games: ${gameIds.join(', ')}`);
 
-    // Simple approach: Delete games directly
-    // The database should handle cascading deletes if properly configured
-    const { error: gamesDeleteError } = await supabase
+    // Try to delete ALL related records first to avoid constraint violations
+    // Using service role key to bypass RLS policies
+    
+    // 1. Find all bets related to these games
+    console.log('   [1/5] Finding related bets...');
+    const { data: relatedBets, error: betsError } = await supabase
+      .from('bet_selections')
+      .select('distinct bet_id')
+      .in('game_id', gameIds);
+    
+    const betIds = relatedBets?.map(b => b.bet_id)?.filter(Boolean) || [];
+    console.log(`   ✓ Found ${betIds.length} related bets`);
+
+    // 2. Delete user_winning_numbers that reference these games
+    console.log('   [2/5] Deleting user_winning_numbers...');
+    try {
+      const { error } = await supabase
+        .from('user_winning_numbers')
+        .delete()
+        .in('game_id', gameIds);
+      if (!error) console.log(`   ✓ Deleted user_winning_numbers`);
+    } catch (e) {
+      console.log(`   ℹ️  Skipped user_winning_numbers (${e.message})`);
+    }
+
+    // 3. Delete bet_selections for these games
+    console.log('   [3/5] Deleting bet_selections...');
+    try {
+      const { error } = await supabase
+        .from('bet_selections')
+        .delete()
+        .in('game_id', gameIds);
+      if (!error) console.log(`   ✓ Deleted bet_selections`);
+    } catch (e) {
+      console.log(`   ℹ️  Skipped bet_selections (${e.message})`);
+    }
+
+    // 4. Delete markets for these games
+    console.log('   [4/5] Deleting markets...');
+    try {
+      const { error } = await supabase
+        .from('markets')
+        .delete()
+        .in('game_id', gameIds);
+      if (!error) console.log(`   ✓ Deleted markets`);
+    } catch (e) {
+      console.log(`   ℹ️  Skipped markets (${e.message})`);
+    }
+
+    // 5. Delete the games themselves
+    console.log('   [5/5] Deleting games...');
+    const { error: gamesDeleteError, count } = await supabase
       .from('games')
       .delete()
       .in('id', gameIds);
 
     if (gamesDeleteError) {
-      console.error('Error deleting games:', gamesDeleteError.message, gamesDeleteError.details);
+      console.error('❌ ERROR deleting games:', gamesDeleteError);
       return res.status(500).json({ 
         success: false, 
         error: 'Failed to delete games', 
         details: gamesDeleteError.message,
+        hint: gamesDeleteError.hint,
         code: gamesDeleteError.code
       });
     }
     
-    const deletedCount = gameIds.length;
-    console.log(`✅ Successfully deleted ${deletedCount} games`);
+    console.log(`✅ Successfully deleted ${gameIds.length} games`);
 
     // Log the deletion
     try {
@@ -1726,22 +1775,22 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
         action: 'bulk_delete_games',
         target_type: 'games',
         changes: {
-          deleted_count: deletedCount,
+          deleted_count: gameIds.length,
           game_ids: gameIds,
         },
-        description: `Bulk deleted ${deletedCount} games`,
+        description: `Bulk deleted ${gameIds.length} games`,
         created_at: new Date().toISOString(),
       }]);
     } catch (_) {}
 
     return res.json({
       success: true,
-      deletedCount: deletedCount,
-      message: `Successfully deleted ${deletedCount} game(s)`
+      deletedCount: gameIds.length,
+      message: `Successfully deleted ${gameIds.length} game(s)`
     });
   } catch (error) {
-    console.error('Bulk delete games error:', error);
-    return res.status(500).json({ success: false, error: error.message });
+    console.error('❌ Bulk delete games error:', error);
+    return res.status(500).json({ success: false, error: error.message, stack: error.stack });
   }
 });
 
