@@ -122,6 +122,20 @@ export function Header() {
                 </Button>
               </Link>
             )}
+            {!isLoggedIn && (
+              <>
+                <Link to="/signup">
+                  <Button size="sm" className="h-8 px-3 text-xs bg-primary hover:bg-primary/90 font-semibold whitespace-nowrap">
+                    Sign Up
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button size="sm" variant="outline" className="h-8 px-3 text-xs font-semibold whitespace-nowrap">
+                    Login
+                  </Button>
+                </Link>
+              </>
+            )}
             {isLoggedIn && (
               <div className="flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1.5 max-w-[180px] group relative">
                 <Wallet className="h-3.5 w-3.5 text-primary shrink-0" />
@@ -156,6 +170,20 @@ export function Header() {
                   Deposit
                 </Button>
               </Link>
+            )}
+            {!isLoggedIn && (
+              <>
+                <Link to="/signup">
+                  <Button size="sm" className="h-7 px-2 text-[11px] bg-primary hover:bg-primary/90 font-semibold whitespace-nowrap">
+                    Sign Up
+                  </Button>
+                </Link>
+                <Link to="/login">
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-[11px] font-semibold whitespace-nowrap">
+                    Login
+                  </Button>
+                </Link>
+              </>
             )}
             {isLoggedIn && (
               <div className="flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 max-w-[145px] min-w-0 group relative" title={`Stakeable: KSH ${(stakeableBalance || 0).toLocaleString()}\nWithdrawable: KSH ${(withdrawableBalance || 0).toLocaleString()}`}>
@@ -244,6 +272,20 @@ export function Header() {
                 <LogOut className="h-4 w-4" />
                 Logout
               </button>
+            )}
+            {!isLoggedIn && (
+              <>
+                <Link to="/signup" onClick={() => setMenuOpen(false)}>
+                  <Button size="sm" className="w-full bg-primary hover:bg-primary/90 font-semibold">
+                    Sign Up
+                  </Button>
+                </Link>
+                <Link to="/login" onClick={() => setMenuOpen(false)}>
+                  <Button size="sm" variant="outline" className="w-full font-semibold">
+                    Login
+                  </Button>
+                </Link>
+              </>
             )}
           </div>
         </div>

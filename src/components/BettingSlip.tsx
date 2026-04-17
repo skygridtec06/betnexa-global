@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { X, Trash2, ChevronUp, ChevronDown, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
@@ -99,7 +100,8 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [isPlacing, setIsPlacing] = useState(false);
   const { addBet, placeBet, syncBalance } = useBets();
-  const { user } = useUser();
+  const { user, isLoggedIn } = useUser();
+  const navigate = useNavigate();
 
   const stakeNum = parseFloat(stake) || 0;
   const totalOdds = items.reduce((acc, item) => acc * item.odds, 1);
@@ -115,6 +117,17 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
   };
 
   const handlePlaceBet = async () => {
+    // Check if user is logged in
+    if (!isLoggedIn) {
+      toast({
+        title: "Sign Up to Place Bet",
+        description: "Please sign up or login to place bets.",
+        variant: "default",
+      });
+      navigate("/signup");
+      return;
+    }
+
     if (stakeNum < 500) {
       toast({
         title: "Invalid Stake",
