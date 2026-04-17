@@ -1697,87 +1697,28 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'gameIds must be a non-empty array' });
     }
 
-    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} games and related data`);
+    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} games`);
 
-    // Step 1: Find all bets for these games
-    // Try to find bets by querying the bet_selections table first which links games to bets
-    const { data: selections, error: selectionsError } = await supabase
-      .from('bet_selections')
-      .select('bet_id')
-      .in('game_id', gameIds);
-
-    if (selectionsError) {
-      console.error('Error finding selections:', selectionsError.message);
-      // Continue anyway - there might not be any selections
-    }
-
-    const betIds = new Set((selections || []).map(s => s.bet_id).filter(Boolean));
-    console.log(`   Found ${betIds.size} bets with selections`);
-
-    // Step 2: Delete bet_selections for these games first
-    const { error: selectionsDeleteError } = await supabase
-      .from('bet_selections')
-      .delete()
-      .in('game_id', gameIds);
-
-    if (selectionsDeleteError) {
-      console.error('Error deleting selections:', selectionsDeleteError.message);
-      return res.status(500).json({ 
-        success: false, 
-        error: 'Failed to delete bet selections', 
-        details: selectionsDeleteError.message 
-      });
-    }
-    console.log(`   Deleted bet_selections for games`);
-
-    // Step 3: Delete bets that are now orphaned or that had selections
-    if (betIds.size > 0) {
-      const betIdsArray = Array.from(betIds);
-      const { error: betsDeleteError } = await supabase
-        .from('bets')
-        .delete()
-        .in('id', betIdsArray);
-
-      if (betsDeleteError) {
-        console.error('Error deleting bets:', betsDeleteError.message);
-        return res.status(500).json({ 
-          success: false, 
-          error: 'Failed to delete bets', 
-          details: betsDeleteError.message 
-        });
-      }
-      console.log(`   Deleted ${betIdsArray.length} bets`);
-    }
-
-    // Step 4: Delete markets for these games
-    const { error: marketsDeleteError } = await supabase
-      .from('markets')
-      .delete()
-      .in('game_id', gameIds);
-
-    if (marketsDeleteError) {
-      console.error('Error deleting markets:', marketsDeleteError.message);
-      // Don't fail on this - markets might not exist
-      console.log(`   ℹ️  Markets deletion note: ${marketsDeleteError.message}`);
-    } else {
-      console.log(`   Deleted markets`);
-    }
-
-    // Step 5: Delete the games themselves
-    const { error: gamesDeleteError } = await supabase
+    // Simple approach: Delete games directly
+    // The database should handle cascading deletes if properly configured
+    const { error: gamesDeleteError, data: deleteResult } = await supabase
       .from('games')
       .delete()
-      .in('id', gameIds);
+      .in('id', gameIds)
+      .select();
 
     if (gamesDeleteError) {
-      console.error('Error deleting games:', gamesDeleteError.message);
+      console.error('Error deleting games:', gamesDeleteError.message, gamesDeleteError.details);
       return res.status(500).json({ 
         success: false, 
         error: 'Failed to delete games', 
-        details: gamesDeleteError.message 
+        details: gamesDeleteError.message,
+        code: gamesDeleteError.code
       });
     }
-    console.log(`   Deleted ${gameIds.length} games`);
+    
+    const deletedCount = Array.isArray(deleteResult) ? deleteResult.length : gameIds.length;
+    console.log(`✅ Successfully deleted ${deletedCount} games`);
 
     // Log the deletion
     try {
@@ -1786,22 +1727,18 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
         action: 'bulk_delete_games',
         target_type: 'games',
         changes: {
-          deleted_count: gameIds.length,
-          deleted_bets: betIds.size,
+          deleted_count: deletedCount,
           game_ids: gameIds,
         },
-        description: `Bulk deleted ${gameIds.length} games and ${betIds.size} related bets`,
+        description: `Bulk deleted ${deletedCount} games`,
         created_at: new Date().toISOString(),
       }]);
     } catch (_) {}
 
-    console.log(`✅ Successfully deleted ${gameIds.length} games and ${betIds.size} bets`);
-
     return res.json({
       success: true,
-      deletedCount: gameIds.length,
-      deletedBets: betIds.size,
-      message: `Successfully deleted ${gameIds.length} game(s) and ${betIds.size} bet(s)`
+      deletedCount: deletedCount,
+      message: `Successfully deleted ${deletedCount} game(s)`
     });
   } catch (error) {
     console.error('Bulk delete games error:', error);
