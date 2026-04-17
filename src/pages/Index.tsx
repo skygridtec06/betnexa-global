@@ -8,6 +8,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { TrendingUp, Search } from "lucide-react";
 import { useBetAutoCalculation } from "@/hooks/useBetAutoCalculation";
 import { useOdds } from "@/context/OddsContext";
+import { useUser } from "@/context/UserContext";
 
 type MatchView = "hot" | "upcoming" | "live" | "ended";
 
@@ -56,6 +57,7 @@ const isFutureKickoff = (time: string) => {
 };
 
 const Index = ({ sport = 'football' }: IndexProps) => {
+  const { isLoggedIn } = useUser();
   const [betSlip, setBetSlip] = useState<BetSlipItem[]>(() => {
     try {
       const raw = localStorage.getItem('betSlipItems');
@@ -370,7 +372,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
         onClear={() => { setBetSlip([]); setSelectedOdds({}); }}
       />
 
-      <BottomNav />
+      {isLoggedIn && <BottomNav />}
     </div>
   );
 };
