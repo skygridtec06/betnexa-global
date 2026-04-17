@@ -38,7 +38,17 @@ const marketLabels: Record<string, string> = {
 const sortGamesByKickoffTime = (gamesToSort: any[]) => {
   return [...gamesToSort].sort((a, b) => {
     try {
-      // First, prioritize by status: live > upcoming > finished
+      // First, prioritize admin-added matches over API-fetched matches
+      const isAdminAddedA = !a.game_id || (!a.game_id.startsWith('af-') && !a.game_id.startsWith('ab-') && !a.game_id.startsWith('tn-') && !a.game_id.startsWith('ck-') && !a.game_id.startsWith('bx-'));
+      const isAdminAddedB = !b.game_id || (!b.game_id.startsWith('af-') && !b.game_id.startsWith('ab-') && !b.game_id.startsWith('tn-') && !b.game_id.startsWith('ck-') && !b.game_id.startsWith('bx-'));
+      
+      if (isAdminAddedA && !isAdminAddedB) {
+        return -1; // Admin-added match A comes first
+      } else if (!isAdminAddedA && isAdminAddedB) {
+        return 1; // Admin-added match B comes first
+      }
+      
+      // Then, prioritize by status: live > upcoming > finished
       const statusPriority = { live: 0, upcoming: 1, finished: 2 };
       const priorityA = statusPriority[a.status as keyof typeof statusPriority] ?? 3;
       const priorityB = statusPriority[b.status as keyof typeof statusPriority] ?? 3;
