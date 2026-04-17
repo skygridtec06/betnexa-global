@@ -47,7 +47,7 @@ interface MatchCardProps {
 }
 
 export function generateMarketOdds(homeOdds: number, drawOdds: number, awayOdds: number, existingMarkets?: Record<string, number>): MatchMarkets {
-  // Helper: only return odds if they exist in the DB, never generate fallbacks
+  // Helper: return odds if they exist in the DB, otherwise return undefined to trigger generation
   const dbVal = (key: string, ...aliases: string[]): number | undefined => {
     for (const k of [key, ...aliases]) {
       const v = existingMarkets?.[k];
@@ -56,33 +56,116 @@ export function generateMarketOdds(homeOdds: number, drawOdds: number, awayOdds:
     return undefined;
   };
 
-  const markets: MatchMarkets = {
-    bttsYes: dbVal('bttsYes', 'btts:yes'),
-    bttsNo: dbVal('bttsNo', 'btts:no'),
-    over25: dbVal('over25', 'over_under:over_2.5'),
-    under25: dbVal('under25', 'over_under:under_2.5'),
-    over15: dbVal('over15', 'over_under:over_1.5'),
-    under15: dbVal('under15', 'over_under:under_1.5'),
-    doubleChanceHomeOrDraw: dbVal('doubleChanceHomeOrDraw', 'double_chance:1X'),
-    doubleChanceAwayOrDraw: dbVal('doubleChanceAwayOrDraw', 'double_chance:X2'),
-    doubleChanceHomeOrAway: dbVal('doubleChanceHomeOrAway', 'double_chance:12'),
-    htftHomeHome: dbVal('htftHomeHome', 'half_time_result:1'),
-    htftDrawDraw: dbVal('htftDrawDraw', 'half_time_result:X'),
-    htftAwayAway: dbVal('htftAwayAway', 'half_time_result:2'),
-    htftDrawHome: dbVal('htftDrawHome'),
-    htftDrawAway: dbVal('htftDrawAway'),
-  };
+  // Check if we have ANY markets from DB
+  const hasDbMarkets = existingMarkets && Object.keys(existingMarkets).length > 0;
 
-  // Correct scores — only include if in DB
-  for (let hScore = 0; hScore <= 4; hScore++) {
-    for (let aScore = 0; aScore <= 4; aScore++) {
-      const key = `cs${hScore}${aScore}`;
-      const val = dbVal(key, `correct_score:${hScore}:${aScore}`);
-      if (val !== undefined) markets[key] = val;
+  // If DB has markets, use them; otherwise generate from pre-match odds
+  if (hasDbMarkets) {
+    const markets: MatchMarkets = {
+      bttsYes: dbVal('bttsYes', 'btts:yes'),
+      bttsNo: dbVal('bttsNo', 'btts:no'),
+      over25: dbVal('over25', 'over_under:over_2.5'),
+      under25: dbVal('under25', 'over_under:under_2.5'),
+      over15: dbVal('over15', 'over_under:over_1.5'),
+      under15: dbVal('under15', 'over_under:under_1.5'),
+      doubleChanceHomeOrDraw: dbVal('doubleChanceHomeOrDraw', 'double_chance:1X'),
+      doubleChanceAwayOrDraw: dbVal('doubleChanceAwayOrDraw', 'double_chance:X2'),
+      doubleChanceHomeOrAway: dbVal('doubleChanceHomeOrAway', 'double_chance:12'),
+      htftHomeHome: dbVal('htftHomeHome', 'half_time_result:1'),
+      htftDrawDraw: dbVal('htftDrawDraw', 'half_time_result:X'),
+      htftAwayAway: dbVal('htftAwayAway', 'half_time_result:2'),
+      htftDrawHome: dbVal('htftDrawHome'),
+      htftDrawAway: dbVal('htftDrawAway'),
+    };
+
+    // Correct scores — only include if in DB
+    for (let hScore = 0; hScore <= 4; hScore++) {
+      for (let aScore = 0; aScore <= 4; aScore++) {
+        const key = `cs${hScore}${aScore}`;
+        const val = dbVal(key, `correct_score:${hScore}:${aScore}`);
+        if (val !== undefined) markets[key] = val;
+      }
+    }
+
+    return markets;
+  }
+
+  // No DB markets - generate from pre-match odds using Poisson model for pre-match (0:0, minute 0)
+  const { lambdaH, lambdaA } = fitExpectedGoals(homeOdds, drawOdds, awayOdds);
+  const matrix = buildScoreMatrix(lambdaH, lambdaA, 8);
+
+  let homeWin = 0, draw = 0, awayWin = 0, bttsYes = 0, over15 = 0, over25 = 0;
+  const exactScores: Record<string, number> = {};
+
+  for (const { addHome, addAway, probability } of matrix) {
+    const finalHome = addHome;
+    const finalAway = addAway;
+    const totalGoals = finalHome + finalAway;
+
+    if (finalHome > finalAway) homeWin += probability;
+    else if (finalHome === finalAway) draw += probability;
+    else awayWin += probability;
+
+    if (finalHome > 0 && finalAway > 0) bttsYes += probability;
+    if (totalGoals > 1.5) over15 += probability;
+    if (totalGoals > 2.5) over25 += probability;
+
+    if (finalHome <= 4 && finalAway <= 4) {
+      exactScores[`cs${finalHome}${finalAway}`] = (exactScores[`cs${finalHome}${finalAway}`] || 0) + probability;
     }
   }
 
-  return markets;
+  const generatedMarkets: MatchMarkets = {
+    bttsYes: oddsFromProbability(bttsYes, 1.06),
+    bttsNo: oddsFromProbability(1 - bttsYes, 1.06),
+    over15: oddsFromProbability(over15, 1.06),
+    under15: oddsFromProbability(1 - over15, 1.06),
+    over25: oddsFromProbability(over25, 1.06),
+    under25: oddsFromProbability(1 - over25, 1.06),
+    doubleChanceHomeOrDraw: oddsFromProbability(homeWin + draw, 1.05, 25),
+    doubleChanceAwayOrDraw: oddsFromProbability(awayWin + draw, 1.05, 25),
+    doubleChanceHomeOrAway: oddsFromProbability(homeWin + awayWin, 1.05, 25),
+  };
+
+  // Add correct scores
+  for (let h = 0; h <= 4; h++) {
+    for (let a = 0; a <= 4; a++) {
+      const key = `cs${h}${a}`;
+      generatedMarkets[key] = oddsFromProbability(exactScores[key] || 0, 1.08);
+    }
+  }
+
+  // HT/FT calculations for first half
+  const firstHalfFactor = 45 / 90;
+  const secondHalfFactor = 45 / 90;
+  const firstHalfMatrix = buildScoreMatrix(lambdaH * firstHalfFactor, lambdaA * firstHalfFactor, 6);
+  const secondHalfMatrix = buildScoreMatrix(lambdaH * secondHalfFactor, lambdaA * secondHalfFactor, 6);
+
+  let hh = 0, dd = 0, aa = 0;
+
+  for (const firstHalf of firstHalfMatrix) {
+    const halftimeHome = firstHalf.addHome;
+    const halftimeAway = firstHalf.addAway;
+    const halftimeProb = firstHalf.probability;
+    const halftimeResult = halftimeHome > halftimeAway ? 'H' : halftimeHome === halftimeAway ? 'D' : 'A';
+
+    for (const secondHalf of secondHalfMatrix) {
+      const fullTimeHome = halftimeHome + secondHalf.addHome;
+      const fullTimeAway = halftimeAway + secondHalf.addAway;
+      const probability = halftimeProb * secondHalf.probability;
+      const fullTimeResult = fullTimeHome > fullTimeAway ? 'H' : fullTimeHome === fullTimeAway ? 'D' : 'A';
+
+      if (halftimeResult === 'H' && fullTimeResult === 'H') hh += probability;
+      if (halftimeResult === 'D' && fullTimeResult === 'D') dd += probability;
+      if (halftimeResult === 'A' && fullTimeResult === 'A') aa += probability;
+    }
+  }
+
+  generatedMarkets.htftHomeHome = oddsFromProbability(hh, 1.08);
+  generatedMarkets.htftDrawDraw = oddsFromProbability(dd, 1.08);
+  generatedMarkets.htftAwayAway = oddsFromProbability(aa, 1.08);
+
+  return generatedMarkets;
 }
 
 // ── In-play Poisson odds model ────────────────────────────────────────────────
