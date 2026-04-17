@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Trash2, ChevronUp, ChevronDown, CheckCircle } from "lucide-react";
+import { X, Trash2, ChevronUp, ChevronDown, CheckCircle, Copy, Link as LinkIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
 import { useBets } from "@/context/BetContext";
 import { useUser } from "@/context/UserContext";
+import { generateShareableLink } from "@/lib/shareableLinks";
 import type { PlacedBet } from "@/context/BetContext";
 
 export interface BetSlipItem {
@@ -119,6 +120,17 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
   const handlePlaceBet = async () => {
     // Check if user is logged in
     if (!isLoggedIn) {
+      // Store picks in sessionStorage for persistence through signup flow
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const picks = params.get("picks");
+        if (picks) {
+          sessionStorage.setItem("pendingPicks", picks);
+        }
+      } catch (error) {
+        console.error("Failed to store pending picks:", error);
+      }
+      
       toast({
         title: "Sign Up to Place Bet",
         description: "Please sign up or login to place bets.",
@@ -282,6 +294,31 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
           <div className="mt-4 flex gap-2">
             <Button variant="ghost" size="sm" onClick={onClear} className="flex-1 text-xs" disabled={isPlacing}>
               <Trash2 className="mr-1 h-3 w-3" /> Clear
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1 text-xs"
+              onClick={() => {
+                try {
+                  const link = generateShareableLink(items);
+                  navigator.clipboard.writeText(link);
+                  toast({
+                    title: "Link Copied!",
+                    description: "Share this link to let others view and place these selections.",
+                  });
+                } catch (error) {
+                  console.error("Failed to copy link:", error);
+                  toast({
+                    title: "Error",
+                    description: "Failed to copy link. Please try again.",
+                    variant: "destructive",
+                  });
+                }
+              }}
+              disabled={items.length === 0}
+            >
+              <LinkIcon className="mr-1 h-3 w-3" /> Share
             </Button>
             <Button 
               variant="hero" 

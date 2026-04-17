@@ -9,6 +9,7 @@ import { TrendingUp, Search } from "lucide-react";
 import { useBetAutoCalculation } from "@/hooks/useBetAutoCalculation";
 import { useOdds } from "@/context/OddsContext";
 import { useUser } from "@/context/UserContext";
+import { getPicksFromUrl } from "@/lib/shareableLinks";
 
 type MatchView = "hot" | "upcoming" | "live" | "ended";
 
@@ -91,6 +92,42 @@ const Index = ({ sport = 'football' }: IndexProps) => {
   useEffect(() => {
     localStorage.setItem('selectedOddsMap', JSON.stringify(selectedOdds));
   }, [selectedOdds]);
+
+  // Load picks from URL if shared link
+  useEffect(() => {
+    let urlPicks = getPicksFromUrl();
+    
+    // Check sessionStorage for pending picks (from signup redirect)
+    if (urlPicks.length === 0) {
+      try {
+        const pendingPicks = sessionStorage.getItem("pendingPicks");
+        if (pendingPicks) {
+          // Restore the URL with picks parameter
+          const newUrl = `${window.location.pathname}?picks=${pendingPicks}`;
+          window.history.replaceState({}, "", newUrl);
+          
+          // Re-read from URL
+          urlPicks = getPicksFromUrl();
+          sessionStorage.removeItem("pendingPicks");
+        }
+      } catch (error) {
+        console.error("Failed to restore pending picks:", error);
+      }
+    }
+    
+    if (urlPicks.length > 0) {
+      // Only load if bet slip is empty (to avoid overwriting)
+      if (betSlip.length === 0) {
+        setBetSlip(urlPicks);
+        // Build selectedOdds map from URL picks
+        const oddsMap: Record<string, string> = {};
+        urlPicks.forEach(item => {
+          oddsMap[item.matchId] = `${item.matchId}-${item.type}`;
+        });
+        setSelectedOdds(oddsMap);
+      }
+    }
+  }, []); // Run only once on mount
 
   // Enable auto bet calculation
   useBetAutoCalculation();

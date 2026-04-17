@@ -110,7 +110,18 @@ export default function Signup() {
         setIsSubmitting(false);
 
         setTimeout(() => {
-          navigate("/");
+          // Restore pending picks from URL if they exist
+          try {
+            const pendingPicks = sessionStorage.getItem("pendingPicks");
+            if (pendingPicks) {
+              navigate(`/?picks=${pendingPicks}`);
+              sessionStorage.removeItem("pendingPicks");
+            } else {
+              navigate("/");
+            }
+          } catch (error) {
+            navigate("/");
+          }
         }, 2000);
       } else {
         // Fallback to local registration if database fails
@@ -143,7 +154,18 @@ export default function Signup() {
         setIsSubmitting(false);
 
         setTimeout(() => {
-          navigate("/");
+          // Restore pending picks from URL if they exist
+          try {
+            const pendingPicks = sessionStorage.getItem("pendingPicks");
+            if (pendingPicks) {
+              navigate(`/?picks=${pendingPicks}`);
+              sessionStorage.removeItem("pendingPicks");
+            } else {
+              navigate("/");
+            }
+          } catch (error) {
+            navigate("/");
+          }
         }, 2000);
       }
     } catch (error) {

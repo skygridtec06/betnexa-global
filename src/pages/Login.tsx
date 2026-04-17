@@ -79,7 +79,19 @@ export default function Login() {
           // Regular user login - create session
           syncBalance(dbUser.accountBalance);
           setIsSubmitting(false);
-          navigate("/");
+          
+          // Restore pending picks from URL if they exist
+          try {
+            const pendingPicks = sessionStorage.getItem("pendingPicks");
+            if (pendingPicks) {
+              navigate(`/?picks=${pendingPicks}`);
+              sessionStorage.removeItem("pendingPicks");
+            } else {
+              navigate("/");
+            }
+          } catch (error) {
+            navigate("/");
+          }
           return;
         }
       }
@@ -143,7 +155,19 @@ export default function Login() {
 
       syncBalance(localUser.accountBalance);
       setIsSubmitting(false);
-      navigate("/");
+      
+      // Restore pending picks from URL if they exist
+      try {
+        const pendingPicks = sessionStorage.getItem("pendingPicks");
+        if (pendingPicks) {
+          navigate(`/?picks=${pendingPicks}`);
+          sessionStorage.removeItem("pendingPicks");
+        } else {
+          navigate("/");
+        }
+      } catch (error) {
+        navigate("/");
+      }
     } catch (error: any) {
       console.error("Login error:", error);
       if (error?.message === 'ACCOUNT_BANNED') {
