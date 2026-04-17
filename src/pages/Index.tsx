@@ -166,7 +166,15 @@ const Index = ({ sport = 'football' }: IndexProps) => {
 
       {/* Matches - Organized by Status */}
       <section className="container mx-auto px-4 py-4">
-        <div className="mb-6 grid grid-cols-4 gap-2">
+        <div className={`mb-6 grid gap-2 ${isLoggedIn ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          <Button
+            variant={activeView === "upcoming" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setActiveView("upcoming")}
+            className="w-full text-xs sm:text-sm"
+          >
+            Upcoming
+          </Button>
           <Button
             variant={activeView === "hot" ? "default" : "outline"}
             size="sm"
@@ -177,14 +185,6 @@ const Index = ({ sport = 'football' }: IndexProps) => {
             Hot
           </Button>
           <Button
-            variant={activeView === "upcoming" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveView("upcoming")}
-            className="w-full text-xs sm:text-sm"
-          >
-            Upcoming
-          </Button>
-          <Button
             variant={activeView === "live" ? "default" : "outline"}
             size="sm"
             onClick={() => setActiveView("live")}
@@ -192,26 +192,28 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           >
             LIVE
           </Button>
-          <Button
-            variant={activeView === "ended" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setActiveView("ended")}
-            className="w-full text-xs sm:text-sm"
-          >
-            ENDED
-          </Button>
+          {isLoggedIn && (
+            <Button
+              variant={activeView === "ended" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setActiveView("ended")}
+              className="w-full text-xs sm:text-sm"
+            >
+              ENDED
+            </Button>
+          )}
         </div>
 
-        {activeView === "hot" && hotGames.length > 0 && (
+        {activeView === "upcoming" && upcomingGames.length > 0 && (
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
-                <span className="mr-2 inline text-lg">🔥</span>
-                Hot Matches 🔥
+                <TrendingUp className="mr-2 inline h-5 w-5 text-primary" />
+                Upcoming {sportLabel} {emoji}
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {hotGames.map((game) => {
+              {upcomingGames.map((game) => {
                 const match: Match = {
                   id: game.id,
                   league: game.league,
@@ -236,16 +238,16 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           </div>
         )}
 
-        {activeView === "upcoming" && upcomingGames.length > 0 && (
+        {activeView === "hot" && hotGames.length > 0 && (
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
-                <TrendingUp className="mr-2 inline h-5 w-5 text-primary" />
-                Upcoming {sportLabel} {emoji}
+                <span className="mr-2 inline text-lg">🔥</span>
+                Hot Matches 🔥
               </h2>
             </div>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {upcomingGames.map((game) => {
+              {hotGames.map((game) => {
                 const match: Match = {
                   id: game.id,
                   league: game.league,
@@ -304,7 +306,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           </div>
         )}
 
-        {activeView === "ended" && endedGames.length > 0 && (
+        {isLoggedIn && activeView === "ended" && endedGames.length > 0 && (
           <div className="mb-10">
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-xl font-bold uppercase tracking-wider text-foreground">
@@ -354,7 +356,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
         {((activeView === "hot" && hotGames.length === 0) ||
           (activeView === "upcoming" && upcomingGames.length === 0) ||
           (activeView === "live" && liveGames.length === 0) ||
-          (activeView === "ended" && endedGames.length === 0)) && (
+          (isLoggedIn && activeView === "ended" && endedGames.length === 0)) && (
           <div className="text-center py-12">
             <p className="text-muted-foreground">
               {searchQuery ? `No matches found for "${searchQuery}"` : activeView === "hot" ? "No hot matches right now. Check upcoming!" : `No ${activeView} matches available right now.`}
