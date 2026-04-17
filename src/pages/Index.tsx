@@ -81,7 +81,7 @@ const Index = ({ sport = 'football' }: IndexProps) => {
   });
   const [showAllFinished, setShowAllFinished] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeView, setActiveView] = useState<MatchView>("hot");
+  const [activeView, setActiveView] = useState<MatchView>("upcoming");
   const { games: apiGames } = useOdds();;
 
   // Persist bet slip selections so they remain even if match cards move/disappear.
