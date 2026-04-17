@@ -1697,24 +1697,13 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       return res.status(400).json({ success: false, error: 'gameIds must be a non-empty array' });
     }
 
-    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} API games`);
+    console.log(`\n🗑️  [DELETE] Bulk deleting ${gameIds.length} games`);
 
-    // Only delete API-managed games (those starting with 'af-')
-    const apiGameIds = gameIds.filter(id => String(id).startsWith('af-'));
-    
-    if (apiGameIds.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Only API-fetched games (starting with af-) can be bulk deleted',
-        details: `Found 0 API games in the provided list of ${gameIds.length} games`
-      });
-    }
-
-    // Delete the games
+    // Delete the games (both API and admin-added)
     const { error: gamesDeleteError } = await supabase
       .from('games')
       .delete()
-      .in('id', apiGameIds);
+      .in('id', gameIds);
 
     if (gamesDeleteError) {
       console.error('Error deleting games:', gamesDeleteError.message);
@@ -1732,20 +1721,20 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
         action: 'bulk_delete_games',
         target_type: 'games',
         changes: {
-          deleted_count: apiGameIds.length,
-          game_ids: apiGameIds,
+          deleted_count: gameIds.length,
+          game_ids: gameIds,
         },
-        description: `Bulk deleted ${apiGameIds.length} API games`,
+        description: `Bulk deleted ${gameIds.length} games`,
         created_at: new Date().toISOString(),
       }]);
     } catch (_) {}
 
-    console.log(`✅ Successfully deleted ${apiGameIds.length} API games`);
+    console.log(`✅ Successfully deleted ${gameIds.length} games`);
 
     return res.json({
       success: true,
-      deletedCount: apiGameIds.length,
-      message: `Successfully deleted ${apiGameIds.length} API game(s)`
+      deletedCount: gameIds.length,
+      message: `Successfully deleted ${gameIds.length} game(s)`
     });
   } catch (error) {
     console.error('Bulk delete games error:', error);
