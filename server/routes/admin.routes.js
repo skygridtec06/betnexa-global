@@ -1701,11 +1701,10 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
 
     // Simple approach: Delete games directly
     // The database should handle cascading deletes if properly configured
-    const { error: gamesDeleteError, data: deleteResult } = await supabase
+    const { error: gamesDeleteError } = await supabase
       .from('games')
       .delete()
-      .in('id', gameIds)
-      .select();
+      .in('id', gameIds);
 
     if (gamesDeleteError) {
       console.error('Error deleting games:', gamesDeleteError.message, gamesDeleteError.details);
@@ -1717,7 +1716,7 @@ router.post('/games/bulk-delete', checkAdmin, async (req, res) => {
       });
     }
     
-    const deletedCount = Array.isArray(deleteResult) ? deleteResult.length : gameIds.length;
+    const deletedCount = gameIds.length;
     console.log(`✅ Successfully deleted ${deletedCount} games`);
 
     // Log the deletion
