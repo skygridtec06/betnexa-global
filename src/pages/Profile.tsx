@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Header } from "@/components/Header";
 import { BottomNav } from "@/components/BottomNav";
 import { Footer } from "@/components/Footer";
@@ -19,6 +20,7 @@ import {
   Download,
   Copy,
   Hash,
+  FileText,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useUser } from "@/context/UserContext";
@@ -26,6 +28,7 @@ import { useBets } from "@/context/BetContext";
 import betnexaAPK from "@/assets/betnexa apk.apk";
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { user, updateUser, logout } = useUser();
   const { balance } = useBets();
   const [isEditing, setIsEditing] = useState(false);
@@ -270,6 +273,13 @@ export default function Profile() {
           >
             <Download className="mr-2 h-4 w-4" />
             {isDownloading ? "Downloading APK..." : "Download Mobile App (APK)"}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full text-primary border-primary hover:bg-primary/10"
+            onClick={() => navigate("/terms")}
+          >
+            <FileText className="mr-2 h-4 w-4" /> Terms & Conditions
           </Button>
           <Button
             variant="ghost"

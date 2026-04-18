@@ -22,6 +22,7 @@ import Finance from "./pages/Finance";
 import MyBets from "./pages/MyBets";
 import History from "./pages/History";
 import Profile from "./pages/Profile";
+import TermsAndConditions from "./pages/TermsAndConditions";
 import Signup from "./pages/Signup";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -72,6 +73,7 @@ const App = () => {
                                 <Route path="/history" element={<ProtectedRoute element={<History />} />} />
                                 <Route path="/profile" element={<ProtectedRoute element={<Profile />} />} />
                                 <Route path="/priority-withdrawal" element={<ProtectedRoute element={<PriorityWithdrawal />} />} />
+                                <Route path="/terms" element={<TermsAndConditions />} />
                                 <Route path="/muleiadmin" element={<AdminProtectedRoute element={<AdminPortal />} />} />
                                 <Route path="*" element={<NotFound />} />
                               </Routes>
