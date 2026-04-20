@@ -83,18 +83,24 @@ const Index = ({ sport = 'football' }: IndexProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeView, setActiveView] = useState<MatchView>("upcoming");
   const [invalidPicksMessage, setInvalidPicksMessage] = useState<string>("");
-  const { games: apiGames } = useOdds();;
+  const [isLoadingBetslip, setIsLoadingBetslip] = useState(false);
+  const { games: apiGames, isLoading: isLoadingGames } = useOdds();
 
   // Validate picks against current games
   const validatePicks = (picks: BetSlipItem[], gamesToCheck: any[]): { valid: BetSlipItem[]; invalid: boolean; message: string } => {
     const validPicks: BetSlipItem[] = [];
+    
+    // If games are still loading, don't validate yet - show loading message
+    if (gamesToCheck.length === 0 && isLoadingGames) {
+      return { valid: [], invalid: false, message: "" }; // Wait for games to load
+    }
     
     for (const pick of picks) {
       const game = gamesToCheck.find(g => g.id === pick.matchId);
       
       if (!game) {
         // Game doesn't exist
-        return { valid: [], invalid: true, message: `Game "${pick.match}" no longer exists or has been removed.` };
+        return { valid: [], invalid: true, message: `Game "${pick.match}" does not exist.` };
       }
       
       if (game.status === "finished") {
@@ -177,15 +183,24 @@ const Index = ({ sport = 'football' }: IndexProps) => {
     if (urlPicks.length > 0) {
       // Only load if bet slip is empty (to avoid overwriting)
       if (betSlip.length === 0) {
+        // Show loading state if games are still loading
+        if (isLoadingGames && apiGames.length === 0) {
+          setIsLoadingBetslip(true);
+          setInvalidPicksMessage(""); // Clear any previous error
+          return;
+        }
+        
         // Validate picks against current games
         const validation = validatePicks(urlPicks, apiGames);
         
         if (validation.invalid) {
           setInvalidPicksMessage(validation.message);
+          setIsLoadingBetslip(false);
           // Don't load invalid picks
           return;
         }
         
+        // Games loaded and validation passed
         setBetSlip(validation.valid);
         // Build selectedOdds map from URL picks
         const oddsMap: Record<string, string> = {};
@@ -193,9 +208,10 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           oddsMap[item.matchId] = `${item.matchId}-${item.type}`;
         });
         setSelectedOdds(oddsMap);
+        setIsLoadingBetslip(false);
       }
     }
-  }, [apiGames]); // Re-run when games change
+  }, [apiGames, isLoadingGames]); // Re-run when games or loading state changes
 
   // Enable auto bet calculation
   useBetAutoCalculation();
@@ -472,9 +488,25 @@ const Index = ({ sport = 'football' }: IndexProps) => {
           (activeView === "live" && liveGames.length === 0) ||
           (isLoggedIn && activeView === "ended" && endedGames.length === 0)) && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              {searchQuery ? `No matches found for "${searchQuery}"` : activeView === "hot" ? "No hot matches right now. Check upcoming!" : `No ${activeView} matches available right now.`}
-            </p>
+            {isLoadingGames && apiGames.length === 0 ? (
+              <div>
+                <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Matches are loading kindly wait...</p>
+              </div>
+            ) : (
+              <p className="text-muted-foreground">
+                {searchQuery ? `No matches found for "${searchQuery}"` : activeView === "hot" ? "No hot matches right now. Check upcoming!" : `No ${activeView} matches available right now.`}
+              </p>
+            )}
+          </div>
+        )}
+
+        {isLoadingBetslip && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-background rounded-lg p-8 text-center">
+              <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-foreground">Loading betting slip...</p>
+            </div>
           </div>
         )}
       </section>

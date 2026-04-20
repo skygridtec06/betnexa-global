@@ -26,6 +26,7 @@ export interface GameOdds {
 
 interface OddsContextType {
   games: GameOdds[];
+  isLoading: boolean;
   addGame: (game: GameOdds) => void;
   updateGame: (id: string, game: Partial<GameOdds>) => void;
   removeGame: (id: string) => void;
@@ -554,7 +555,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
 
   return (
     <OddsContext.Provider
-      value={{ games, addGame, updateGame, removeGame, getGame, updateGameMarkets, refreshGames }}
+      value={{ games, isLoading, addGame, updateGame, removeGame, getGame, updateGameMarkets, refreshGames }}
     >
       {children}
     </OddsContext.Provider>
