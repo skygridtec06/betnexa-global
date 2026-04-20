@@ -36,11 +36,37 @@ interface OddsContextType {
 
 const OddsContext = createContext<OddsContextType | undefined>(undefined);
 
+// Helper function to load cached games from localStorage
+const loadCachedGames = (): GameOdds[] => {
+  try {
+    const cached = localStorage.getItem('betnexa_games_cache');
+    if (cached) {
+      const parsed = JSON.parse(cached);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        console.log('📦 Loaded', parsed.length, 'cached games from localStorage');
+        return parsed;
+      }
+    }
+  } catch (error) {
+    console.warn('⚠️ Error loading cached games:', error);
+  }
+  return [];
+};
+
+// Helper function to save games to localStorage cache
+const saveCachedGames = (games: GameOdds[]): void => {
+  try {
+    localStorage.setItem('betnexa_games_cache', JSON.stringify(games));
+  } catch (error) {
+    console.warn('⚠️ Error saving games to cache:', error);
+  }
+};
+
 export function OddsProvider({ children }: { children: ReactNode }) {
-  const [games, setGames] = useState<GameOdds[]>([]);
+  const [games, setGames] = useState<GameOdds[]>(() => loadCachedGames());
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const gamesRef = useRef<GameOdds[]>([]);
+  const gamesRef = useRef<GameOdds[]>(loadCachedGames());
   const kickoffTimesRef = useRef<Record<string, number>>({}); // Track when each game kicked off
 
   const hasApiGamesNeedingSync = () => {
@@ -118,6 +144,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
             const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
             setGames(sortedGames);
             gamesRef.current = sortedGames;
+            // Save to localStorage cache for next page load
+            saveCachedGames(sortedGames);
             setLoadError(null);
           } else {
             console.warn('⚠️ Invalid response format:', data);
@@ -355,6 +383,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
                 const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
                 console.log(`✅ [MARKET UPDATE] Updated ${sortedGames.length} games with new market data`);
                 gamesRef.current = sortedGames;
+                // Save to localStorage cache after market updates
+                saveCachedGames(sortedGames);
                 return sortedGames;
               });
             }
@@ -445,6 +475,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
           const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
           setGames(sortedGames);
           gamesRef.current = sortedGames;
+          // Save to localStorage cache for next page load
+          saveCachedGames(sortedGames);
         }
       }
     } catch (error: any) {
@@ -466,6 +498,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       // Add new game and maintain stable sort by ID
       const updated = [...prev, game].sort((a, b) => a.id.localeCompare(b.id));
       gamesRef.current = updated;
+      // Save to cache after adding game
+      saveCachedGames(updated);
       return updated;
     });
   };
@@ -487,6 +521,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
       // Maintain stable sort order by ID to prevent reranking issues
       const stableSorted = updated.sort((a, b) => a.id.localeCompare(b.id));
       gamesRef.current = stableSorted;
+      // Save to cache after updating game
+      saveCachedGames(stableSorted);
       return stableSorted;
     });
   };
@@ -495,6 +531,8 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     setGames((prev) => {
       const updated = prev.filter((game) => game.id !== id);
       gamesRef.current = updated;
+      // Save to cache after removing game
+      saveCachedGames(updated);
       return updated;
     });
   };
