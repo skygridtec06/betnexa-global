@@ -63,11 +63,13 @@ const saveCachedGames = (games: GameOdds[]): void => {
 };
 
 export function OddsProvider({ children }: { children: ReactNode }) {
-  const [games, setGames] = useState<GameOdds[]>(() => loadCachedGames());
-  const [isLoading, setIsLoading] = useState(true);
+  const cachedGames = loadCachedGames();
+  const [games, setGames] = useState<GameOdds[]>(cachedGames);
+  const [isLoading, setIsLoading] = useState(cachedGames.length === 0); // Only loading if no cache
   const [loadError, setLoadError] = useState<string | null>(null);
-  const gamesRef = useRef<GameOdds[]>(loadCachedGames());
+  const gamesRef = useRef<GameOdds[]>(cachedGames);
   const kickoffTimesRef = useRef<Record<string, number>>({}); // Track when each game kicked off
+  const fetchInProgressRef = useRef(false); // Prevent duplicate fetches
 
   const hasApiGamesNeedingSync = () => {
     const now = Date.now();
@@ -80,100 +82,105 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Fetch games from database on component mount
-  useEffect(() => {
-    const fetchGames = async () => {
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+  // Fetch games from database - immediately on component mount, not in useEffect
+  const performFetch = useCallback(async () => {
+    if (fetchInProgressRef.current) return;
+    fetchInProgressRef.current = true;
+
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      
+      console.log('🔄 Fetching fresh games from:', apiUrl);
+
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+      const response = await fetch(`${apiUrl}/api/admin/games?_t=${Date.now()}`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      });
+
+      clearTimeout(timeoutId);
+
+      console.log('📊 Fetch response status:', response.status);
+
+      if (response.ok) {
+        const data = await response.json();
         
-        console.log('🔄 Fetching games from:', apiUrl);
-
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-
-        const response = await fetch(`${apiUrl}/api/admin/games?_t=${Date.now()}`, {
-          signal: controller.signal,
-          cache: 'no-store',
-        });
-
-        clearTimeout(timeoutId);
-
-        console.log('📊 Fetch response status:', response.status);
-
-        if (response.ok) {
-          const data = await response.json();
+        if (data.success && Array.isArray(data.games)) {
+          console.log('✅ Successfully loaded', data.games.length, 'games from API');
           
-          if (data.success && Array.isArray(data.games)) {
-            console.log('✅ Successfully loaded', data.games.length, 'games');
-            
-            // Transform database games to GameOdds format
-            const transformedGames: GameOdds[] = data.games.map((g: any) => ({
-              id: g.game_id || g.id,
-              league: g.league || '',
-              homeTeam: g.home_team,
-              awayTeam: g.away_team,
-              homeOdds: parseFloat(g.home_odds) || 2.0,
-              drawOdds: parseFloat(g.draw_odds) || 3.0,
-              awayOdds: parseFloat(g.away_odds) || 3.0,
-              time: g.scheduled_time || g.time || new Date().toISOString(),
-              status: g.status || 'upcoming',
-              markets: g.markets || {},
-              homeScore: g.home_score || 0,
-              awayScore: g.away_score || 0,
-              minute: g.minute || 0,
-              seconds: 0, // Initialize seconds to 0 - calculated on frontend
-              kickoffStartTime: g.kickoff_start_time || undefined,
-              isKickoffStarted: g.is_kickoff_started || false,
-              gamePaused: g.game_paused || false,
-              kickoffPausedAt: g.kickoff_paused_at || undefined,
-              isHalftime: g.is_halftime || false,
-              sport: g.sport || 'football',
-            }));
-            
-            // Remove duplicates by ID and sort by ID for stable ordering to prevent reranking/collision issues
-            const seenIds = new Set<string>();
-            const deduplicatedGames = transformedGames.filter(game => {
-              if (seenIds.has(game.id)) {
-                console.warn(`⚠️ Duplicate game removed: ${game.id} (${game.homeTeam} vs ${game.awayTeam})`);
-                return false;
-              }
-              seenIds.add(game.id);
-              return true;
-            });
-            
-            const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
-            setGames(sortedGames);
-            gamesRef.current = sortedGames;
-            // Save to localStorage cache for next page load
-            saveCachedGames(sortedGames);
-            setLoadError(null);
-          } else {
-            console.warn('⚠️ Invalid response format:', data);
-            setLoadError(null); // Don't show error, just start with empty games
-          }
+          // Transform database games to GameOdds format
+          const transformedGames: GameOdds[] = data.games.map((g: any) => ({
+            id: g.game_id || g.id,
+            league: g.league || '',
+            homeTeam: g.home_team,
+            awayTeam: g.away_team,
+            homeOdds: parseFloat(g.home_odds) || 2.0,
+            drawOdds: parseFloat(g.draw_odds) || 3.0,
+            awayOdds: parseFloat(g.away_odds) || 3.0,
+            time: g.scheduled_time || g.time || new Date().toISOString(),
+            status: g.status || 'upcoming',
+            markets: g.markets || {},
+            homeScore: g.home_score || 0,
+            awayScore: g.away_score || 0,
+            minute: g.minute || 0,
+            seconds: 0, // Initialize seconds to 0 - calculated on frontend
+            kickoffStartTime: g.kickoff_start_time || undefined,
+            isKickoffStarted: g.is_kickoff_started || false,
+            gamePaused: g.game_paused || false,
+            kickoffPausedAt: g.kickoff_paused_at || undefined,
+            isHalftime: g.is_halftime || false,
+            sport: g.sport || 'football',
+          }));
+          
+          // Remove duplicates by ID and sort by ID for stable ordering to prevent reranking/collision issues
+          const seenIds = new Set<string>();
+          const deduplicatedGames = transformedGames.filter(game => {
+            if (seenIds.has(game.id)) {
+              console.warn(`⚠️ Duplicate game removed: ${game.id} (${game.homeTeam} vs ${game.awayTeam})`);
+              return false;
+            }
+            seenIds.add(game.id);
+            return true;
+          });
+          
+          const sortedGames = deduplicatedGames.sort((a, b) => a.id.localeCompare(b.id));
+          setGames(sortedGames);
+          gamesRef.current = sortedGames;
+          // Save to localStorage cache for next page load
+          saveCachedGames(sortedGames);
+          setLoadError(null);
         } else {
-          console.warn('⚠️ API returned non-OK status:', response.status);
-          setLoadError(null); // Don't block app from loading
+          console.warn('⚠️ Invalid response format:', data);
+          setLoadError(null); // Don't show error, just start with empty games
         }
-      } catch (error: any) {
-        if (error.name === 'AbortError') {
-          console.warn('⏱️ Game fetch timeout (10s)');
-        } else {
-          console.error('❌ Error fetching games:', error);
-        }
+      } else {
+        console.warn('⚠️ API returned non-OK status:', response.status);
         setLoadError(null); // Don't block app from loading
-      } finally {
-        setIsLoading(false);
       }
-    };
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.warn('⏱️ Game fetch timeout (10s)');
+      } else {
+        console.error('❌ Error fetching games:', error);
+      }
+      setLoadError(null); // Don't block app from loading
+    } finally {
+      setIsLoading(false);
+      fetchInProgressRef.current = false;
+    }
+  }, []);
 
-    fetchGames();
+  // Fetch games immediately on mount - this runs before useEffect
+  useEffect(() => {
+    performFetch();
 
     // No auto-refresh needed - timer polling handles live game updates
     return () => {
       // Cleanup handled by timer effect
     };
-  }, []);
+  }, [performFetch]);
 
   // Timer polling for live games - fetch server time to sync across all users/admin
   useEffect(() => {
