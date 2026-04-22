@@ -21,39 +21,9 @@ const supabase = createClient(supabaseUrl, supabaseKey, {
   },
 });
 
-// Track connection health
-let isConnected = true;
-let lastErrorTime = 0;
-const ERROR_THRESHOLD = 5000; // 5 second retry window
-
-// Detect connection issues
-const originalFrom = supabase.from.bind(supabase);
-supabase.from = function (table: string) {
-  const query = originalFrom(table);
-  
-  // Wrap query execution to detect failures
-  const originalSelect = query.select.bind(query);
-  query.select = function (...args: any[]) {
-    const selectQuery = originalSelect(...args);
-    
-    // Auto-retry on connection failure
-    return (selectQuery as any).catch?.((err: any) => {
-      const now = Date.now();
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('timeout')) {
-        if (now - lastErrorTime > ERROR_THRESHOLD) {
-          lastErrorTime = now;
-          console.warn('[Supabase] Connection issue detected, will retry on next query');
-          isConnected = false;
-        }
-      }
-      throw err;
-    }) || selectQuery;
-  };
-  
-  return query;
-};
-
 // Export connection status for UI
+let isConnected = true;
+
 export function isSupabaseConnected() {
   return isConnected;
 }
