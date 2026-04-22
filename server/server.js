@@ -13,7 +13,6 @@ const LiveRoutes = require('./routes/live.routes.js');
 const CronRoutes = require('./routes/cron.routes.js');
 const { startMatchEventScheduler } = require('./services/matchScheduler');
 const PresenceRoutes = require('./routes/presence.routes.js');
-const databaseHealthMonitor = require('./services/databaseHealthMonitor');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -108,38 +107,18 @@ app.use('/api/cron', CronRoutes);
 app.use('/api/presence', PresenceRoutes);
 
 // Health check
-// Enhanced health check endpoint with database status
+// Simple health check endpoint
 app.get('/api/health', (req, res) => {
   console.log('🏥 Health check requested');
-  const dbStatus = databaseHealthMonitor.getHealthResponse();
-  
   res.json({
-    status: dbStatus.status === 'healthy' ? 'Server is running' : 'Server running but database unstable',
+    status: 'Server is running',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.1',
     supabase: {
       configured: process.env.SUPABASE_URL ? true : false,
       url: process.env.SUPABASE_URL ? '✓' : 'NOT configured',
-      health: dbStatus.status,
-      database: dbStatus.database,
     },
-  });
-});
-
-// Database diagnostics endpoint
-app.get('/api/health/database', (req, res) => {
-  const status = databaseHealthMonitor.getStatus();
-  const code = status.healthy ? 200 : 503;
-  
-  res.status(code).json({
-    healthy: status.healthy,
-    metrics: status.metrics,
-    recentAlerts: status.recentAlerts.map(a => ({
-      level: a.level,
-      message: a.message,
-      timestamp: a.timestamp,
-    })),
   });
 });
 
