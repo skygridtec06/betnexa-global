@@ -805,10 +805,18 @@ router.get('/games', async (req, res) => {
     
     if (!supabase) {
       console.error('❌ Supabase client is not initialized');
+      console.error('   SUPABASE_URL:', process.env.SUPABASE_URL ? '✓ set' : '❌ NOT SET');
+      console.error('   SUPABASE_SERVICE_KEY:', process.env.SUPABASE_SERVICE_KEY ? '✓ set' : '❌ NOT SET');
+      console.error('   SUPABASE_ANON_KEY:', process.env.SUPABASE_ANON_KEY ? '✓ set' : '❌ NOT SET');
       return res.status(503).json({ 
         error: 'Service unavailable', 
         details: 'Database not initialized',
-        success: false
+        success: false,
+        diagnostics: {
+          supabase_configured: !!supabase,
+          url_env_set: !!process.env.SUPABASE_URL,
+          key_env_set: !!process.env.SUPABASE_SERVICE_KEY
+        }
       });
     }
 
@@ -818,15 +826,28 @@ router.get('/games', async (req, res) => {
       .order('id', { ascending: true }); // Sort by ID for stable, consistent ordering
 
     if (error) {
-      console.error('❌ Database query error:', error.message, error.code);
+      console.error('❌ Database query error:');
+      console.error('   Message:', error.message);
+      console.error('   Code:', error.code);
+      console.error('   Status:', error.status);
+      console.error('   Details:', error.details);
+      console.error('   Hint:', error.hint);
+      
       // Return empty array instead of error so frontend can load
       console.log('📋 Returning empty games array due to database error');
       return res.json({ 
         success: true, 
         games: [],
-        message: 'Database temporarily unavailable, returning empty games'
+        message: 'Database temporarily unavailable, returning empty games',
+        diagnostics: {
+          error_message: error.message,
+          error_code: error.code,
+          error_status: error.status
+        }
       });
     }
+    
+    console.log(`✅ Query successful, got ${(games || []).length} games`);
 
     // Auto-cleanup: delete API-fetched (af-, ab-) games whose kickoff has passed
     const now = new Date();
