@@ -215,7 +215,7 @@ async function sendDepositSms(phone, amount, newBalance) {
   const msg =
     `Received a deposit of KSH ${Number(amount).toFixed(0)} on your Betnexa wallet. ` +
     `New balance: KSH ${Number(newBalance).toFixed(0)}. ` +
-    `Place your bets now! on https://Betnexa.vercel.app`;
+    `Place your bets now! on https://Betnexa.co.ke`;
   return sendSms(phone, msg);
 }
 
@@ -249,7 +249,7 @@ async function sendActivationSms(phone, username, amount, newBalance) {
   const msg =
     `Hey ${username}, your BETNEXA account has been activated successfully!` +
     `${depositPart}${balancePart} Withdrawal is now enabled on your account. ` +
-    `You can now withdraw your winnings directly to M-Pesa. Login now: https://Betnexa.vercel.app`;
+    `You can now withdraw your winnings directly to M-Pesa. Login now: https://Betnexa.co.ke`;
   return sendSms(phone, msg);
 }
 
@@ -287,7 +287,8 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   }
   
   const msg =
-    `💰 NEW ${typeLabel}\n` +
+    `${formattedAmount}\n`
+  `💰 NEW ${typeLabel}\n` +
     `User: ${username} (${userPhone})\n` +
     `Amount: KSH ${formattedAmount}\n` +
     `Time: ${timestamp}\n` +
