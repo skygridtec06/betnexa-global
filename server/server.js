@@ -13,6 +13,7 @@ const LiveRoutes = require('./routes/live.routes.js');
 const CronRoutes = require('./routes/cron.routes.js');
 const { startMatchEventScheduler } = require('./services/matchScheduler');
 const PresenceRoutes = require('./routes/presence.routes.js');
+const databaseHealthMonitor = require('./services/databaseHealthMonitor');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -76,9 +77,35 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Request logging
+// Request timeout middleware - prevent hanging connections
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path}`);
+  // Set socket timeout to 30 seconds
+  req.socket.setTimeout(30000);
+  res.setTimeout(30000, () => {
+    console.error(`⏱️  Request timeout: ${req.method} ${req.path}`);
+    res.status(408).json({ error: 'Request timeout - server response delayed' });
+  });
+  next();
+});
+
+// Request logging with performance monitoring
+app.use((req, res, next) => {
+  const start = Date.now();
+  const originalSend = res.send;
+  
+  res.send = function (data) {
+    const duration = Date.now() - start;
+    const statusCode = res.statusCode;
+    
+    if (duration > 5000) {
+      console.warn(`⚠️  [${duration}ms] ${req.method} ${req.path} - Status ${statusCode}`);
+    } else {
+      console.log(`📨 [${duration}ms] ${req.method} ${req.path} - Status ${statusCode}`);
+    }
+    
+    return originalSend.call(this, data);
+  };
+  
   next();
 });
 
@@ -94,15 +121,38 @@ app.use('/api/cron', CronRoutes);
 app.use('/api/presence', PresenceRoutes);
 
 // Health check
-// Health check endpoint
+// Enhanced health check endpoint with database status
 app.get('/api/health', (req, res) => {
   console.log('🏥 Health check requested');
+  const dbStatus = databaseHealthMonitor.getHealthResponse();
+  
   res.json({
-    status: 'Server is running',
+    status: dbStatus.status === 'healthy' ? 'Server is running' : 'Server running but database unstable',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
     version: '1.0.1',
-    supabase: process.env.SUPABASE_URL ? 'configured' : 'NOT configured',
+    supabase: {
+      configured: process.env.SUPABASE_URL ? true : false,
+      url: process.env.SUPABASE_URL ? '✓' : 'NOT configured',
+      health: dbStatus.status,
+      database: dbStatus.database,
+    },
+  });
+});
+
+// Database diagnostics endpoint
+app.get('/api/health/database', (req, res) => {
+  const status = databaseHealthMonitor.getStatus();
+  const code = status.healthy ? 200 : 503;
+  
+  res.status(code).json({
+    healthy: status.healthy,
+    metrics: status.metrics,
+    recentAlerts: status.recentAlerts.map(a => ({
+      level: a.level,
+      message: a.message,
+      timestamp: a.timestamp,
+    })),
   });
 });
 
