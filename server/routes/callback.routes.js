@@ -166,7 +166,7 @@ router.post('/payhero', async (req, res) => {
           // --- Credit user stakeable_balance (deposits go to stakeable) ---
           const { data: userRow, error: userFetchErr } = await supabase
             .from('users')
-            .select('stakeable_balance, withdrawable_balance, phone_number')
+            .select('stakeable_balance, withdrawable_balance, phone_number, username')
             .eq('id', user_id)
             .single();
 

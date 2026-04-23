@@ -287,8 +287,8 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   }
   
   const msg =
-    `${formattedAmount}\n`
-  `💰 NEW ${typeLabel}\n` +
+    `${formattedAmount}\n` +
+    `💰 NEW ${typeLabel}\n` +
     `User: ${username} (${userPhone})\n` +
     `Amount: KSH ${formattedAmount}\n` +
     `Time: ${timestamp}\n` +

@@ -13,6 +13,8 @@ const LiveRoutes = require('./routes/live.routes.js');
 const CronRoutes = require('./routes/cron.routes.js');
 const { startMatchEventScheduler } = require('./services/matchScheduler');
 const PresenceRoutes = require('./routes/presence.routes.js');
+const supabaseHealthMonitor = require('./services/supabaseHealthMonitor');
+const autoRecoveryService = require('./services/autoRecoveryService');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -106,19 +108,44 @@ app.use('/api/live', LiveRoutes);
 app.use('/api/cron', CronRoutes);
 app.use('/api/presence', PresenceRoutes);
 
-// Health check
-// Simple health check endpoint
+// Health check endpoints
+// Main health endpoint - returns system and Supabase service status
 app.get('/api/health', (req, res) => {
-  console.log('🏥 Health check requested');
+  const status = supabaseHealthMonitor.getStatus();
+  
   res.json({
-    status: 'Server is running',
+    status: status.status,
+    healthy: status.healthy,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development',
-    version: '1.0.1',
-    supabase: {
-      configured: process.env.SUPABASE_URL ? true : false,
-      url: process.env.SUPABASE_URL ? '✓' : 'NOT configured',
+    version: '2.0.0',
+    server: 'running',
+    services: {
+      database: status.services.database.healthy ? 'healthy' : 'unhealthy',
+      postrest: status.services.postrest.healthy ? 'healthy' : 'unhealthy',
+      auth: status.services.auth.healthy ? 'healthy' : 'unhealthy',
+      storage: status.services.storage.healthy ? 'healthy' : 'unhealthy',
+      realtime: status.services.realtime.healthy ? 'healthy' : 'unhealthy',
+      edge_functions: status.services.edgeFunctions.healthy ? 'healthy' : 'unhealthy'
     },
+    metrics: status.metrics
+  });
+});
+
+// Detailed health endpoint - comprehensive diagnostic data
+app.get('/api/health/database', (req, res) => {
+  const detailed = supabaseHealthMonitor.getDetailedHealth();
+  res.json(detailed);
+});
+
+// Quick status endpoint - minimal response for frequent checks
+app.get('/api/health/quick', (req, res) => {
+  const status = supabaseHealthMonitor.getStatus();
+  res.json({
+    healthy: status.healthy,
+    status: status.status,
+    last_check: status.lastCheck,
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -154,7 +181,10 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`\n✅ PayHero Payment Server running on port ${PORT}`);
   console.log(`📍 API: http://localhost:${PORT}/api`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`🏥 Health Endpoints:`);
+  console.log(`   - http://localhost:${PORT}/api/health (Main status)`);
+  console.log(`   - http://localhost:${PORT}/api/health/database (Detailed diagnostics)`);
+  console.log(`   - http://localhost:${PORT}/api/health/quick (Quick status)`);
   console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`\n💳 Ready to process M-Pesa payments!\n`);
 
