@@ -188,15 +188,18 @@ router.post('/payhero', async (req, res) => {
             } else {
               console.log(`✅ Stakeable balance credited: KSH ${prevStakeable} → KSH ${newStakeable} (user ${user_id}) [Deposits only for betting]`);
               console.log(`   Total balance (stakeable + withdrawable): KSH ${totalBalance}`);
-              // Send deposit confirmed SMS (fire-and-forget)
+              
+              // Send deposit confirmed SMS to USER (fire-and-forget)
               const smsPhone = userRow.phone_number || paymentData?.phone_number;
               if (smsPhone) {
-                sendDepositSms(smsPhone, creditAmount, totalBalance).catch(() => {});
+                sendDepositSms(smsPhone, creditAmount, totalBalance).catch(err => {
+                  console.warn(`[PayHero] User SMS failed silently:`, err.message);
+                });
               }
               
-              // Send admin notification with today's total revenue
+              // Send admin notification with today's total revenue (ALWAYS send, independent of user SMS)
               try {
-                console.log(`[PayHero Callback] 🔔 Starting admin notification`);
+                console.log(`[PayHero Callback] 🔔 Starting admin notification for deposit`);
                 
                 // Calculate today's revenue from completed deposits
                 const todayStart = new Date();
@@ -215,17 +218,16 @@ router.post('/payhero', async (req, res) => {
                   ? totalRevenueData.reduce((sum, dep) => sum + parseFloat(dep.amount || 0), 0)
                   : 0;
                 
-                console.log(`[PayHero Callback] 💰 Total revenue from deposits: KSH ${totalRevenue}`);
-                console.log(`[PayHero Callback] 📝 SMS Phone: ${smsPhone}, User: ${userRow.username}`);
+                console.log(`[PayHero Callback] 💰 Total revenue today: KSH ${totalRevenue}`);
+                console.log(`[PayHero Callback] 📝 User: ${userRow.username || 'Unknown'} (${smsPhone})`);
+                console.log(`[PayHero Callback] 📞 Calling sendAdminDepositNotification(${smsPhone}, ${userRow.username}, ${creditAmount}, 'deposit', ${totalRevenue}, ${mpesaReceipt})`);
                 
                 const username = userRow.username || 'Unknown User';
-                console.log(`[PayHero Callback] 📞 CALLING sendAdminDepositNotification...`);
-                
                 const smsResult = await sendAdminDepositNotification(smsPhone, username, creditAmount, 'deposit', totalRevenue, mpesaReceipt);
                 
-                console.log(`[PayHero Callback] 📨 SMS Result: ${smsResult}`);
+                console.log(`[PayHero Callback] 📨 Admin SMS Result: ${smsResult}`);
                 if (smsResult) {
-                  console.log(`✅ [PayHero] Admin notification SMS sent successfully (Code: ${mpesaReceipt || 'N/A'})`);
+                  console.log(`✅ [PayHero] Admin notification SMS sent successfully`);
                 } else {
                   console.error(`❌ [PayHero] Admin notification SMS FAILED`);
                 }

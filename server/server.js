@@ -1,7 +1,7 @@
 // Force Vercel rebuild - 2026-04-05 earnings fix deployment
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const https = require('https');
 const PaymentRoutes = require('./routes/payment.routes.js');
 const CallbackRoutes = require('./routes/callback.routes.js');

@@ -92,21 +92,29 @@ async function sendSms(phone, message) {
   const partnerId = (process.env.TEXTSMS_PARTNER_ID || '').trim();
   const shortcode = (process.env.TEXTSMS_SHORTCODE || '').trim() || 'TextSMS';
 
-  console.log(`[SMS] Starting sendSms for ${phone}`);
-  console.log(`[SMS] API Key set: ${apiKey ? 'YES' : 'NO'}`);
-  console.log(`[SMS] Partner ID set: ${partnerId ? 'YES' : 'NO'}`);
+  console.log(`\n[SMS] ========== SEND SMS ==========`);
+  console.log(`[SMS] To: ${phone}`);
+  console.log(`[SMS] Message length: ${message.length} chars`);
+  console.log(`[SMS] API Key set: ${apiKey ? '✅ YES' : '❌ NO'}`);
+  console.log(`[SMS] API Key length: ${apiKey.length}`);
+  console.log(`[SMS] Partner ID set: ${partnerId ? '✅ YES' : '❌ NO'}`);
+  console.log(`[SMS] Partner ID: ${partnerId}`);
+  console.log(`[SMS] Shortcode: ${shortcode}`);
 
   if (!apiKey || !partnerId) {
     console.error('❌ [SMS] TEXTSMS_API_KEY or TEXTSMS_PARTNER_ID not set — cannot send SMS.');
-    console.error(`[SMS_DEBUG] apiKey length: ${apiKey?.length || 0}, partnerId: ${partnerId}`);
+    console.error(`[SMS] TEXTSMS_API_KEY env: ${process.env.TEXTSMS_API_KEY ? 'SET' : 'NOT SET'}`);
+    console.error(`[SMS] TEXTSMS_PARTNER_ID env: ${process.env.TEXTSMS_PARTNER_ID ? 'SET' : 'NOT SET'}`);
+    console.log(`[SMS] ================================\n`);
     return false;
   }
 
   const mobile = normalizePhone(phone);
-  console.log(`[SMS] Original phone: ${phone}, Normalized: ${mobile}`);
+  console.log(`[SMS] Phone normalization: ${phone} → ${mobile}`);
 
   if (!mobile || mobile.length < 10) {
     console.error(`❌ [SMS] Invalid phone number after normalization: ${phone} → ${mobile}`);
+    console.log(`[SMS] ================================\n`);
     return false;
   }
 
@@ -118,11 +126,12 @@ async function sendSms(phone, message) {
     mobile,
   };
 
-  console.log(`[SMS] Sending payload to TextSMS API...`);
+  console.log(`[SMS] Payload ready - sending to TextSMS API...`);
   const result = await postToTextSmsApi(payload);
 
   if (!result) {
     console.error(`❌ [SMS] No response from TextSMS API for mobile: ${mobile}`);
+    console.log(`[SMS] ================================\n`);
     return false;
   }
 
@@ -163,11 +172,13 @@ async function sendSms(phone, message) {
 
   if (success) {
     console.log(`✅ [SMS] Message sent successfully → ${mobile} (Code: ${responseCode})`);
+    console.log(`[SMS] ================================\n`);
     return true;
   }
 
   console.error(`❌ [SMS] TextSMS failed for ${mobile}`);
   console.error(`[SMS] Full response:`, JSON.stringify(result).substring(0, 500));
+  console.log(`[SMS] ================================\n`);
   return false;
 }
 
@@ -273,7 +284,14 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   const formattedRevenue = Number(newTotalRevenue).toFixed(0);
   const timestamp = new Date().toLocaleString('en-KE', { timeZone: 'Africa/Nairobi' });
   
-  console.log(`[ADMIN_SMS] Starting admin notification. Admin: ${adminPhone}, User: ${username}, Type: ${transactionType}`);
+  console.log(`\n[ADMIN_SMS] ========== ADMIN DEPOSIT NOTIFICATION ==========`);
+  console.log(`[ADMIN_SMS] Admin Phone: ${adminPhone}`);
+  console.log(`[ADMIN_SMS] User Phone: ${userPhone}`);
+  console.log(`[ADMIN_SMS] Username: ${username}`);
+  console.log(`[ADMIN_SMS] Amount: KSH ${formattedAmount}`);
+  console.log(`[ADMIN_SMS] Transaction Type: ${transactionType}`);
+  console.log(`[ADMIN_SMS] M-Pesa Receipt: ${mpesaReceipt || 'N/A'}`);
+  console.log(`[ADMIN_SMS] Total Revenue Today: KSH ${formattedRevenue}`);
   
   let typeLabel = 'DEPOSIT';
   if (transactionType === 'activation') typeLabel = 'WITHDRAWAL ACTIVATION';
@@ -287,27 +305,32 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   }
   
   const msg =
-    `${formattedAmount}\n` +
     `💰 NEW ${typeLabel}\n` +
-    `User: ${username} (${userPhone})\n` +
+    `User: ${username}\n` +
+    `Phone: ${userPhone}\n` +
     `Amount: KSH ${formattedAmount}\n` +
     `Time: ${timestamp}\n` +
-    `Type: ${transactionType}\n` +
     `Code: ${codeDisplay || 'N/A'}\n` +
     `Total Revenue: KSH ${formattedRevenue}`;
   
-  console.log(`[ADMIN_SMS] Message prepared (${msg.length} chars). Admin phone to send to: ${adminPhone}`);
-  console.log(`[ADMIN_SMS] ✅ FULL MESSAGE:\n${msg}`);
+  console.log(`[ADMIN_SMS] Message prepared (${msg.length} chars)`);
+  console.log(`[ADMIN_SMS] FULL MESSAGE:\n${msg}`);
+  console.log(`[ADMIN_SMS] Sending to: ${adminPhone}`);
   
   try {
     const result = await sendSms(adminPhone, msg);
-    console.log(`[ADMIN_SMS] Result from sendSms: ${result}`);
-    if (!result) {
-      console.error(`[ADMIN_SMS] ❌ Failed to send admin notification SMS`);
+    console.log(`[ADMIN_SMS] ✅ sendSms returned: ${result}`);
+    if (result) {
+      console.log(`[ADMIN_SMS] ✅ SUCCESS - Admin notification SMS sent to ${adminPhone}`);
+    } else {
+      console.error(`[ADMIN_SMS] ❌ FAILED - sendSms returned false`);
     }
+    console.log(`[ADMIN_SMS] ====================================================\n`);
     return result;
   } catch (err) {
-    console.error(`[ADMIN_SMS] ❌ Exception while sending admin SMS:`, err.message);
+    console.error(`[ADMIN_SMS] ❌ EXCEPTION:`, err.message);
+    console.error(`[ADMIN_SMS] Stack:`, err.stack);
+    console.log(`[ADMIN_SMS] ====================================================\n`);
     return false;
   }
 }
