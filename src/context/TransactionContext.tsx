@@ -50,10 +50,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   const fetchTransactions = async (userId: string) => {
     try {
       setIsLoading(true);
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
-        // Additional context line
-        console.log("API URL set to:", apiUrl);
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/transactions/user/${userId}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }

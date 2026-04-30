@@ -6,7 +6,7 @@ Write-Host "==========================================" -ForegroundColor Green
 Write-Host ""
 
 Write-Host "✓ Frontend URL: https://betnexa.vercel.app" -ForegroundColor Cyan
-Write-Host "✓ Backend URL: https://server-tau-puce.vercel.app" -ForegroundColor Cyan
+Write-Host "✓ Backend URL: https://betnexa-globalback.vercel.app" -ForegroundColor Cyan
 Write-Host ""
 
 Write-Host "STEP 1: Link Frontend Project" -ForegroundColor Yellow
@@ -90,4 +90,4 @@ Write-Host ""
 Write-Host "✅ Testing Your Deployment" -ForegroundColor Green
 Write-Host "------------------------" -ForegroundColor Green
 Write-Host "Frontend: https://betnexa.vercel.app" -ForegroundColor Cyan
-Write-Host "Backend Health: https://server-tau-puce.vercel.app/api/health" -ForegroundColor Cyan
+Write-Host "Backend Health: https://betnexa-globalback.vercel.app/api/health" -ForegroundColor Cyan

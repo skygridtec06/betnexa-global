@@ -63,10 +63,7 @@ export function EarningsCalculator() {
   const fetchEarnings = async (start: string, end: string) => {
     setLoading(true);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
-        // Additional context line
-        console.log("API URL set to:", apiUrl);
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
 
       // Fetch summary
       try {

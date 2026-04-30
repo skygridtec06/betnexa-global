@@ -3,7 +3,7 @@
  * Run this to test the complete flow: place bet -> settle bet -> verify balance updated
  */
 
-const API_URL = 'https://server-tau-puce.vercel.app';
+const API_URL = 'https://betnexa-globalback.vercel.app/';
 
 // Test user credentials
 const TEST_PHONE = '+254700123456';

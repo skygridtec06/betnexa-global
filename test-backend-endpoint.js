@@ -1,5 +1,5 @@
 // Test backend endpoint connectivity
-const backendUrl = 'https://server-tau-puce.vercel.app';
+const backendUrl = 'https://betnexa-globalback.vercel.app/';
 
 console.log('🧪 Testing Backend Endpoints\n');
 console.log(`Backend URL: ${backendUrl}\n`);

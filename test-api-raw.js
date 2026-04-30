@@ -5,7 +5,7 @@
  * Tests the admin games API and shows raw responses
  */
 
-const API_URL = 'https://server-tau-puce.vercel.app';
+const API_URL = 'https://betnexa-globalback.vercel.app/';
 
 async function testAPI() {
   console.log('\n🔍 Testing Admin Games API');

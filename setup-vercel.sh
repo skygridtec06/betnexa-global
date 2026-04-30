@@ -7,7 +7,7 @@ echo "==========================================="
 echo ""
 
 echo "✓ Frontend URL: https://betnexa.vercel.app"
-echo "✓ Backend URL: https://server-tau-puce.vercel.app"
+echo "✓ Backend URL: https://betnexa-globalback.vercel.app"
 echo ""
 
 echo "Step 1: Link Frontend Project"
@@ -40,7 +40,7 @@ echo "FRONTEND (https://vercel.com/dashboard/betnexa/settings/environment-variab
 echo "Add or update these variables:"
 echo "  VITE_SUPABASE_URL=https://eaqogmybihiqzivuwyav.supabase.co"
 echo "  VITE_SUPABASE_ANON_KEY=<your-supabase-anon-key>"
-echo "  VITE_API_URL=https://server-tau-puce.vercel.app"
+echo "  VITE_API_URL=https://betnexa-globalback.vercel.app"
 echo ""
 echo "BACKEND (https://vercel.com/dashboard/server-chi-orcin/settings/environment-variables)"
 echo "Add or update these variables:"
@@ -62,4 +62,4 @@ echo ""
 
 echo "✅ Once environment variables are set and redeployed:"
 echo "   - Frontend: https://betnexa.vercel.app"
-echo "   - Backend: https://server-tau-puce.vercel.app/api/health"
+echo "   - Backend: https://betnexa-globalback.vercel.app/api/health"

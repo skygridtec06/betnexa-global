@@ -41,7 +41,7 @@ The admin portal was adding games, updating scores, and modifying user data, but
 
 **Infrastructure:**
 - Frontend: https://betnexa.vercel.app
-- Backend: https://server-tau-puce.vercel.app
+- Backend: https://betnexa-globalback.vercel.app
 
 **Changes Deployed:**
 - All code committed to GitHub
@@ -347,5 +347,5 @@ The system is ready for production use.
 **Implementation Date:** January 2024
 **Status:** ✅ Live on Production
 **Frontend:** https://betnexa.vercel.app
-**Backend:** https://server-tau-puce.vercel.app
+**Backend:** https://betnexa-globalback.vercel.app
 **Admin Portal:** https://betnexa.vercel.app/muleiadmin (0714945142 / 4306)

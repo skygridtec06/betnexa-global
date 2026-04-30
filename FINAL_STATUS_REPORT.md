@@ -236,7 +236,7 @@ Database Query:           < 500ms
 
 **Testing Environment:**
 - Local: Windows 10/11, Node.js v20.14.0
-- Production: Vercel (server-tau-puce.vercel.app)
+- Production: Vercel (betnexa-globalback.vercel.app)
 
 **Documentation:**
 - See TEST_RESULTS.md for detailed test cases

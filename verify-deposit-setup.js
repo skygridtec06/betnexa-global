@@ -5,7 +5,7 @@
  * Run after environment variables are configured
  */
 
-const backendUrl = 'https://server-tau-puce.vercel.app';
+const backendUrl = 'https://betnexa-globalback.vercel.app/';
 const colors = {
   reset: '\x1b[0m',
   green: '\x1b[32m',

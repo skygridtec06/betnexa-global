@@ -2,7 +2,7 @@
  * Test the fixed game creation endpoint
  */
 
-const apiUrl = 'https://server-tau-puce.vercel.app';
+const apiUrl = 'https://betnexa-globalback.vercel.app/';
 const adminPhone = '0714945142';
 
 async function testGameCreation() {

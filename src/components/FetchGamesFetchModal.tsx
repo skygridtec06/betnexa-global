@@ -32,10 +32,7 @@ export const FetchGamesFetchModal = ({ isOpen, onClose, onExecute }: FetchGamesF
     setStep('fetching');
     setErrorMsg('');
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
-        // Additional context line
-        console.log("API URL set to:", apiUrl);
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
       const adminPhone = localStorage.getItem("adminPhone") || localStorage.getItem("userPhone") || "0712345678";
       
       const response = await fetch(`${apiUrl}/api/admin/fetch-api-football/fetch-preview`, {

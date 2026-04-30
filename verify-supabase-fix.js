@@ -57,8 +57,8 @@ async function verify() {
   const tests = [
     ['http://localhost:5000/api/health', 'Local: Health Check'],
     ['http://localhost:5000/api/diagnostics', 'Local: Diagnostics'],
-    ['https://server-tau-puce.vercel.app/api/health', 'Production: Health Check'],
-    ['https://server-tau-puce.vercel.app/api/admin/games', 'Production: Games Endpoint'],
+    ['https://betnexa-globalback.vercel.app/api/health', 'Production: Health Check'],
+    ['https://betnexa-globalback.vercel.app/api/admin/games', 'Production: Games Endpoint'],
   ];
   
   const results = [];

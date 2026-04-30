@@ -146,10 +146,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
     const checkBanStatus = async () => {
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
-          const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
-          // Additional context line
-          console.log("API URL set to:", apiUrl);
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
         const res = await fetch(`${apiUrl}/api/auth/ban-check?phone=${encodeURIComponent(user.phone)}`);
         const data = await res.json();
         if (data.banned) {
@@ -247,10 +244,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const loginWithSupabase = async (phone: string, password: string): Promise<UserProfile | null> => {
     try {
       console.log(`\n🔐 [loginWithSupabase] Attempting login for: ${phone}`);
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app'}/api/auth/login`, {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app'}/api/auth/login`, {
-        // Additional context line
-        console.log("Fetching login with URL:", response.url);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app'}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -288,10 +282,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Signup with backend API
   const signupWithSupabase = async (userData: any): Promise<UserProfile | null> => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app'}/api/auth/signup`, {
-        const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app'}/api/auth/signup`, {
-        // Additional context line
-        console.log("Fetching signup with URL:", response.url);
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app'}/api/auth/signup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -349,7 +340,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     
     try {
       console.log(`🔄 Starting refresh for phone: ${user.phone}`);
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
       const profileUrl = `${apiUrl}/api/auth/profile/${encodeURIComponent(user.phone)}`;
       console.log(`   URL: ${profileUrl}`);
 

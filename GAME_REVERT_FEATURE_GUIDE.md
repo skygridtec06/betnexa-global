@@ -174,7 +174,7 @@ const revertGame = async (gameId: string) => {
 
 ## Deployment Status
 
-✅ **Backend**: Deployed to https://server-tau-puce.vercel.app
+✅ **Backend**: Deployed to https://betnexa-globalback.vercel.app
 ✅ **Frontend**: Deployed to https://betnexa.co.ke
 
 ### Commit Hash

@@ -3,7 +3,7 @@
  * Run: node test-deposit.js
  */
 
-const backendUrl = 'https://server-tau-puce.vercel.app';
+const backendUrl = 'https://betnexa-globalback.vercel.app/';
 
 async function testDeposit() {
   console.log('\n🧪 Testing Deposit API\n');

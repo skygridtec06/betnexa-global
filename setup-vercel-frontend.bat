@@ -15,7 +15,7 @@ echo Setting VITE_SUPABASE_ANON_KEY...
 npx vercel env add VITE_SUPABASE_ANON_KEY sb_publishable_Lc8dQIzND4_qyIbN2EuQrQ_0Ma0OINQ --environment production --yes
 
 echo Setting VITE_API_URL (Backend URL)...
-npx vercel env add VITE_API_URL https://server-tau-puce.vercel.app --environment production --yes
+npx vercel env add VITE_API_URL https://betnexa-globalback.vercel.app --environment production --yes
 
 echo.
 echo ✅ Frontend environment variables added!

@@ -1,6 +1,6 @@
 const fetch = (url, options) => import('node-fetch').then(({default: fetch}) => fetch(url, options));
 
-const API_URL = 'https://server-tau-puce.vercel.app';
+const API_URL = 'https://betnexa-globalback.vercel.app/';
 const ADMIN_PHONE = '0714945142';
 
 async function testAdminAPIs() {

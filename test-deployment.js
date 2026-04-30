@@ -62,9 +62,9 @@ console.log('\n🧪 API ENDPOINTS TESTED');
 console.log('─────────────────────────────────────────────────────────────────');
 console.log('✅ Frontend: https://betnexa.vercel.app');
 console.log('   Status: 200 OK');
-console.log('✅ Backend Health: https://server-tau-puce.vercel.app/api/health');
+console.log('✅ Backend Health: https://betnexa-globalback.vercel.app/api/health');
 console.log('   Status: 200 OK (Server running)');
-console.log('⚠️  Games API: https://server-tau-puce.vercel.app/api/admin/games');
+console.log('⚠️  Games API: https://betnexa-globalback.vercel.app/api/admin/games');
 console.log('   Status: Requires database configuration');
 
 // 6. Project Status Summary
@@ -73,7 +73,7 @@ console.log('──────────────────────�
 console.log('✅ All changes committed to git');
 console.log('✅ Repository: betnex01-netizen/betnexa2');
 console.log('✅ Frontend deployed on: https://betnexa.vercel.app');
-console.log('✅ Backend deployed on: https://server-tau-puce.vercel.app');
+console.log('✅ Backend deployed on: https://betnexa-globalback.vercel.app/');
 console.log('✅ Build completes successfully');
 console.log('✅ TypeScript code compiles');
 console.log('\n⚡ KEY IMPROVEMENTS MADE:');

@@ -5,7 +5,7 @@
  * Directly test if backend can authenticate admin
  */
 
-const BACKEND_URL = 'https://server-tau-puce.vercel.app';
+const BACKEND_URL = 'https://betnexa-globalback.vercel.app/';
 
 async function testAdminLogin() {
   try {
