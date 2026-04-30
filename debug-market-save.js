@@ -5,7 +5,7 @@
 
 import fetch from 'node-fetch';
 
-const API_URL = process.env.API_URL || 'https://server-tau-puce.vercel.app';
+const API_URL = process.env.API_URL || 'https://betnexa-globalback.vercel.app';
 
 async function testMarketSave() {
   try {

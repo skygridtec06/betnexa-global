@@ -83,7 +83,7 @@ ee993bb - FIX: Remove syntax error in server.js
 
 ### Vercel Status
 ```
-Environment: Production (server-tau-puce.vercel.app)
+Environment: Production (betnexa-globalback.vercel.app)
 Build: ✅ Triggered
 Status: Building/Deploying
 ETA: 2-3 minutes for full deployment
@@ -213,7 +213,7 @@ Overall Score: 100% (7/7 tests passed)
    - Monitor production logs
 
 2. **Production Endpoint Tests** (After deployment)
-   - Test https://server-tau-puce.vercel.app/api/health
+   - Test https://betnexa-globalback.vercel.app/api/health
    - Verify admin panel loads
    - Check CORS headers in browser
    - Test payment endpoints

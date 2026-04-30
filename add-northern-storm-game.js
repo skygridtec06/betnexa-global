@@ -5,7 +5,7 @@
  * This uses the proper API endpoint instead of raw SQL
  */
 
-const API_URL = 'https://server-tau-puce.vercel.app';
+const API_URL = 'https://betnexa-globalback.vercel.app';
 const ADMIN_PHONE = '0714945142';
 
 const gameData = {

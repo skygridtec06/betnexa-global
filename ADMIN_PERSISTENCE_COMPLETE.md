@@ -143,7 +143,7 @@ See: [TESTING_ADMIN_PERSISTENCE.md](TESTING_ADMIN_PERSISTENCE.md)
 
 ✅ Auto-deployed to Vercel:
 - Frontend: https://betnexa.vercel.app
-- Backend: https://server-tau-puce.vercel.app
+- Backend: https://betnexa-globalback.vercel.app
 
 ## Admin Credentials
 
@@ -272,5 +272,5 @@ The system is ready for production use.
 
 **Last Updated:** January 2024
 **Status:** ✅ Complete and Deployed
-**Backend:** https://server-tau-puce.vercel.app
+**Backend:** https://betnexa-globalback.vercel.app
 **Frontend:** https://betnexa.vercel.app

@@ -103,7 +103,7 @@ Replaced synchronous context function calls with async API calls:
 
 ```bash
 # Add a game
-curl -X POST https://server-tau-puce.vercel.app/api/admin/games \
+curl -X POST https://betnexa-globalback.vercel.app/api/admin/games \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "0714945142",
@@ -119,7 +119,7 @@ curl -X POST https://server-tau-puce.vercel.app/api/admin/games \
   }'
 
 # Update game score
-curl -X PUT https://server-tau-puce.vercel.app/api/admin/games/g1234567890/score \
+curl -X PUT https://betnexa-globalback.vercel.app/api/admin/games/g1234567890/score \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "0714945142",
@@ -130,10 +130,10 @@ curl -X PUT https://server-tau-puce.vercel.app/api/admin/games/g1234567890/score
   }'
 
 # Get all games
-curl https://server-tau-puce.vercel.app/api/admin/games
+curl https://betnexa-globalback.vercel.app/api/admin/games
 
 # Get admin stats
-curl https://server-tau-puce.vercel.app/api/admin/stats
+curl https://betnexa-globalback.vercel.app/api/admin/stats
 ```
 
 ## Database Changes
@@ -153,7 +153,7 @@ The following database tables are used/updated:
 
 ### Vercel URLs
 - Frontend: https://betnexa.vercel.app
-- Backend: https://server-tau-puce.vercel.app
+- Backend: https://betnexa-globalback.vercel.app
 
 ## Verification Checklist
 

@@ -97,7 +97,7 @@ In DevTools:
 ### Issue: Getting Network Error in console
 **Solution:**
 1. Check if backend server is running
-2. Go to https://server-tau-puce.vercel.app/api/health
+2. Go to https://betnexa-globalback.vercel.app/api/health
 3. Should see: `{"status":"ok"}`
 4. If not, backend needs to be redeployed
 

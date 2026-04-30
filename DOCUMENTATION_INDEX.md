@@ -219,7 +219,7 @@
 | **Status** | ✅ Live in Production |
 | **Admin URL** | https://betnexa.vercel.app/muleiadmin |
 | **Admin Credentials** | 0714945142 / 4306 |
-| **Backend** | https://server-tau-puce.vercel.app |
+| **Backend** | https://betnexa-globalback.vercel.app |
 | **Frontend** | https://betnexa.vercel.app |
 | **Database** | Supabase PostgreSQL |
 | **API Endpoints** | 10 new endpoints |
@@ -327,7 +327,7 @@ All documents use:
 
 ### Deployment
 - **Frontend:** https://betnexa.vercel.app
-- **Backend:** https://server-tau-puce.vercel.app
+- **Backend:** https://betnexa-globalback.vercel.app
 - **Admin Portal:** https://betnexa.vercel.app/muleiadmin
 - **GitHub:** https://github.com/betnex01-netizen/betnexa2
 - **Supabase:** https://supabase.com

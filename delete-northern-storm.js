@@ -10,7 +10,7 @@ async function deleteGame() {
   try {
     // First, fetch all games to find Northern Storm
     console.log('📋 Searching for Northern Storm game...');
-    const getResponse = await fetch('https://server-tau-puce.vercel.app/api/admin/games');
+    const getResponse = await fetch('https://betnexa-globalback.vercel.app/api/admin/games');
     const getBody = await getResponse.json();
 
     if (!getBody.success || !Array.isArray(getBody.games)) {
@@ -35,7 +35,7 @@ async function deleteGame() {
 
     // Delete the game
     console.log('\n🗑️  Deleting game...');
-    const deleteResponse = await fetch(`https://server-tau-puce.vercel.app/api/admin/games/${gameId}`, {
+    const deleteResponse = await fetch(`https://betnexa-globalback.vercel.app/api/admin/games/${gameId}`, {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json'

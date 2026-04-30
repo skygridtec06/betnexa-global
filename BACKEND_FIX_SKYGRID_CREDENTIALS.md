@@ -14,9 +14,9 @@ You were **absolutely correct**! We were updating the FRONTEND but not the BACKE
 | Project | Type | URL | Vercel Project ID | Status |
 |---------|------|-----|-------------------|--------|
 | **betnexa** | Frontend | https://betnexa.co.ke | `prj_kzbO5AAiAwtRB7x65P6mGBLsJxmf` | ✅ Updated |
-| **server** | Backend API | https://server-tau-puce.vercel.app | `prj_GI4IKJIkAdrNntmBD9khquhVZWzU` | ❌ WAS OLD! |
+| **server** | Backend API | https://betnexa-globalback.vercel.app | `prj_GI4IKJIkAdrNntmBD9khquhVZWzU` | ❌ WAS OLD! |
 
-**The STK Push calls the BACKEND API** (`server-tau-puce.vercel.app`), NOT the frontend!
+**The STK Push calls the BACKEND API** (`betnexa-globalback.vercel.app`), NOT the frontend!
 
 ### Old Backend Credentials (21 days old):
 ```
@@ -26,7 +26,7 @@ You were **absolutely correct**! We were updating the FRONTEND but not the BACKE
 ❌ DARAJA_TEST_SHORT_CODE          = 3570049 (METRO-GAIN)                    (21d)
 ❌ DARAJA_TEST_PARTY_B             = 6821352 (OLD)                           (8d)
 ❌ DARAJA_TEST_TRANSACTION_TYPE    = CustomerBuyGoodsOnline (WRONG)          (21d)
-❌ DARAJA_TEST_CALLBACK_BASE_URL   = server-tau-puce.vercel.app             (21d)
+❌ DARAJA_TEST_CALLBACK_BASE_URL   = betnexa-globalback.vercel.app             (21d)
 ```
 
 **This is why STK was showing METRO-GAIN HO!** The backend was still using the old credentials!
@@ -56,7 +56,7 @@ Removed all 7 DARAJA variables from backend server project.
 ```
 Backend Project: server
 Status: ✅ Production redeployed [18 seconds ago]
-URL: https://server-tau-puce.vercel.app
+URL: https://betnexa-globalback.vercel.app
 Credentials: All 7 DARAJA vars FRESH (2-3m old)
 ```
 
@@ -80,7 +80,7 @@ Credentials: All 7 DARAJA vars FRESH (2-3m old)
 
 **When user initiates STK payment:**
 
-1. Frontend sends request to Backend API at `server-tau-puce.vercel.app`
+1. Frontend sends request to Backend API at `betnexa-globalback.vercel.app`
 2. Backend loads DARAJA credentials: **SKYGRID (Consumer Key: IZVSC3..., Short Code: 4046271)**
 3. Backend authenticates with Safaricom Daraja using **SKYGRID credentials**
 4. Daraja returns STK prompt configured for **SKYGRID TECHNOLOGIES**
@@ -110,7 +110,7 @@ User Browser
     ↓
 Frontend (betnexa.co.ke) - ✅ Had SKYGRID creds
     ↓
-Backend API (server-tau-puce.vercel.app) - ❌ HAD OLD METRO-GAIN CREDS
+Backend API (betnexa-globalback.vercel.app) - ❌ HAD OLD METRO-GAIN CREDS
     ↓
 Daraja API ← Uses BACKEND credentials
     ↓  
@@ -123,7 +123,7 @@ User Browser
     ↓
 Frontend (betnexa.co.ke) - ✅ SKYGRID
     ↓
-Backend API (server-tau-puce.vercel.app) - ✅ FRESH SKYGRID (3m old)
+Backend API (betnexa-globalback.vercel.app) - ✅ FRESH SKYGRID (3m old)
     ↓
 Daraja API ← Uses BACKEND SKYGRID credentials ✅
     ↓  

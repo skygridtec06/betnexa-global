@@ -154,7 +154,7 @@ Admin changes sync through database
 ```
 VITE_SUPABASE_URL = https://eaqogmybihiqzivuwyav.supabase.co
 VITE_SUPABASE_ANON_KEY = sb_publishable_Lc8dQIzND4_qyIbN2EuQrQ_0Ma0OINQ  
-VITE_API_URL = https://server-tau-puce.vercel.app
+VITE_API_URL = https://betnexa-globalback.vercel.app
 ```
 
 ### Vercel Backend (server)
@@ -165,7 +165,7 @@ PAYHERO_API_KEY = [your-payhero-key]
 PAYHERO_API_SECRET = [your-payhero-secret]
 PAYHERO_ACCOUNT_ID = 3398
 NODE_ENV = production
-CALLBACK_URL = https://server-tau-puce.vercel.app/api/callbacks
+CALLBACK_URL = https://betnexa-globalback.vercel.app/api/callbacks
 ```
 
 ---

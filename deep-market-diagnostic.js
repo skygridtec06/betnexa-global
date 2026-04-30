@@ -12,7 +12,7 @@
 import fetch from 'node-fetch';
 import { setTimeout as sleep } from 'timers/promises';
 
-const API_URL = process.env.API_URL || 'https://server-tau-puce.vercel.app';
+const API_URL = process.env.API_URL || 'https://betnexa-globalback.vercel.app';
 
 class MarketDiagnostic {
   constructor() {

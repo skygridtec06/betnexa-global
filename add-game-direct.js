@@ -60,7 +60,7 @@ async function addGameDirectly() {
 
     // Now test API retrieval
     console.log('🔄 Testing API retrieval...\n');
-    const response = await fetch('https://server-tau-puce.vercel.app/api/admin/games');
+    const response = await fetch('https://betnexa-globalback.vercel.app/api/admin/games');
     const body = await response.json();
 
     if (body.success && Array.isArray(body.games)) {

@@ -122,7 +122,7 @@ const gameData = {
 
 ### Test via API:
 ```bash
-curl -X POST "https://server-tau-puce.vercel.app/api/admin/games" \
+curl -X POST "https://betnexa-globalback.vercel.app/api/admin/games" \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "0714945142",
@@ -176,7 +176,7 @@ curl -X POST "https://server-tau-puce.vercel.app/api/admin/games" \
 
 ✅ **Deployed to Vercel:**
 - Frontend: https://betnexa.vercel.app
-- Backend: https://server-tau-puce.vercel.app
+- Backend: https://betnexa-globalback.vercel.app
 
 **Note:** Vercel typically takes 1-2 minutes to fully deploy after git push. If you still see errors, wait 2 minutes and refresh the page.
 

@@ -190,7 +190,7 @@ The admin portal has 5 main tabs:
 5. Contact development team with error message
 
 **Emergency Contacts:**
-- Backend: server-tau-puce.vercel.app
+- Backend: betnexa-globalback.vercel.app
 - Database: Supabase dashboard
 - Frontend: betnexa.vercel.app
 

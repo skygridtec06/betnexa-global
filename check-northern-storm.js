@@ -8,7 +8,7 @@ async function checkGame() {
   console.log('\n🔍 Checking for Northern Storm game in database...\n');
 
   try {
-    const response = await fetch('https://server-tau-puce.vercel.app/api/admin/games');
+    const response = await fetch('https://betnexa-globalback.vercel.app/api/admin/games');
     const body = await response.json();
 
     if (!body.success || !Array.isArray(body.games)) {

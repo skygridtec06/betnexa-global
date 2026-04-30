@@ -8,7 +8,7 @@ async function checkHealth() {
   console.log('\n🏥 Checking backend server health...\n');
 
   try {
-    const response = await fetch('https://server-tau-puce.vercel.app/api/health');
+    const response = await fetch('https://betnexa-globalback.vercel.app/api/health');
     const body = await response.json();
 
     console.log(`Status Code: ${response.status}\n`);

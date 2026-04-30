@@ -5,7 +5,7 @@
  * Login and get direct admin token
  */
 
-const BACKEND_URL = 'https://server-tau-puce.vercel.app';
+const BACKEND_URL = 'https://betnexa-globalback.vercel.app';
 
 async function getAdminAccess() {
   try {

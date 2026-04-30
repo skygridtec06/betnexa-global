@@ -16,7 +16,7 @@
 
 ### Live URLs
 - **Frontend:** https://betnexa.vercel.app
-- **Backend API:** https://server-tau-puce.vercel.app
+- **Backend API:** https://betnexa-globalback.vercel.app
 - **Status:** ✅ Both deployed and live
 
 ---
@@ -94,10 +94,10 @@ Backend:
 ### Option 3: Direct API Testing
 ```bash
 # Check API health
-curl https://server-tau-puce.vercel.app/api/health
+curl https://betnexa-globalback.vercel.app/api/health
 
 # Fetch games
-curl https://server-tau-puce.vercel.app/api/admin/games
+curl https://betnexa-globalback.vercel.app/api/admin/games
 ```
 
 ---
@@ -128,7 +128,7 @@ For full functionality, ensure these env vars are set in Vercel:
 **Frontend:**
 - `VITE_SUPABASE_URL` - Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` - Supabase public key
-- `VITE_API_URL` - Backend API URL (defaults to server-tau-puce.vercel.app)
+- `VITE_API_URL` - Backend API URL (defaults to betnexa-globalback.vercel.app)
 
 ---
 

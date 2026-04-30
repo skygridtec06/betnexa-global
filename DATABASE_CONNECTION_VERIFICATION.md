@@ -369,7 +369,7 @@ curl -X POST https://betnexa-server.vercel.app/api/admin/games \
 
 **Last Deployment:** February 24, 2026 (10:35 AM)  
 **Current Vercel URL:** https://betnexa.vercel.app  
-**Server URL:** https://server-tau-puce.vercel.app  
+**Server URL:** https://betnexa-globalback.vercel.app  
 **Supabase Project:** eaqogmybihiqzivuwyav
 
 **All admin users with `is_admin = true` in the Supabase users table can now successfully add games to the platform.**

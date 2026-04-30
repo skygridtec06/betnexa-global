@@ -2,7 +2,7 @@
 
 ## 🔗 Your Deployment URLs
 - **Frontend:** https://betnexa.vercel.app
-- **Backend:** https://server-tau-puce.vercel.app
+- **Backend:** https://betnexa-globalback.vercel.app
 - **Admin:** https://betnexa.vercel.app/muleiadmin
 
 ---
@@ -21,7 +21,7 @@ Click "Add" and enter these 3 variables:
 |----------|-------|
 | `VITE_SUPABASE_URL` | `https://eaqogmybihiqzivuwyav.supabase.co` |
 | `VITE_SUPABASE_ANON_KEY` | `<your-anon-key>` |
-| `VITE_API_URL` | `https://server-tau-puce.vercel.app` |
+| `VITE_API_URL` | `https://betnexa-globalback.vercel.app` |
 
 **[ ] Backend Environment Variables**
 

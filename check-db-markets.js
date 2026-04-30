@@ -4,7 +4,7 @@
 
 import fetch from 'node-fetch';
 
-const API_URL = process.env.API_URL || 'https://server-tau-puce.vercel.app';
+const API_URL = process.env.API_URL || 'https://betnexa-globalback.vercel.app';
 const TEST_GAME_ID = '8902ba2e-0995-49b9-b4d1-a054e82ae042';
 
 async function checkDatabase() {

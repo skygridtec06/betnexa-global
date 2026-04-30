@@ -8,7 +8,7 @@
 - **Last Commit:** a0bef3d - Add dual admin support
 
 ### Backend API
-- **URL:** https://server-tau-puce.vercel.app
+- **URL:** https://betnexa-globalback.vercel.app
 - **Status:** ✅ Deployed and Live
 - **Key Endpoint:** `GET /api/admin/users` - Fetch all admin users
 

@@ -1,4 +1,4 @@
-const API_URL = 'https://server-tau-puce.vercel.app/api/admin/calculate-user-balances';
+const API_URL = 'https://betnexa-globalback.vercel.app/api/admin/calculate-user-balances';
 const ADMIN_PHONE = '0799880000'; // This should be the admin phone number
 
 async function calculateUserBalances() {

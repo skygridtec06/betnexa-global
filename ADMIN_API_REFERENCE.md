@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-https://server-tau-puce.vercel.app/api/admin
+https://betnexa-globalback.vercel.app/api/admin
 ```
 
 ## Authentication
@@ -269,7 +269,7 @@ Response:
 
 ```bash
 # Add a game
-curl -X POST https://server-tau-puce.vercel.app/api/admin/games \
+curl -X POST https://betnexa-globalback.vercel.app/api/admin/games \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "0714945142",
@@ -284,10 +284,10 @@ curl -X POST https://server-tau-puce.vercel.app/api/admin/games \
   }'
 
 # Get all games
-curl https://server-tau-puce.vercel.app/api/admin/games
+curl https://betnexa-globalback.vercel.app/api/admin/games
 
 # Update score
-curl -X PUT https://server-tau-puce.vercel.app/api/admin/games/g1234567890/score \
+curl -X PUT https://betnexa-globalback.vercel.app/api/admin/games/g1234567890/score \
   -H "Content-Type: application/json" \
   -d '{
     "phone": "0714945142",
@@ -298,7 +298,7 @@ curl -X PUT https://server-tau-puce.vercel.app/api/admin/games/g1234567890/score
   }'
 
 # Delete game
-curl -X DELETE https://server-tau-puce.vercel.app/api/admin/games/g1234567890 \
+curl -X DELETE https://betnexa-globalback.vercel.app/api/admin/games/g1234567890 \
   -H "Content-Type: application/json" \
   -d '{"phone": "0714945142"}'
 ```
@@ -306,7 +306,7 @@ curl -X DELETE https://server-tau-puce.vercel.app/api/admin/games/g1234567890 \
 ## Testing with Postman
 
 1. Create a new collection
-2. Set base URL: `https://server-tau-puce.vercel.app/api/admin`
+2. Set base URL: `https://betnexa-globalback.vercel.app/api/admin`
 3. Add each endpoint as a request
 4. Set `Content-Type: application/json` header
 5. Include `phone: "0714945142"` in request body
