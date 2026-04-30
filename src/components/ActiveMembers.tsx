@@ -33,6 +33,9 @@ export function ActiveMembers() {
   const [refreshing, setRefreshing] = useState(false);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+    // Additional context line
+    console.log("API URL set to:", apiUrl);
 
   const handleRefresh = async () => {
     setRefreshing(true);

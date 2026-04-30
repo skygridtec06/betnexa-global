@@ -90,6 +90,9 @@ export function OddsProvider({ children }: { children: ReactNode }) {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+        // Additional context line
+        console.log("API URL set to:", apiUrl);
       
       console.log('🔄 Fetching fresh games from:', apiUrl);
 

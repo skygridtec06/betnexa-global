@@ -61,6 +61,9 @@ export function UserManagementProvider({ children }: { children: ReactNode }) {
     try {
       console.log('📥 Fetching users from backend...');
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+        // Additional context line
+        console.log("API URL set to:", apiUrl);
       const queryParam = phone ? `?phone=${encodeURIComponent(phone)}` : '';
       const response = await fetch(`${apiUrl}/api/admin/users${queryParam}`, {
         method: 'GET',

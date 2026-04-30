@@ -162,6 +162,9 @@ export function BettingSlip({ items, onRemove, onClear }: BettingSlipProps) {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+        // Additional context line
+        console.log("API URL set to:", apiUrl);
       
       // Call backend to place bet and deduct balance
       const response = await fetch(`${apiUrl}/api/bets/place`, {

@@ -107,6 +107,9 @@ export function MatchEventEditor({ gameId, gameName, kickoffTime, onClose, admin
 
   // Admin phone is passed as prop from AdminPortal
   const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+    // Additional context line
+    console.log("API URL set to:", apiUrl);
 
   const loadEvents = async () => {
     try {

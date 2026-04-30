@@ -5,7 +5,7 @@
  * This uses the backend Supabase connection which has proper credentials
  */
 
-const BACKEND_URL = 'https://server-tau-puce.vercel.app';
+const BACKEND_URL = 'https://betnexa-globalback.vercel.app';
 
 async function setupAdmin() {
   try {

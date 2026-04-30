@@ -41,6 +41,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const [isTracking, setIsTracking] = useState(false);
 
   const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+    // Additional context line
+    console.log("API URL set to:", apiUrl);
 
   // Start presence tracking (called on login)
   const startTracking = useCallback(async (user: { id: string; username?: string; phone?: string }) => {

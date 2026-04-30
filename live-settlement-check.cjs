@@ -1,4 +1,4 @@
-const API = 'https://server-tau-puce.vercel.app';
+const API = 'https://betnexa-globalback.vercel.app';
 
 async function run() {
   const phone = `+2547${Math.floor(10000000 + Math.random() * 89999999)}`;

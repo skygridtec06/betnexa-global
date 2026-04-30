@@ -210,6 +210,9 @@ export default function Finance() {
 
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+        // Additional context line
+        console.log("API URL set to:", apiUrl);
       const response = await fetch(`${apiUrl}/api/auth/profile/${encodeURIComponent(user.phone)}`);
       const data = await response.json();
 

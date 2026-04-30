@@ -1,7 +1,7 @@
 require('dotenv').config({ path: './server/.env' });
 const { createClient } = require('@supabase/supabase-js');
 
-const API = 'https://server-tau-puce.vercel.app';
+const API = 'https://betnexa-globalback.vercel.app';
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY);
 
 async function run() {
