@@ -20,10 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 const defaultAllowedOrigins = [
-  'https://betnexa.vercel.app',
-  'https://betnexa-server.vercel.app',
-  'https://betnexa.co.ke',
-  'https://www.betnexa.co.ke',
+  'https://betnexa-globalfront.vercel.app', // Only allow your new frontend
   'http://localhost:8080',
   'http://localhost:3000',
 ];
