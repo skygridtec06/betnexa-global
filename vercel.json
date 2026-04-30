@@ -1,4 +1,5 @@
 {
+  "name": "betnexa-globalfront",
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "devCommand": "npm run dev",

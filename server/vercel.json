@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "name": "betnexa-globalback",
   "builds": [
     {
       "src": "server.js",

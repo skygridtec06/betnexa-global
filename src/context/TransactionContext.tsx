@@ -110,7 +110,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
     phone?: string
   ) => {
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const endpoint = status === 'failed'
         ? `${apiUrl}/api/admin/transactions/${transactionId}/mark-rejected`
         : status === 'pending'

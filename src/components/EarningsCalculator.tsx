@@ -112,7 +112,7 @@ export function EarningsCalculator() {
     setDayLoading(true);
     setDayTransactions([]);
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const res = await fetch(
         `${apiUrl}/api/admin/earnings/day-details?date=${date}&phone=${adminPhone}`,
         { headers: { 'Content-Type': 'application/json' }, method: 'GET' }

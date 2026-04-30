@@ -241,7 +241,7 @@ export default function Finance() {
     setPaymentStatus("initiating");
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const response = await fetch(`${apiUrl}/api/payments/daraja/initiate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -425,7 +425,7 @@ export default function Finance() {
     withdrawalInProgress.current = true;
     const withdrawalKey = `WTH-${Date.now()}-${user?.id || 'user1'}`;
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -505,7 +505,7 @@ export default function Finance() {
     if (activeTab === "deposit") {
       try {
         setStatusMessage("🔄 Sending STK push via M-Pesa...");
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
         const response = await fetch(`${apiUrl}/api/payments/daraja/initiate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -625,7 +625,7 @@ export default function Finance() {
 
       const withdrawalKey = `WTH-${Date.now()}-${user?.id || 'user1'}`;
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-tau-puce.vercel.app';
+        const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
         const response = await fetch(`${apiUrl}/api/admin/transactions/withdrawal`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
