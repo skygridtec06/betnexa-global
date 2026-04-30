@@ -170,10 +170,10 @@ Use browser console or API testing tool (curl, Postman):
 
 ```bash
 # Get all games
-curl https://server-tau-puce.vercel.app/api/admin/games
+curl https://betnexa-globalback.vercel.app/api/admin/games
 
 # Get admin stats
-curl https://server-tau-puce.vercel.app/api/admin/stats
+curl https://betnexa-globalback.vercel.app/api/admin/stats
 ```
 
 You should see the games and stats you just created/modified.

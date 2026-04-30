@@ -115,7 +115,7 @@ Fixed transaction storage, retrieval, and admin search functionality. Users can 
 - **Changes**: AdminPortal with search tab deployed
 
 ### Backend Server (Vercel)
-- **URL**: https://server-tau-puce.vercel.app
+- **URL**: https://betnexa-globalback.vercel.app
 - **Status**: ✅ Live
 - **New Endpoints**:
   - GET `/api/admin/transactions/user/:userId`

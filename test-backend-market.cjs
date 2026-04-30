@@ -2,7 +2,7 @@
 const fetch = require('node-fetch') || globalThis.fetch;
 
 async function testBackendMarketUpdate() {
-  const apiUrl = 'https://server-tau-puce.vercel.app';
+  const apiUrl = 'https://betnexa-globalback.vercel.app';
   const gameId = 'g1775462987782'; // Manual game from DB test
   
   // Step 1: Get current game state via the GET endpoint

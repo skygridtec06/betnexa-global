@@ -4,8 +4,8 @@
 
 ```
 Frontend:  https://betnexa.vercel.app
-Backend:   https://server-tau-puce.vercel.app
-Health:    https://server-tau-puce.vercel.app/api/health
+Backend:   https://betnexa-globalback.vercel.app
+Health:    https://betnexa-globalback.vercel.app/api/health
 ```
 
 ---

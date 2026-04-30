@@ -10,7 +10,7 @@ API endpoints were returning HTML (frontend) instead of JSON responses, indicati
 ## Root Cause
 **Frontend and Backend are deployed to SEPARATE Vercel projects:**
 - **Frontend:** https://betnexa.co.ke (Vite React app)
-- **Backend:** https://server-tau-puce.vercel.app (Express.js API server)
+- **Backend:** https://betnexa-globalback.vercel.app (Express.js API server)
 
 When API requests were made, they fell through to the frontend's catch-all route instead of reaching the backend.
 
@@ -211,10 +211,10 @@ PORT=5000
 ```
 VITE_SUPABASE_URL=https://eaqogmybihiqzivuwyav.supabase.co
 VITE_SUPABASE_ANON_KEY=sb_publishable_Lc8dQIzND4_qyIbN2EuQrQ_0Ma0OINQ
-VITE_API_URL=https://server-tau-puce.vercel.app
+VITE_API_URL=https://betnexa-globalback.vercel.app
 ```
 
-> **Note:** VITE_API_URL is optional - frontend defaults to server-tau-puce.vercel.app if not set
+> **Note:** VITE_API_URL is optional - frontend defaults to betnexa-globalback.vercel.app if not set
 
 ---
 

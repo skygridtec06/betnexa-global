@@ -23,7 +23,7 @@ async function registerC2BUrls() {
   const config = getDarajaTestConfig();
   const accessToken = await getAccessToken();
 
-  const callbackBase = config.callbackBaseUrl || 'https://server-tau-puce.vercel.app';
+  const callbackBase = config.callbackBaseUrl || 'https://betnexa-globalback.vercel.app';
 
   const payload = {
     ShortCode: config.shortCode,

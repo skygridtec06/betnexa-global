@@ -182,7 +182,7 @@ ee993bb - FIX: Remove syntax error - duplicate closing brace in server.js
 ## 📝 NEXT STEPS
 
 1. ✅ Wait for Vercel deployment to complete (2-3 minutes)
-2. ✅ Test production endpoints at https://server-tau-puce.vercel.app
+2. ✅ Test production endpoints at https://betnexa-globalback.vercel.app
 3. ✅ Verify admin panel loads without CORS errors
 4. ✅ Monitor server logs for any production issues
 

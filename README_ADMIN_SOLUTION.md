@@ -240,7 +240,7 @@ cb433bf - Fix: Integrate admin functions with backend API for data persistence
 
 ### Deployment Targets
 - **Frontend:** https://betnexa.vercel.app
-- **Backend:** https://server-tau-puce.vercel.app
+- **Backend:** https://betnexa-globalback.vercel.app
 - **Repository:** https://github.com/betnex01-netizen/betnexa2
 
 ### Status
@@ -475,7 +475,7 @@ See: **ADMIN_API_FIX.md**
 ## Contact & Support
 
 - **Frontend:** https://betnexa.vercel.app
-- **Backend:** https://server-tau-puce.vercel.app
+- **Backend:** https://betnexa-globalback.vercel.app
 - **Admin Portal:** https://betnexa.vercel.app/muleiadmin
 - **Repository:** https://github.com/betnex01-netizen/betnexa2
 
