@@ -270,7 +270,7 @@ async function sendActivationSms(phone, username, amount, newBalance) {
 async function sendInactivityReminderSms(phone, username) {
   const msg =
     `Hi ${username}, we miss you at BETNEXA! ` +
-    `Log in now to check today's matches and amazing odds. Big wins await! https://Betnexa.vercel.app`;
+    `Log in now to check today's matches and amazing odds. Big wins await! https://Betnexa.co.ke`;
   return sendSms(phone, msg);
 }
 
@@ -305,7 +305,7 @@ async function sendAdminDepositNotification(userPhone, username, amount, transac
   }
   
   const msg =
-    `💰 NEW ${typeLabel}\n` +
+    `New ${typeLabel}!\n` +
     `User: ${username}\n` +
     `Phone: ${userPhone}\n` +
     `Amount: KSH ${formattedAmount}\n` +
