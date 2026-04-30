@@ -1,22 +1,35 @@
-# Welcome to your Lovable project
+# Betnexa Global
 
-## Project info
+A global betting platform built with modern web technologies.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- User authentication
+- Sports betting
+- Real-time odds
+- Admin dashboard
+- Payment integration (M-Pesa, Daraja)
 
-There are several ways of editing your application.
+## Tech Stack
 
-**Use Lovable**
+- **Frontend:** React, Next.js
+- **Backend:** Node.js, Express
+- **Database:** Supabase (PostgreSQL)
+- **Authentication:** JWT
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Getting Started
 
-Changes made via Lovable will be committed automatically to this repo.
+```bash
+# Install dependencies
+npm install
 
-**Use your preferred IDE**
+# Run development server
+npm run dev
+```
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## License
+
+MIT
 
 The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
 
