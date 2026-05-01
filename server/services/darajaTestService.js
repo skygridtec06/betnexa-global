@@ -17,7 +17,7 @@ function getDarajaTestConfig() {
     shortCode: clean(process.env.DARAJA_TEST_SHORT_CODE) || '4046271',
     partyB: clean(process.env.DARAJA_TEST_PARTY_B) || '4046271',
     transactionType: clean(process.env.DARAJA_TEST_TRANSACTION_TYPE) || 'CustomerPayBillOnline',
-    callbackBaseUrl: cleanUrl(process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://betnexa-globalback.vercel.app').replace(/\/$/, ''),
+    callbackBaseUrl: cleanUrl(process.env.DARAJA_TEST_CALLBACK_BASE_URL || process.env.SERVER_PUBLIC_URL || 'https://server-virid-zeta-19.vercel.app').replace(/\/$/, ''),
   };
 
   const missing = Object.entries(config)

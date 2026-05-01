@@ -89,7 +89,7 @@ export function OddsProvider({ children }: { children: ReactNode }) {
     fetchInProgressRef.current = true;
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       
       console.log('🔄 Fetching fresh games from:', apiUrl);
 

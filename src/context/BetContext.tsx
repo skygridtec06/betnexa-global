@@ -154,7 +154,7 @@ export function BetProvider({ children }: { children: ReactNode }) {
 
     // Now sync with backend database
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const endpoint = `${apiUrl}/api/bets/${betId}/status`;
       
       console.log(`   📡 Calling API: PUT ${endpoint}`);

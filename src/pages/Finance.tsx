@@ -209,7 +209,7 @@ export default function Finance() {
     if (!user?.phone) return null;
 
     try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'https://betnexa-globalback.vercel.app';
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://server-virid-zeta-19.vercel.app';
       const response = await fetch(`${apiUrl}/api/auth/profile/${encodeURIComponent(user.phone)}`);
       const data = await response.json();
 
